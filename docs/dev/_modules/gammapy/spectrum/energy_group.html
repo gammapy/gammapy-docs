@@ -1,0 +1,585 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>gammapy.spectrum.energy_group &#8212; gammapy v0.7.dev5391</title>
+    <link rel="stylesheet" href="../../../_static/gammapy.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.7.dev5391',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <link rel="shortcut icon" href="../../../_static/astropy_logo.ico"/>
+    <link rel="author" title="About these documents" href="../../../about.html" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+<link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+<script type="text/javascript" src="../../../_static/copybutton.js"></script>
+
+
+  </head>
+  <body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">gamma</span><span id="logotext2">py</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="Astropy Homepage" href="http://www.astropy.org"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">gammapy v0.7.dev5391</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for gammapy.spectrum.energy_group</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
+<span class="sd">&quot;&quot;&quot;Spectrum energy bin grouping.</span>
+
+<span class="sd">There are three classes:</span>
+
+<span class="sd">* SpectrumEnergyGroup - one group</span>
+<span class="sd">* SpectrumEnergyGroups - one grouping, i.e. collection of groups</span>
+<span class="sd">* SpectrumEnergyGroupMaker - algorithms to compute groupings.</span>
+
+<span class="sd">Algorithms to compute groupings are both on SpectrumEnergyGroups and SpectrumEnergyGroupMaker.</span>
+<span class="sd">The difference is that SpectrumEnergyGroups contains the algorithms and book-keeping that</span>
+<span class="sd">just have to do with the groups, whereas SpectrumEnergyGroupMaker also accesses</span>
+<span class="sd">information from SpectrumObservation (e.g. safe energy range or counts data) and</span>
+<span class="sd">implements higher-level algorithms.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="k">import</span> <span class="n">deepcopy</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">..extern.six.moves</span> <span class="k">import</span> <span class="n">UserList</span>
+<span class="kn">from</span> <span class="nn">astropy.units</span> <span class="k">import</span> <span class="n">Quantity</span>
+<span class="kn">from</span> <span class="nn">astropy.table</span> <span class="k">import</span> <span class="n">Table</span>
+<span class="kn">from</span> <span class="nn">astropy.table</span> <span class="k">import</span> <span class="n">vstack</span> <span class="k">as</span> <span class="n">table_vstack</span>
+<span class="kn">from</span> <span class="nn">..utils.table</span> <span class="k">import</span> <span class="n">table_from_row_data</span><span class="p">,</span> <span class="n">table_row_to_dict</span>
+<span class="kn">from</span> <span class="nn">..data</span> <span class="k">import</span> <span class="n">ObservationStats</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;SpectrumEnergyGroup&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;SpectrumEnergyGroups&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;SpectrumEnergyGroupMaker&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="c1"># TODO: improve the code so that this isn&#39;t needed!</span>
+<span class="n">INVALID_GROUP_INDEX</span> <span class="o">=</span> <span class="o">-</span><span class="mi">99</span>
+
+<span class="c1"># TODO: this is used for input at the moment,</span>
+<span class="c1"># but for output the `bin_type` field is used.</span>
+<span class="c1"># Make up your mind!</span>
+<span class="n">UNDERFLOW_BIN_INDEX</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+<span class="n">OVERFLOW_BIN_INDEX</span> <span class="o">=</span> <span class="o">-</span><span class="mi">2</span>
+
+
+<div class="viewcode-block" id="SpectrumEnergyGroup"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroup.html#gammapy.spectrum.SpectrumEnergyGroup">[docs]</a><span class="k">class</span> <span class="nc">SpectrumEnergyGroup</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Spectrum energy group.</span>
+
+<span class="sd">    Represents a consecutive range of bin indices (both ends inclusive).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="s1">&#39;energy_group_idx&#39;</span><span class="p">,</span> <span class="s1">&#39;bin_idx_min&#39;</span><span class="p">,</span> <span class="s1">&#39;bin_idx_max&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;bin_type&#39;</span><span class="p">,</span> <span class="s1">&#39;energy_min&#39;</span><span class="p">,</span> <span class="s1">&#39;energy_max&#39;</span><span class="p">,</span>
+    <span class="p">]</span>
+    <span class="sd">&quot;&quot;&quot;List of data members of this class.&quot;&quot;&quot;</span>
+
+    <span class="n">valid_bin_types</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;normal&#39;</span><span class="p">,</span> <span class="s1">&#39;underflow&#39;</span><span class="p">,</span> <span class="s1">&#39;overflow&#39;</span><span class="p">]</span>
+    <span class="sd">&quot;&quot;&quot;Valid values for ``bin_types`` attribute.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy_group_idx</span><span class="p">,</span> <span class="n">bin_idx_min</span><span class="p">,</span> <span class="n">bin_idx_max</span><span class="p">,</span> <span class="n">bin_type</span><span class="p">,</span>
+                 <span class="n">energy_min</span><span class="p">,</span> <span class="n">energy_max</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">energy_group_idx</span> <span class="o">=</span> <span class="n">energy_group_idx</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bin_idx_min</span> <span class="o">=</span> <span class="n">bin_idx_min</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bin_idx_max</span> <span class="o">=</span> <span class="n">bin_idx_max</span>
+        <span class="k">if</span> <span class="n">bin_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">valid_bin_types</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Invalid bin type: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">bin_type</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bin_type</span> <span class="o">=</span> <span class="n">bin_type</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">energy_min</span> <span class="o">=</span> <span class="n">energy_min</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">energy_max</span> <span class="o">=</span> <span class="n">energy_max</span>
+
+<div class="viewcode-block" id="SpectrumEnergyGroup.from_dict"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroup.html#gammapy.spectrum.SpectrumEnergyGroup.from_dict">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_dict</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">((</span><span class="n">_</span><span class="p">,</span> <span class="n">data</span><span class="p">[</span><span class="n">_</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="n">fields</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="o">**</span><span class="n">data</span><span class="p">)</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">_data</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[(</span><span class="n">_</span><span class="p">,</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_</span><span class="p">))</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">txt</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;</span><span class="si">{}</span><span class="s1">=</span><span class="si">{!r}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">]</span>
+        <span class="k">return</span> <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">(</span><span class="si">{}</span><span class="s1">)&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">txt</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
+
+<div class="viewcode-block" id="SpectrumEnergyGroup.to_dict"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroup.html#gammapy.spectrum.SpectrumEnergyGroup.to_dict">[docs]</a>    <span class="k">def</span> <span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">OrderedDict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">)</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">bin_idx_array</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Numpy array of bin indices in the group.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bin_idx_min</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bin_idx_max</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">bin_table</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Create `~astropy.table.Table` with bins in the group.</span>
+
+<span class="sd">        Columns are: ``energy_group_idx``, ``bin_idx``, ``bin_type``</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">()</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;bin_idx&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bin_idx_array</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;energy_group_idx&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_group_idx</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;bin_type&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bin_type</span>
+        <span class="k">return</span> <span class="n">table</span>
+
+<div class="viewcode-block" id="SpectrumEnergyGroup.contains_energy"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroup.html#gammapy.spectrum.SpectrumEnergyGroup.contains_energy">[docs]</a>    <span class="k">def</span> <span class="nf">contains_energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Does this group contain a given energy?&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">energy_min</span> <span class="o">&lt;=</span> <span class="n">energy</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">energy</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_max</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="SpectrumEnergyGroups"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroups.html#gammapy.spectrum.SpectrumEnergyGroups">[docs]</a><span class="k">class</span> <span class="nc">SpectrumEnergyGroups</span><span class="p">(</span><span class="n">UserList</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;List of `~gammapy.spectrum.SpectrumEnergyGroup` objects.</span>
+
+<span class="sd">    A helper class used by the `gammapy.spectrum.SpectrumEnergyMaker`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">(len=</span><span class="si">{}</span><span class="s1">)&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">ss</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">:</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+        <span class="n">lines</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_group_table</span><span class="p">()</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">max_width</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">max_lines</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">ss</span> <span class="o">+=</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ss</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
+
+<div class="viewcode-block" id="SpectrumEnergyGroups.copy"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroups.html#gammapy.spectrum.SpectrumEnergyGroups.copy">[docs]</a>    <span class="k">def</span> <span class="nf">copy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Deep copy&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumEnergyGroups.from_total_table"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroups.html#gammapy.spectrum.SpectrumEnergyGroups.from_total_table">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_total_table</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">table</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Create list of SpectrumEnergyGroup objects from table.&quot;&quot;&quot;</span>
+        <span class="n">groups</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">()</span>
+
+        <span class="k">for</span> <span class="n">energy_group_idx</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;energy_group_idx&#39;</span><span class="p">]):</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;energy_group_idx&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">energy_group_idx</span>
+            <span class="n">group_table</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+            <span class="n">bin_idx_min</span> <span class="o">=</span> <span class="n">group_table</span><span class="p">[</span><span class="s1">&#39;bin_idx&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">bin_idx_max</span> <span class="o">=</span> <span class="n">group_table</span><span class="p">[</span><span class="s1">&#39;bin_idx&#39;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="c1"># bin_type = group_table[&#39;bin_type&#39;]</span>
+            <span class="k">if</span> <span class="n">energy_group_idx</span> <span class="o">==</span> <span class="n">UNDERFLOW_BIN_INDEX</span><span class="p">:</span>
+                <span class="n">bin_type</span> <span class="o">=</span> <span class="s1">&#39;underflow&#39;</span>
+            <span class="k">elif</span> <span class="n">energy_group_idx</span> <span class="o">==</span> <span class="n">OVERFLOW_BIN_INDEX</span><span class="p">:</span>
+                <span class="n">bin_type</span> <span class="o">=</span> <span class="s1">&#39;overflow&#39;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">bin_type</span> <span class="o">=</span> <span class="s1">&#39;normal&#39;</span>
+            <span class="n">energy_min</span> <span class="o">=</span> <span class="n">group_table</span><span class="p">[</span><span class="s1">&#39;energy_min&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">energy_max</span> <span class="o">=</span> <span class="n">group_table</span><span class="p">[</span><span class="s1">&#39;energy_max&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+            <span class="n">group</span> <span class="o">=</span> <span class="n">SpectrumEnergyGroup</span><span class="p">(</span>
+                <span class="n">energy_group_idx</span><span class="o">=</span><span class="n">energy_group_idx</span><span class="p">,</span>
+                <span class="n">bin_idx_min</span><span class="o">=</span><span class="n">bin_idx_min</span><span class="p">,</span>
+                <span class="n">bin_idx_max</span><span class="o">=</span><span class="n">bin_idx_max</span><span class="p">,</span>
+                <span class="n">bin_type</span><span class="o">=</span><span class="n">bin_type</span><span class="p">,</span>
+                <span class="n">energy_min</span><span class="o">=</span><span class="n">energy_min</span><span class="p">,</span>
+                <span class="n">energy_max</span><span class="o">=</span><span class="n">energy_max</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">groups</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">group</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">groups</span></div>
+
+<div class="viewcode-block" id="SpectrumEnergyGroups.from_group_table"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroups.html#gammapy.spectrum.SpectrumEnergyGroups.from_group_table">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_group_table</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">table</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Create from energy groups in `~astropy.table.Table` format.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">([</span>
+            <span class="n">SpectrumEnergyGroup</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">table_row_to_dict</span><span class="p">(</span><span class="n">row</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">table</span>
+        <span class="p">])</span></div>
+
+<div class="viewcode-block" id="SpectrumEnergyGroups.to_total_table"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroups.html#gammapy.spectrum.SpectrumEnergyGroups.to_total_table">[docs]</a>    <span class="k">def</span> <span class="nf">to_total_table</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Table with one energy bin per row (`~astropy.table.Table`).</span>
+
+<span class="sd">        Columns:</span>
+
+<span class="sd">        * ``energy_group_idx`` - Energy group index (int)</span>
+<span class="sd">        * ``bin_idx`` - Energy bin index (int)</span>
+<span class="sd">        * ``bin_type`` - Bin type {&#39;normal&#39;, &#39;underflow&#39;, &#39;overflow&#39;} (str)</span>
+
+<span class="sd">        There are no energy columns, because the per-bin energy info</span>
+<span class="sd">        was lost during grouping.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tables</span> <span class="o">=</span> <span class="p">[</span><span class="n">group</span><span class="o">.</span><span class="n">bin_table</span> <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">table_vstack</span><span class="p">(</span><span class="n">tables</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumEnergyGroups.to_group_table"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroups.html#gammapy.spectrum.SpectrumEnergyGroups.to_group_table">[docs]</a>    <span class="k">def</span> <span class="nf">to_group_table</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Table with one energy group per row (`~astropy.table.Table`).</span>
+
+<span class="sd">        Columns:</span>
+
+<span class="sd">        * ``energy_group_idx`` - Energy group index (int)</span>
+<span class="sd">        * ``energy_group_n_bins`` - Number of bins in the energy group (int)</span>
+<span class="sd">        * ``bin_idx_min`` - First bin index in the energy group (int)</span>
+<span class="sd">        * ``bin_idx_max`` - Last bin index in the energy group (int)</span>
+<span class="sd">        * ``bin_type`` - Bin type {&#39;normal&#39;, &#39;underflow&#39;, &#39;overflow&#39;} (str)</span>
+<span class="sd">        * ``energy_min`` - Energy group start energy (Quantity)</span>
+<span class="sd">        * ``energy_max`` - Energy group end energy (Quantity)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">rows</span> <span class="o">=</span> <span class="p">[</span><span class="n">group</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">]</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">table_from_row_data</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">table</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">bin_idx_range</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Tuple (left, right) with range of bin indices (both edges inclusive).&quot;&quot;&quot;</span>
+        <span class="n">left</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">bin_idx_min</span>
+        <span class="n">right</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">bin_idx_max</span>
+        <span class="k">return</span> <span class="n">left</span><span class="p">,</span> <span class="n">right</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">energy_range</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Total energy range (`~astropy.units.Quantity` of length 2).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">Quantity</span><span class="p">([</span><span class="bp">self</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">energy_min</span><span class="p">,</span> <span class="bp">self</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">energy_max</span><span class="p">])</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">energy_bounds</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Energy group bounds (`~astropy.units.Quantity`).&quot;&quot;&quot;</span>
+        <span class="n">energy</span> <span class="o">=</span> <span class="p">[</span><span class="n">_</span><span class="o">.</span><span class="n">energy_min</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">]</span>
+        <span class="n">energy</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">energy_max</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">energy</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SpectrumEnergyGroups.find_list_idx"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroups.html#gammapy.spectrum.SpectrumEnergyGroups.find_list_idx">[docs]</a>    <span class="k">def</span> <span class="nf">find_list_idx</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Find the list index corresponding to a given energy.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">group</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">group</span><span class="o">.</span><span class="n">contains_energy</span><span class="p">(</span><span class="n">energy</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">idx</span>
+
+            <span class="c1"># TODO: do we need / want this behaviour?</span>
+            <span class="c1"># If yes, could add via a kwarg `last_bin_right_edge_inclusive=False`</span>
+            <span class="c1"># For last energy group</span>
+            <span class="c1"># if idx == len(self) - 1 and energy == group.energy_max:</span>
+            <span class="c1">#     return idx</span>
+
+        <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span><span class="s1">&#39;No group found with energy: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">energy</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="SpectrumEnergyGroups.find_list_idx_range"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroups.html#gammapy.spectrum.SpectrumEnergyGroups.find_list_idx_range">[docs]</a>    <span class="k">def</span> <span class="nf">find_list_idx_range</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy_min</span><span class="p">,</span> <span class="n">energy_max</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;TODO: document.</span>
+
+<span class="sd">        * Min index is the bin that contains ``energy_range.min``</span>
+<span class="sd">        * Max index is the bin that is below the one that contains ``energy_range.max``</span>
+<span class="sd">        * This way we don&#39;t loose any bins or count them twice.</span>
+<span class="sd">        * Containment is checked for each bin as [min, max)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">idx_min</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find_list_idx</span><span class="p">(</span><span class="n">energy</span><span class="o">=</span><span class="n">energy_min</span><span class="p">)</span>
+        <span class="n">idx_max</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find_list_idx</span><span class="p">(</span><span class="n">energy</span><span class="o">=</span><span class="n">energy_max</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="n">idx_min</span><span class="p">,</span> <span class="n">idx_max</span></div>
+
+<div class="viewcode-block" id="SpectrumEnergyGroups.make_and_replace_merged_group"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroups.html#gammapy.spectrum.SpectrumEnergyGroups.make_and_replace_merged_group">[docs]</a>    <span class="k">def</span> <span class="nf">make_and_replace_merged_group</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">list_idx_min</span><span class="p">,</span> <span class="n">list_idx_max</span><span class="p">,</span> <span class="n">bin_type</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Merge energy groups and update indexes&quot;&quot;&quot;</span>
+        <span class="c1"># Create a merged group object</span>
+        <span class="n">group</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_merged_group</span><span class="p">(</span>
+            <span class="n">list_idx_min</span><span class="o">=</span><span class="n">list_idx_min</span><span class="p">,</span>
+            <span class="n">list_idx_max</span><span class="o">=</span><span class="n">list_idx_max</span><span class="p">,</span>
+            <span class="n">bin_type</span><span class="o">=</span><span class="n">bin_type</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Delete previous groups</span>
+        <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">list_idx_min</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">list_idx_max</span> <span class="o">-</span> <span class="n">list_idx_min</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span>
+
+        <span class="c1"># Insert the merged group</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">list_idx_min</span><span class="p">,</span> <span class="n">group</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reindex_groups</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+<div class="viewcode-block" id="SpectrumEnergyGroups.reindex_groups"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroups.html#gammapy.spectrum.SpectrumEnergyGroups.reindex_groups">[docs]</a>    <span class="k">def</span> <span class="nf">reindex_groups</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Re-index groups&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">energy_group_idx</span><span class="p">,</span> <span class="n">group</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="n">group</span><span class="o">.</span><span class="n">energy_group_idx</span> <span class="o">=</span> <span class="n">energy_group_idx</span></div>
+
+<div class="viewcode-block" id="SpectrumEnergyGroups.make_merged_group"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroups.html#gammapy.spectrum.SpectrumEnergyGroups.make_merged_group">[docs]</a>    <span class="k">def</span> <span class="nf">make_merged_group</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">list_idx_min</span><span class="p">,</span> <span class="n">list_idx_max</span><span class="p">,</span> <span class="n">bin_type</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Merge group according to indexes&quot;&quot;&quot;</span>
+        <span class="n">left_group</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="n">list_idx_min</span><span class="p">]</span>
+        <span class="n">right_group</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="n">list_idx_max</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">SpectrumEnergyGroup</span><span class="p">(</span>
+            <span class="n">energy_group_idx</span><span class="o">=</span><span class="n">INVALID_GROUP_INDEX</span><span class="p">,</span>
+            <span class="n">bin_idx_min</span><span class="o">=</span><span class="n">left_group</span><span class="o">.</span><span class="n">bin_idx_min</span><span class="p">,</span>
+            <span class="n">bin_idx_max</span><span class="o">=</span><span class="n">right_group</span><span class="o">.</span><span class="n">bin_idx_max</span><span class="p">,</span>
+            <span class="n">bin_type</span><span class="o">=</span><span class="n">bin_type</span><span class="p">,</span>
+            <span class="n">energy_min</span><span class="o">=</span><span class="n">left_group</span><span class="o">.</span><span class="n">energy_min</span><span class="p">,</span>
+            <span class="n">energy_max</span><span class="o">=</span><span class="n">right_group</span><span class="o">.</span><span class="n">energy_max</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+    <span class="c1"># TODO: choose one of the apply energy min / max methods!</span>
+
+<div class="viewcode-block" id="SpectrumEnergyGroups.apply_energy_min_old"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroups.html#gammapy.spectrum.SpectrumEnergyGroups.apply_energy_min_old">[docs]</a>    <span class="k">def</span> <span class="nf">apply_energy_min_old</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Modify list in-place to apply a min energy cut.&quot;&quot;&quot;</span>
+        <span class="n">idx_max</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find_list_idx</span><span class="p">(</span><span class="n">energy</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">make_and_replace_merged_group</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">idx_max</span><span class="p">,</span> <span class="s1">&#39;underflow&#39;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumEnergyGroups.apply_energy_min"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroups.html#gammapy.spectrum.SpectrumEnergyGroups.apply_energy_min">[docs]</a>    <span class="k">def</span> <span class="nf">apply_energy_min</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">):</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_group_table</span><span class="p">()</span>
+        <span class="n">idx_max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">t</span><span class="p">[</span><span class="s1">&#39;energy_min&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span> <span class="o">&lt;</span> <span class="n">energy</span><span class="p">)[</span><span class="mi">0</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">make_and_replace_merged_group</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">idx_max</span><span class="p">,</span> <span class="s1">&#39;underflow&#39;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumEnergyGroups.apply_energy_max_old"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroups.html#gammapy.spectrum.SpectrumEnergyGroups.apply_energy_max_old">[docs]</a>    <span class="k">def</span> <span class="nf">apply_energy_max_old</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Modify list in-place to apply a max energy cut.&quot;&quot;&quot;</span>
+        <span class="n">idx_min</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find_list_idx</span><span class="p">(</span><span class="n">energy</span><span class="p">)</span>
+        <span class="n">idx_max</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">make_and_replace_merged_group</span><span class="p">(</span><span class="n">idx_min</span><span class="p">,</span> <span class="n">idx_max</span><span class="p">,</span> <span class="s1">&#39;overflow&#39;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumEnergyGroups.apply_energy_max"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroups.html#gammapy.spectrum.SpectrumEnergyGroups.apply_energy_max">[docs]</a>    <span class="k">def</span> <span class="nf">apply_energy_max</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">):</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_group_table</span><span class="p">()</span>
+        <span class="n">idx_min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">t</span><span class="p">[</span><span class="s1">&#39;energy_max&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span> <span class="o">&gt;</span> <span class="n">energy</span><span class="p">)[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">make_and_replace_merged_group</span><span class="p">(</span><span class="n">idx_min</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;overflow&#39;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumEnergyGroups.clip_to_valid_range"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroups.html#gammapy.spectrum.SpectrumEnergyGroups.clip_to_valid_range">[docs]</a>    <span class="k">def</span> <span class="nf">clip_to_valid_range</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">list_idx</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;TODO: document&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="p">[</span><span class="n">list_idx</span><span class="p">]</span><span class="o">.</span><span class="n">bin_type</span> <span class="o">==</span> <span class="s1">&#39;underflow&#39;</span><span class="p">:</span>
+            <span class="n">list_idx</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="p">[</span><span class="n">list_idx</span><span class="p">]</span><span class="o">.</span><span class="n">bin_type</span> <span class="o">==</span> <span class="s1">&#39;overflow&#39;</span><span class="p">:</span>
+            <span class="n">list_idx</span> <span class="o">-=</span> <span class="mi">1</span>
+
+        <span class="k">if</span> <span class="n">list_idx</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span><span class="s1">&#39;list_idx </span><span class="si">{}</span><span class="s1"> &lt; 0&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">list_idx</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">list_idx</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span><span class="s1">&#39;list_idx </span><span class="si">{}</span><span class="s1"> &gt; len(self)&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">list_idx</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">list_idx</span></div>
+
+<div class="viewcode-block" id="SpectrumEnergyGroups.apply_energy_binning"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroups.html#gammapy.spectrum.SpectrumEnergyGroups.apply_energy_binning">[docs]</a>    <span class="k">def</span> <span class="nf">apply_energy_binning</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ebounds</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Apply an energy binning.&quot;&quot;&quot;</span>
+
+        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">ebounds</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">energy_min</span> <span class="o">=</span> <span class="n">ebounds</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+            <span class="n">energy_max</span> <span class="o">=</span> <span class="n">ebounds</span><span class="p">[</span><span class="n">idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+            <span class="n">list_idx_min</span><span class="p">,</span> <span class="n">list_idx_max</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find_list_idx_range</span><span class="p">(</span><span class="n">energy_min</span><span class="p">,</span> <span class="n">energy_max</span><span class="p">)</span>
+
+            <span class="c1"># Be sure to leave underflow and overflow bins alone</span>
+            <span class="c1"># TODO: this is pretty ugly ... make it better somehow!</span>
+            <span class="n">list_idx_min</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clip_to_valid_range</span><span class="p">(</span><span class="n">list_idx_min</span><span class="p">)</span>
+            <span class="n">list_idx_max</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clip_to_valid_range</span><span class="p">(</span><span class="n">list_idx_max</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">make_and_replace_merged_group</span><span class="p">(</span>
+                <span class="n">list_idx_min</span><span class="o">=</span><span class="n">list_idx_min</span><span class="p">,</span>
+                <span class="n">list_idx_max</span><span class="o">=</span><span class="n">list_idx_max</span><span class="p">,</span>
+                <span class="n">bin_type</span><span class="o">=</span><span class="s1">&#39;normal&#39;</span><span class="p">,</span>
+            <span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="SpectrumEnergyGroupMaker"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroupMaker.html#gammapy.spectrum.SpectrumEnergyGroupMaker">[docs]</a><span class="k">class</span> <span class="nc">SpectrumEnergyGroupMaker</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Energy bin groups for spectral analysis.</span>
+
+<span class="sd">    This class contains both methods that run algorithms</span>
+<span class="sd">    that compute groupings as well as the results as data members</span>
+<span class="sd">    and methods to debug and assess the results.</span>
+
+<span class="sd">    The input ``obs`` is used read-only, to access the counts energy</span>
+<span class="sd">    binning, as well as some other info that is used for energy bin grouping.</span>
+
+<span class="sd">    This class creates the ``groups`` attribute on construction,</span>
+<span class="sd">    with exactly one group per energy bin. It is then modified by calling</span>
+<span class="sd">    methods on this class, usually to declare some bins as under- and</span>
+<span class="sd">    overflow (i.e. not to be used in spectral analysis), and to group</span>
+<span class="sd">    bins (e.g. for flux point computation).</span>
+
+<span class="sd">    See :ref:`spectrum_energy_group` for examples.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    obs : `~gammapy.spectrum.SpectrumObservation`</span>
+<span class="sd">        Spectrum observation</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    obs : `~gammapy.spectrum.SpectrumObservation`</span>
+<span class="sd">        Spectrum observation data</span>
+<span class="sd">    groups : `~gammapy.spectrum.SpectrumEnergyGroups`</span>
+<span class="sd">        List of energy groups</span>
+
+<span class="sd">    See also</span>
+<span class="sd">    --------</span>
+<span class="sd">    SpectrumEnergyGroups, SpectrumEnergyGroup, FluxPointEstimator</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">obs</span> <span class="o">=</span> <span class="n">obs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">groups</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_groups_from_obs</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_groups_from_obs</span><span class="p">(</span><span class="n">obs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute energy groups list with one group per energy bin.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        obs : `~gammapy.spectrum.SpectrumObservation`</span>
+<span class="sd">            Spectrum observation data</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        groups : `~gammapy.spectrum.SpectrumEnergyGroups`</span>
+<span class="sd">            List of energy groups</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Start with a table with the obs energy binning</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">stats_table</span><span class="p">()</span>
+        <span class="c1"># Make one group per bin</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;bin_idx&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">table</span><span class="p">))</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;energy_group_idx&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">table</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">SpectrumEnergyGroups</span><span class="o">.</span><span class="n">from_total_table</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SpectrumEnergyGroupMaker.compute_range_safe"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroupMaker.html#gammapy.spectrum.SpectrumEnergyGroupMaker.compute_range_safe">[docs]</a>    <span class="k">def</span> <span class="nf">compute_range_safe</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Apply safe energy range of observation to ``groups``.</span>
+
+<span class="sd">        This method takes the safe energy range information from ``self.obs``</span>
+<span class="sd">        and changes ``self.groups`` like this:</span>
+
+<span class="sd">        * group bins below the safe energy range into one group of type &quot;underflow&quot;</span>
+<span class="sd">        * group bins above the safe energy range into one group of type &quot;overflow&quot;</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">bins</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">bins_in_safe_range</span>
+
+        <span class="n">underflow</span> <span class="o">=</span> <span class="n">bins</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span>
+
+        <span class="c1"># If no low threshold is set no underflow bin is needed</span>
+        <span class="k">if</span> <span class="n">underflow</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">groups</span><span class="o">.</span><span class="n">make_and_replace_merged_group</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">underflow</span><span class="p">,</span> <span class="s1">&#39;underflow&#39;</span><span class="p">)</span>
+
+        <span class="c1"># The group binning has changed</span>
+        <span class="n">overflow</span> <span class="o">=</span> <span class="n">bins</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">underflow</span>
+        <span class="n">max_bin</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">groups</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">energy_group_idx</span>
+
+        <span class="c1"># If no high threshold is set no overflow bin is needed</span>
+        <span class="k">if</span> <span class="n">overflow</span> <span class="o">&lt;=</span> <span class="n">max_bin</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">groups</span><span class="o">.</span><span class="n">make_and_replace_merged_group</span><span class="p">(</span><span class="n">overflow</span><span class="p">,</span> <span class="n">max_bin</span><span class="p">,</span> <span class="s1">&#39;overflow&#39;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumEnergyGroupMaker.compute_groups_fixed"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroupMaker.html#gammapy.spectrum.SpectrumEnergyGroupMaker.compute_groups_fixed">[docs]</a>    <span class="k">def</span> <span class="nf">compute_groups_fixed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ebounds</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Apply grouping for a given fixed energy binning.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        ebounds : `~astropy.units.Quantity`</span>
+<span class="sd">            Energy bounds array</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">groups</span><span class="o">.</span><span class="n">apply_energy_min</span><span class="p">(</span><span class="n">energy</span><span class="o">=</span><span class="n">ebounds</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">groups</span><span class="o">.</span><span class="n">apply_energy_max</span><span class="p">(</span><span class="n">energy</span><span class="o">=</span><span class="n">ebounds</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">groups</span><span class="o">.</span><span class="n">apply_energy_binning</span><span class="p">(</span><span class="n">ebounds</span><span class="o">=</span><span class="n">ebounds</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumEnergyGroupMaker.compute_groups_adaptive"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumEnergyGroupMaker.html#gammapy.spectrum.SpectrumEnergyGroupMaker.compute_groups_adaptive">[docs]</a>    <span class="k">def</span> <span class="nf">compute_groups_adaptive</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">min_signif</span><span class="p">,</span> <span class="n">rebin_factor</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute energy binning for flux points.</span>
+
+<span class="sd">        This is useful to get an energy binning to use with</span>
+<span class="sd">        :func:`~gammapy.spectrum.FluxPoints` Each bin in the</span>
+<span class="sd">        resulting energy binning will include a ``min_signif`` source detection.</span>
+
+<span class="sd">        TODO: It is required that at least two fine bins be included in one</span>
+<span class="sd">        flux point interval, otherwise the sherpa covariance method breaks</span>
+<span class="sd">        down.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        min_signif : float</span>
+<span class="sd">            Required significance for each bin</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">obs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs</span>
+        <span class="c1"># NOTE: Results may vary from FitSpectrum since there the rebin</span>
+        <span class="c1"># parameter can only have fixed values, here it grows linearly. Also it</span>
+        <span class="c1"># has to start at 2 here (see docstring)</span>
+
+        <span class="c1"># First first bin above low threshold and last bin below high threshold</span>
+        <span class="n">current_ebins</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">energy</span>
+        <span class="n">current_bin</span> <span class="o">=</span> <span class="p">(</span><span class="n">current_ebins</span><span class="o">.</span><span class="n">find_node</span><span class="p">(</span><span class="n">obs</span><span class="o">.</span><span class="n">lo_threshold</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">max_bin</span> <span class="o">=</span> <span class="p">(</span><span class="n">current_ebins</span><span class="o">.</span><span class="n">find_node</span><span class="p">(</span><span class="n">obs</span><span class="o">.</span><span class="n">hi_threshold</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="c1"># List holding final energy binning</span>
+        <span class="n">binning</span> <span class="o">=</span> <span class="p">[</span><span class="n">current_ebins</span><span class="o">.</span><span class="n">lo</span><span class="p">[</span><span class="n">current_bin</span><span class="p">]]</span>
+
+        <span class="c1"># Precompute ObservationStats for each bin</span>
+        <span class="n">obs_stats</span> <span class="o">=</span> <span class="p">[</span><span class="n">obs</span><span class="o">.</span><span class="n">stats</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">current_ebins</span><span class="o">.</span><span class="n">nbins</span><span class="p">)]</span>
+        <span class="k">while</span> <span class="n">current_bin</span> <span class="o">+</span> <span class="n">rebin_factor</span> <span class="o">&lt;=</span> <span class="n">max_bin</span><span class="p">:</span>
+            <span class="c1"># Merge bins together until min_signif is reached</span>
+            <span class="n">stats_list</span> <span class="o">=</span> <span class="n">obs_stats</span><span class="p">[</span><span class="n">current_bin</span><span class="p">:</span><span class="n">current_bin</span> <span class="o">+</span> <span class="n">rebin_factor</span><span class="p">:</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">stats</span> <span class="o">=</span> <span class="n">ObservationStats</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">stats_list</span><span class="p">)</span>
+            <span class="n">sigma</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">sigma</span>
+            <span class="k">if</span> <span class="n">sigma</span> <span class="o">&lt;</span> <span class="n">min_signif</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">sigma</span><span class="p">):</span>
+                <span class="n">rebin_factor</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">continue</span>
+
+            <span class="c1"># Append upper bin edge of good energy bin to final binning</span>
+            <span class="n">binning</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">current_ebins</span><span class="o">.</span><span class="n">lo</span><span class="p">[</span><span class="n">current_bin</span> <span class="o">+</span> <span class="n">rebin_factor</span><span class="p">])</span>
+            <span class="n">current_bin</span> <span class="o">+=</span> <span class="n">rebin_factor</span>
+
+        <span class="n">binning</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">binning</span><span class="p">)</span>
+        <span class="c1"># Replace highest bin edge by high threshold</span>
+        <span class="n">binning</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">hi_threshold</span>
+
+        <span class="c1"># TODO: fill self.groups instead of returning the binning!</span>
+        <span class="c1"># self.groups.apply_energy_binning(binning)</span>
+
+        <span class="k">return</span> <span class="n">binning</span></div></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2018, The Gammapy developers.<br/>
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.6.5. &nbsp;
+    Last built 08 Jan 2018. <br/>
+  </p>
+</footer>
+  </body>
+</html>

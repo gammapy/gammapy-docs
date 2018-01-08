@@ -1,0 +1,1144 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>gammapy.spectrum.flux_point &#8212; gammapy v0.7.dev5391</title>
+    <link rel="stylesheet" href="../../../_static/gammapy.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.7.dev5391',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <link rel="shortcut icon" href="../../../_static/astropy_logo.ico"/>
+    <link rel="author" title="About these documents" href="../../../about.html" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+<link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+<script type="text/javascript" src="../../../_static/copybutton.js"></script>
+
+
+  </head>
+  <body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">gamma</span><span id="logotext2">py</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="Astropy Homepage" href="http://www.astropy.org"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">gammapy v0.7.dev5391</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for gammapy.spectrum.flux_point</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">OrderedDict</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">astropy.table</span> <span class="k">import</span> <span class="n">Table</span><span class="p">,</span> <span class="n">vstack</span>
+<span class="kn">from</span> <span class="nn">astropy</span> <span class="k">import</span> <span class="n">units</span> <span class="k">as</span> <span class="n">u</span>
+<span class="kn">from</span> <span class="nn">astropy.io.registry</span> <span class="k">import</span> <span class="n">IORegistryError</span>
+<span class="kn">from</span> <span class="nn">..utils.scripts</span> <span class="k">import</span> <span class="n">make_path</span>
+<span class="kn">from</span> <span class="nn">..utils.table</span> <span class="k">import</span> <span class="n">table_standardise_units_copy</span><span class="p">,</span> <span class="n">table_from_row_data</span>
+<span class="kn">from</span> <span class="nn">.models</span> <span class="k">import</span> <span class="n">PowerLaw</span>
+<span class="kn">from</span> <span class="nn">.powerlaw</span> <span class="k">import</span> <span class="n">power_law_integral_flux</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;FluxPoints&#39;</span><span class="p">,</span>
+    <span class="c1"># &#39;FluxPointProfiles&#39;,</span>
+    <span class="s1">&#39;FluxPointEstimator&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;FluxPointFitter&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="n">REQUIRED_COLUMNS</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">([</span>
+    <span class="p">(</span><span class="s1">&#39;dnde&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;e_ref&#39;</span><span class="p">,</span> <span class="s1">&#39;dnde&#39;</span><span class="p">]),</span>
+    <span class="p">(</span><span class="s1">&#39;e2dnde&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;e_ref&#39;</span><span class="p">,</span> <span class="s1">&#39;e2dnde&#39;</span><span class="p">]),</span>
+    <span class="p">(</span><span class="s1">&#39;flux&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;e_min&#39;</span><span class="p">,</span> <span class="s1">&#39;e_max&#39;</span><span class="p">,</span> <span class="s1">&#39;flux&#39;</span><span class="p">]),</span>
+    <span class="p">(</span><span class="s1">&#39;eflux&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;e_min&#39;</span><span class="p">,</span> <span class="s1">&#39;e_max&#39;</span><span class="p">,</span> <span class="s1">&#39;eflux&#39;</span><span class="p">]),</span>
+<span class="p">])</span>
+
+<span class="n">OPTIONAL_COLUMNS</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">([</span>
+    <span class="p">(</span><span class="s1">&#39;dnde&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;dnde_err&#39;</span><span class="p">,</span> <span class="s1">&#39;dnde_errp&#39;</span><span class="p">,</span> <span class="s1">&#39;dnde_errn&#39;</span><span class="p">,</span> <span class="s1">&#39;dnde_ul&#39;</span><span class="p">,</span> <span class="s1">&#39;is_ul&#39;</span><span class="p">]),</span>
+    <span class="p">(</span><span class="s1">&#39;e2dnde&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;e2dnde_err&#39;</span><span class="p">,</span> <span class="s1">&#39;e2dnde_errp&#39;</span><span class="p">,</span> <span class="s1">&#39;e2dnde_errn&#39;</span><span class="p">,</span> <span class="s1">&#39;e2dnde_ul&#39;</span><span class="p">,</span> <span class="s1">&#39;is_ul&#39;</span><span class="p">]),</span>
+    <span class="p">(</span><span class="s1">&#39;flux&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;flux_err&#39;</span><span class="p">,</span> <span class="s1">&#39;flux_errp&#39;</span><span class="p">,</span> <span class="s1">&#39;flux_errn&#39;</span><span class="p">,</span> <span class="s1">&#39;flux_ul&#39;</span><span class="p">,</span> <span class="s1">&#39;is_ul&#39;</span><span class="p">]),</span>
+    <span class="p">(</span><span class="s1">&#39;eflux&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;eflux_err&#39;</span><span class="p">,</span> <span class="s1">&#39;eflux_errp&#39;</span><span class="p">,</span> <span class="s1">&#39;eflux_errn&#39;</span><span class="p">,</span> <span class="s1">&#39;eflux_ul&#39;</span><span class="p">,</span> <span class="s1">&#39;is_ul&#39;</span><span class="p">]),</span>
+<span class="p">])</span>
+
+<span class="n">DEFAULT_UNIT</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">([</span>
+    <span class="p">(</span><span class="s1">&#39;dnde&#39;</span><span class="p">,</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s1">&#39;cm-2 s-1 TeV-1&#39;</span><span class="p">)),</span>
+    <span class="p">(</span><span class="s1">&#39;e2dnde&#39;</span><span class="p">,</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s1">&#39;erg cm-2 s-1&#39;</span><span class="p">)),</span>
+    <span class="p">(</span><span class="s1">&#39;flux&#39;</span><span class="p">,</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s1">&#39;cm-2 s-1&#39;</span><span class="p">)),</span>
+    <span class="p">(</span><span class="s1">&#39;eflux&#39;</span><span class="p">,</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s1">&#39;erg cm-2 s-1&#39;</span><span class="p">)),</span>
+<span class="p">])</span>
+
+
+<div class="viewcode-block" id="FluxPoints"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPoints.html#gammapy.spectrum.FluxPoints">[docs]</a><span class="k">class</span> <span class="nc">FluxPoints</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Flux points container.</span>
+
+<span class="sd">    The supported formats are described here: :ref:`gadf:flux-points`</span>
+
+<span class="sd">    In summary, the following formats and minimum required columns are:</span>
+
+<span class="sd">    * Format ``dnde``: columns ``e_ref`` and ``dnde``</span>
+<span class="sd">    * Format ``e2dnde``: columns ``e_ref``, ``e2dnde``</span>
+<span class="sd">    * Format ``flux``: columns ``e_min``, ``e_max``, ``flux``</span>
+<span class="sd">    * Format ``eflux``: columns ``e_min``, ``e_max``, ``eflux``</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    table : `~astropy.table.Table`</span>
+<span class="sd">        Table with flux point data</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    table : `~astropy.table.Table`</span>
+<span class="sd">        Table with flux point data</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    The `FluxPoints` object is most easily created by reading a file with</span>
+<span class="sd">    flux points given in one of the formats documented above:</span>
+
+<span class="sd">    .. code:: python</span>
+
+<span class="sd">        from gammapy.spectrum import FluxPoints</span>
+<span class="sd">        filename = &#39;$GAMMAPY_EXTRA/test_datasets/spectrum/flux_points/flux_points.fits&#39;</span>
+<span class="sd">        flux_points = FluxPoints.read(filename)</span>
+<span class="sd">        flux_points.plot()</span>
+
+<span class="sd">    An instance of `FluxPoints` can also be created by passing an instance of</span>
+<span class="sd">    `astropy.table.Table`, which contains the required columns, such as `&#39;e_ref&#39;`</span>
+<span class="sd">    and `&#39;dnde&#39;`:</span>
+
+<span class="sd">    .. code:: python</span>
+
+<span class="sd">        from astropy import units as u</span>
+<span class="sd">        from astropy.table import Table</span>
+<span class="sd">        from gammapy.spectrum import FluxPoints</span>
+<span class="sd">        from gammapy.spectrum.models import PowerLaw</span>
+
+<span class="sd">        table = Table()</span>
+<span class="sd">        pwl = PowerLaw()</span>
+<span class="sd">        e_ref = np.logspace(0, 2, 7) * u.TeV</span>
+<span class="sd">        table[&#39;e_ref&#39;] = e_ref</span>
+<span class="sd">        table[&#39;dnde&#39;] = pwl(e_ref)</span>
+<span class="sd">        table.meta[&#39;SED_TYPE&#39;] = &#39;dnde&#39;</span>
+
+<span class="sd">        flux_points = FluxPoints(table)</span>
+<span class="sd">        flux_points.plot()</span>
+
+<span class="sd">    If you have flux points in a different data format, the format can be changed</span>
+<span class="sd">    by renamimg the table columns and adding meta data:</span>
+
+<span class="sd">    .. code:: python</span>
+
+<span class="sd">        from astropy import units as u</span>
+<span class="sd">        from astropy.table import Table</span>
+<span class="sd">        from gammapy.spectrum import FluxPoints</span>
+
+<span class="sd">        table = Table.read(&#39;$GAMMAPY_EXTRA/test_datasets/spectrum/flux_points/flux_points_ctb_37b.txt&#39;,</span>
+<span class="sd">                           format=&#39;ascii.csv&#39;, delimiter=&#39; &#39;, comment=&#39;#&#39;)</span>
+<span class="sd">        table.meta[&#39;SED_TYPE&#39;] = &#39;dnde&#39;</span>
+<span class="sd">        table.rename_column(&#39;Differential_Flux&#39;, &#39;dnde&#39;)</span>
+<span class="sd">        table[&#39;dnde&#39;].unit = &#39;cm-2 s-1 TeV-1&#39;</span>
+
+<span class="sd">        table.rename_column(&#39;lower_error&#39;, &#39;dnde_errn&#39;)</span>
+<span class="sd">        table[&#39;dnde_errn&#39;].unit = &#39;cm-2 s-1 TeV-1&#39;</span>
+
+<span class="sd">        table.rename_column(&#39;upper_error&#39;, &#39;dnde_errp&#39;)</span>
+<span class="sd">        table[&#39;dnde_errp&#39;].unit = &#39;cm-2 s-1 TeV-1&#39;</span>
+
+<span class="sd">        table.rename_column(&#39;E&#39;, &#39;e_ref&#39;)</span>
+<span class="sd">        table[&#39;e_ref&#39;].unit = &#39;TeV&#39;</span>
+
+<span class="sd">        flux_points = FluxPoints(table)</span>
+<span class="sd">        flux_points.plot()</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">table</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">table</span> <span class="o">=</span> <span class="n">table_standardise_units_copy</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
+        <span class="c1"># validate that the table is a valid representation</span>
+        <span class="c1"># of the given flux point sed type</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_table</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">fmt</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">(sed_type=&quot;</span><span class="si">{}</span><span class="s1">&quot;, n_points=</span><span class="si">{}</span><span class="s1">)&#39;</span>
+        <span class="k">return</span> <span class="n">fmt</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sed_type</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">))</span>
+
+<div class="viewcode-block" id="FluxPoints.read"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPoints.html#gammapy.spectrum.FluxPoints.read">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Read flux points.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        filename : str</span>
+<span class="sd">            Filename</span>
+<span class="sd">        kwargs : dict</span>
+<span class="sd">            Keyword arguments passed to `astropy.table.Table.read`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">filename</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">IORegistryError</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;format&#39;</span><span class="p">,</span> <span class="s1">&#39;ascii.ecsv&#39;</span><span class="p">)</span>
+            <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="s1">&#39;SED_TYPE&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">sed_type</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_guess_sed_type</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
+            <span class="n">table</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;SED_TYPE&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sed_type</span>
+
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">table</span><span class="o">=</span><span class="n">table</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="FluxPoints.write"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPoints.html#gammapy.spectrum.FluxPoints.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Write flux points.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        filename : str</span>
+<span class="sd">            Filename</span>
+<span class="sd">        kwargs : dict</span>
+<span class="sd">            Keyword arguments passed to `astropy.table.Table.write`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">filename</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">IORegistryError</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;format&#39;</span><span class="p">,</span> <span class="s1">&#39;ascii.ecsv&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="FluxPoints.stack"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPoints.html#gammapy.spectrum.FluxPoints.stack">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">stack</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">flux_points</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Create flux points by stacking list of flux points.</span>
+
+<span class="sd">        The first `FluxPoints` object in the list is taken as a reference to infer</span>
+<span class="sd">        column names and units for the stacked object.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        flux_points : list of `FluxPoints`</span>
+<span class="sd">            List of flux points to stack.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        flux_points : `FluxPoints`</span>
+<span class="sd">            Flux points without upper limit points.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">reference</span> <span class="o">=</span> <span class="n">flux_points</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">table</span>
+
+        <span class="n">tables</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">flux_points</span><span class="p">:</span>
+            <span class="n">table</span> <span class="o">=</span> <span class="n">_</span><span class="o">.</span><span class="n">table</span>
+            <span class="k">for</span> <span class="n">colname</span> <span class="ow">in</span> <span class="n">reference</span><span class="o">.</span><span class="n">colnames</span><span class="p">:</span>
+                <span class="n">column</span> <span class="o">=</span> <span class="n">reference</span><span class="p">[</span><span class="n">colname</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">column</span><span class="o">.</span><span class="n">unit</span><span class="p">:</span>
+                    <span class="n">table</span><span class="p">[</span><span class="n">colname</span><span class="p">]</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="n">colname</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">column</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span>
+            <span class="n">tables</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">table</span><span class="p">[</span><span class="n">reference</span><span class="o">.</span><span class="n">colnames</span><span class="p">])</span>
+
+        <span class="n">table_stacked</span> <span class="o">=</span> <span class="n">vstack</span><span class="p">(</span><span class="n">tables</span><span class="p">)</span>
+        <span class="n">table_stacked</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;SED_TYPE&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">reference</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;SED_TYPE&#39;</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">table_stacked</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="FluxPoints.drop_ul"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPoints.html#gammapy.spectrum.FluxPoints.drop_ul">[docs]</a>    <span class="k">def</span> <span class="nf">drop_ul</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Drop upper limit flux points.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        flux_points : `FluxPoints`</span>
+<span class="sd">            Flux points with upper limit points removed.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+
+<span class="sd">        &gt;&gt;&gt; from gammapy.spectrum import FluxPoints</span>
+<span class="sd">        &gt;&gt;&gt; filename = &#39;$GAMMAPY_EXTRA/test_datasets/spectrum/flux_points/flux_points.fits&#39;</span>
+<span class="sd">        &gt;&gt;&gt; flux_points = FluxPoints.read(filename)</span>
+<span class="sd">        &gt;&gt;&gt; print(flux_points)</span>
+<span class="sd">        FluxPoints(sed_type=&quot;flux&quot;, n_points=24)</span>
+<span class="sd">        &gt;&gt;&gt; print(flux_points.drop_ul())</span>
+<span class="sd">        FluxPoints(sed_type=&quot;flux&quot;, n_points=19)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">table_drop_ul</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="o">~</span><span class="bp">self</span><span class="o">.</span><span class="n">_is_ul</span><span class="p">]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span><span class="n">table_drop_ul</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="FluxPoints.to_sed_type"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPoints.html#gammapy.spectrum.FluxPoints.to_sed_type">[docs]</a>    <span class="k">def</span> <span class="nf">to_sed_type</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sed_type</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">&#39;log_center&#39;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">pwl_approx</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Convert to a different SED type (return new `FluxPoints`).</span>
+
+<span class="sd">        See: http://adsabs.harvard.edu/abs/1995NIMPA.355..541L for details</span>
+<span class="sd">        on the `&#39;lafferty&#39;` method.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        sed_type : {&#39;dnde&#39;}</span>
+<span class="sd">             SED type to convert to.</span>
+<span class="sd">        model : `~gammapy.spectrum.SpectralModel`</span>
+<span class="sd">            Spectral model assumption.  Note that the value of the amplitude parameter</span>
+<span class="sd">            does not matter. Still it is recommended to use something with the right</span>
+<span class="sd">            scale and units. E.g. `amplitude = 1e-12 * u.Unit(&#39;cm-2 s-1 TeV-1&#39;)`</span>
+<span class="sd">        method : {&#39;lafferty&#39;, &#39;log_center&#39;, &#39;table&#39;}</span>
+<span class="sd">            Flux points `e_ref` estimation method:</span>
+
+<span class="sd">                * `&#39;laferty&#39;` Lafferty &amp; Wyatt model-based e_ref</span>
+<span class="sd">                * `&#39;log_center&#39;` log bin center e_ref</span>
+<span class="sd">                * `&#39;table&#39;` using column &#39;e_ref&#39; from input flux_points</span>
+<span class="sd">        pwl_approx : bool</span>
+<span class="sd">            Use local power law appoximation at e_ref to compute differential flux</span>
+<span class="sd">            from the integral flux. This method is used by the Fermi-LAT catalogs.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        flux_points : `FluxPoints`</span>
+<span class="sd">            Flux points including differential quantity columns `dnde`</span>
+<span class="sd">            and `dnde_err` (optional), `dnde_ul` (optional).</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+<span class="sd">        &gt;&gt;&gt; from astropy import units as u</span>
+<span class="sd">        &gt;&gt;&gt; from gammapy.spectrum import FluxPoints</span>
+<span class="sd">        &gt;&gt;&gt; from gammapy.spectrum.models import PowerLaw</span>
+<span class="sd">        &gt;&gt;&gt; filename = &#39;$GAMMAPY_EXTRA/test_datasets/spectrum/flux_points/flux_points.fits&#39;</span>
+<span class="sd">        &gt;&gt;&gt; flux_points = FluxPoints.read(filename)</span>
+<span class="sd">        &gt;&gt;&gt; model = PowerLaw(2.2 * u.Unit(&#39;&#39;), 1e-12 * u.Unit(&#39;cm-2 s-1 TeV-1&#39;), 1 * u.TeV)</span>
+<span class="sd">        &gt;&gt;&gt; flux_points_dnde = flux_points.to_sed_type(&#39;dnde&#39;, model=model)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># TODO: implement other directions. Refactor!</span>
+        <span class="k">if</span> <span class="n">sed_type</span> <span class="o">!=</span> <span class="s1">&#39;dnde&#39;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+        <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">model</span> <span class="o">=</span> <span class="n">PowerLaw</span><span class="p">(</span>
+                <span class="n">index</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="p">),</span>
+                <span class="n">amplitude</span><span class="o">=</span><span class="mi">1</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s1">&#39;cm-2 s-1 TeV-1&#39;</span><span class="p">),</span>
+                <span class="n">reference</span><span class="o">=</span><span class="mi">1</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">TeV</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="n">input_table</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="n">e_min</span><span class="p">,</span> <span class="n">e_max</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">e_min</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">e_max</span>
+
+        <span class="c1"># Compute e_ref</span>
+        <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;table&#39;</span><span class="p">:</span>
+            <span class="n">e_ref</span> <span class="o">=</span> <span class="n">input_table</span><span class="p">[</span><span class="s1">&#39;e_ref&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+        <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;log_center&#39;</span><span class="p">:</span>
+            <span class="n">e_ref</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">e_min</span> <span class="o">*</span> <span class="n">e_max</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;lafferty&#39;</span><span class="p">:</span>
+            <span class="c1"># set e_ref that it represents the mean dnde in the given energy bin</span>
+            <span class="n">e_ref</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_e_ref_lafferty</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">e_min</span><span class="p">,</span> <span class="n">e_max</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Invalid method: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">method</span><span class="p">))</span>
+
+        <span class="n">flux</span> <span class="o">=</span> <span class="n">input_table</span><span class="p">[</span><span class="s1">&#39;flux&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+        <span class="n">dnde</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dnde_from_flux</span><span class="p">(</span><span class="n">flux</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">e_ref</span><span class="p">,</span> <span class="n">e_min</span><span class="p">,</span> <span class="n">e_max</span><span class="p">,</span> <span class="n">pwl_approx</span><span class="p">)</span>
+
+        <span class="c1"># Add to result table</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">input_table</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;e_ref&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">e_ref</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;dnde&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dnde</span>
+
+        <span class="k">if</span> <span class="s1">&#39;flux_err&#39;</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">colnames</span><span class="p">:</span>
+            <span class="c1"># TODO: implement better error handling, e.g. MC based method</span>
+            <span class="n">table</span><span class="p">[</span><span class="s1">&#39;dnde_err&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dnde</span> <span class="o">*</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;flux_err&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span> <span class="o">/</span> <span class="n">flux</span>
+
+        <span class="k">if</span> <span class="s1">&#39;flux_errn&#39;</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">colnames</span><span class="p">:</span>
+            <span class="n">table</span><span class="p">[</span><span class="s1">&#39;dnde_errn&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dnde</span> <span class="o">*</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;flux_errn&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span> <span class="o">/</span> <span class="n">flux</span>
+            <span class="n">table</span><span class="p">[</span><span class="s1">&#39;dnde_errp&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dnde</span> <span class="o">*</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;flux_errp&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span> <span class="o">/</span> <span class="n">flux</span>
+
+        <span class="k">if</span> <span class="s1">&#39;flux_ul&#39;</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">colnames</span><span class="p">:</span>
+            <span class="n">flux_ul</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;flux_ul&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+            <span class="n">dnde_ul</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dnde_from_flux</span><span class="p">(</span><span class="n">flux_ul</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">e_ref</span><span class="p">,</span> <span class="n">e_min</span><span class="p">,</span> <span class="n">e_max</span><span class="p">,</span> <span class="n">pwl_approx</span><span class="p">)</span>
+            <span class="n">table</span><span class="p">[</span><span class="s1">&#39;dnde_ul&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dnde_ul</span>
+
+        <span class="n">table</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;SED_TYPE&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;dnde&#39;</span>
+        <span class="k">return</span> <span class="n">FluxPoints</span><span class="p">(</span><span class="n">table</span><span class="p">)</span></div>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_e_ref_lafferty</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">e_min</span><span class="p">,</span> <span class="n">e_max</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Helper for `to_sed_type`.</span>
+
+<span class="sd">        Compute e_ref that the value at e_ref corresponds</span>
+<span class="sd">        to the mean value between e_min and e_max.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">flux</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">integral</span><span class="p">(</span><span class="n">e_min</span><span class="p">,</span> <span class="n">e_max</span><span class="p">)</span>
+        <span class="n">dnde_mean</span> <span class="o">=</span> <span class="n">flux</span> <span class="o">/</span> <span class="p">(</span><span class="n">e_max</span> <span class="o">-</span> <span class="n">e_min</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">model</span><span class="o">.</span><span class="n">inverse</span><span class="p">(</span><span class="n">dnde_mean</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_dnde_from_flux</span><span class="p">(</span><span class="n">flux</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">e_ref</span><span class="p">,</span> <span class="n">e_min</span><span class="p">,</span> <span class="n">e_max</span><span class="p">,</span> <span class="n">pwl_approx</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Helper for `to_sed_type`.</span>
+
+<span class="sd">        Compute dnde under the assumption that flux equals expected</span>
+<span class="sd">        flux from model.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">dnde_model</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">e_ref</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">pwl_approx</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">spectral_index</span><span class="p">(</span><span class="n">e_ref</span><span class="p">)</span>
+            <span class="n">flux_model</span> <span class="o">=</span> <span class="n">power_law_integral_flux</span><span class="p">(</span><span class="n">f</span><span class="o">=</span><span class="n">dnde_model</span><span class="p">,</span> <span class="n">g</span><span class="o">=</span><span class="n">index</span><span class="p">,</span> <span class="n">e</span><span class="o">=</span><span class="n">e_ref</span><span class="p">,</span>
+                                                 <span class="n">e1</span><span class="o">=</span><span class="n">e_min</span><span class="p">,</span> <span class="n">e2</span><span class="o">=</span><span class="n">e_max</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">flux_model</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">integral</span><span class="p">(</span><span class="n">e_min</span><span class="p">,</span> <span class="n">e_max</span><span class="p">,</span> <span class="n">intervals</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">dnde_model</span> <span class="o">*</span> <span class="p">(</span><span class="n">flux</span> <span class="o">/</span> <span class="n">flux_model</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">sed_type</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;SED type (str).</span>
+
+<span class="sd">        One of: {&#39;dnde&#39;, &#39;e2dnde&#39;, &#39;flux&#39;, &#39;eflux&#39;}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;SED_TYPE&#39;</span><span class="p">]</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_guess_sed_type</span><span class="p">(</span><span class="n">table</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Guess SED type from table content.&quot;&quot;&quot;</span>
+        <span class="n">valid_sed_types</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">REQUIRED_COLUMNS</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="k">for</span> <span class="n">sed_type</span> <span class="ow">in</span> <span class="n">valid_sed_types</span><span class="p">:</span>
+            <span class="n">required</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">REQUIRED_COLUMNS</span><span class="p">[</span><span class="n">sed_type</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">required</span><span class="o">.</span><span class="n">issubset</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">colnames</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">sed_type</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_guess_sed_type_from_unit</span><span class="p">(</span><span class="n">unit</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Guess SED type from unit.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">sed_type</span><span class="p">,</span> <span class="n">default_unit</span> <span class="ow">in</span> <span class="n">DEFAULT_UNIT</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">unit</span><span class="o">.</span><span class="n">is_equivalent</span><span class="p">(</span><span class="n">default_unit</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">sed_type</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_validate_table</span><span class="p">(</span><span class="n">table</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Validate input table.&quot;&quot;&quot;</span>
+        <span class="c1"># TODO: do we really want to error out on tables that don&#39;t have `SED_TYPE` in meta?</span>
+        <span class="c1"># If yes, then this needs to be documented in the docstring,</span>
+        <span class="c1"># and the workaround pointed out (to add the meta key before creating FluxPoints).</span>
+        <span class="n">sed_type</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;SED_TYPE&#39;</span><span class="p">]</span>
+        <span class="n">required</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">REQUIRED_COLUMNS</span><span class="p">[</span><span class="n">sed_type</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">required</span><span class="o">.</span><span class="n">issubset</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">colnames</span><span class="p">):</span>
+            <span class="n">missing</span> <span class="o">=</span> <span class="n">required</span><span class="o">.</span><span class="n">difference</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">colnames</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Missing columns for sed type &#39;</span><span class="si">{}</span><span class="s2">&#39;:&quot;</span>
+                             <span class="s2">&quot; </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">sed_type</span><span class="p">,</span> <span class="n">missing</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">_get_y_energy_unit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">y_unit</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get energy part of the given y unit.&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[</span><span class="n">_</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">y_unit</span><span class="o">.</span><span class="n">bases</span> <span class="k">if</span> <span class="n">_</span><span class="o">.</span><span class="n">physical_type</span> <span class="o">==</span> <span class="s1">&#39;energy&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">except</span> <span class="ne">IndexError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s1">&#39;TeV&#39;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="FluxPoints.get_energy_err"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPoints.html#gammapy.spectrum.FluxPoints.get_energy_err">[docs]</a>    <span class="k">def</span> <span class="nf">get_energy_err</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sed_type</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute energy error for given sed type&quot;&quot;&quot;</span>
+        <span class="c1"># TODO: sed_type is not used</span>
+        <span class="k">if</span> <span class="n">sed_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">sed_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sed_type</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">e_min</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;e_min&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+            <span class="n">e_max</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;e_max&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+            <span class="n">e_ref</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">e_ref</span>
+            <span class="n">x_err</span> <span class="o">=</span> <span class="p">((</span><span class="n">e_ref</span> <span class="o">-</span> <span class="n">e_min</span><span class="p">),</span> <span class="p">(</span><span class="n">e_max</span> <span class="o">-</span> <span class="n">e_ref</span><span class="p">))</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="n">x_err</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">x_err</span></div>
+
+<div class="viewcode-block" id="FluxPoints.get_flux_err"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPoints.html#gammapy.spectrum.FluxPoints.get_flux_err">[docs]</a>    <span class="k">def</span> <span class="nf">get_flux_err</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sed_type</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute flux error for given sed type&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">sed_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">sed_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sed_type</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># asymmetric error</span>
+            <span class="n">y_errn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="n">sed_type</span> <span class="o">+</span> <span class="s1">&#39;_errn&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+            <span class="n">y_errp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="n">sed_type</span> <span class="o">+</span> <span class="s1">&#39;_errp&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+            <span class="n">y_err</span> <span class="o">=</span> <span class="p">(</span><span class="n">y_errn</span><span class="p">,</span> <span class="n">y_errp</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="c1"># symmetric error</span>
+                <span class="n">y_err</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="n">sed_type</span> <span class="o">+</span> <span class="s1">&#39;_err&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+                <span class="n">y_err</span> <span class="o">=</span> <span class="p">(</span><span class="n">y_err</span><span class="p">,</span> <span class="n">y_err</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                <span class="c1"># no error at all</span>
+                <span class="n">y_err</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">y_err</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">_is_ul</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;is_ul&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;bool&#39;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">sed_type</span><span class="p">])</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">e_ref</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Reference energy.</span>
+
+<span class="sd">        Defined by `e_ref` column in `FluxPoints.table` or computed as log</span>
+<span class="sd">        center, if `e_min` and `e_max` columns are present in `FluxPoints.table`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        e_ref : `~astropy.units.Quantity`</span>
+<span class="sd">            Reference energy.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;e_ref&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">e_min</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">e_max</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">e_min</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Lower bound of energy bin.</span>
+
+<span class="sd">        Defined by `e_min` column in `FluxPoints.table`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        e_min : `~astropy.units.Quantity`</span>
+<span class="sd">            Lower bound of energy bin.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;e_min&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">e_max</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Upper bound of energy bin.</span>
+
+<span class="sd">        Defined by ``e_max`` column in ``table``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        e_max : `~astropy.units.Quantity`</span>
+<span class="sd">            Upper bound of energy bin.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;e_max&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+
+<div class="viewcode-block" id="FluxPoints.plot"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPoints.html#gammapy.spectrum.FluxPoints.plot">[docs]</a>    <span class="k">def</span> <span class="nf">plot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sed_type</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">energy_unit</span><span class="o">=</span><span class="s1">&#39;TeV&#39;</span><span class="p">,</span> <span class="n">flux_unit</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+             <span class="n">energy_power</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Plot flux points.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        ax : `~matplotlib.axes.Axes`</span>
+<span class="sd">            Axis object to plot on.</span>
+<span class="sd">        sed_type : [&#39;dnde&#39;, &#39;flux&#39;, &#39;eflux&#39;]</span>
+<span class="sd">            Which sed type to plot.</span>
+<span class="sd">        energy_unit : str, `~astropy.units.Unit`, optional</span>
+<span class="sd">            Unit of the energy axis</span>
+<span class="sd">        flux_unit : str, `~astropy.units.Unit`, optional</span>
+<span class="sd">            Unit of the flux axis</span>
+<span class="sd">        energy_power : int</span>
+<span class="sd">            Power of energy to multiply y axis with</span>
+<span class="sd">        kwargs : dict</span>
+<span class="sd">            Keyword arguments passed to :func:`matplotlib.pyplot.errorbar`</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ax : `~matplotlib.axes.Axes`</span>
+<span class="sd">            Axis object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+
+        <span class="k">if</span> <span class="n">ax</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">gca</span><span class="p">()</span>
+
+        <span class="n">sed_type</span> <span class="o">=</span> <span class="n">sed_type</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">sed_type</span>
+        <span class="n">y_unit</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="n">flux_unit</span> <span class="ow">or</span> <span class="n">DEFAULT_UNIT</span><span class="p">[</span><span class="n">sed_type</span><span class="p">])</span>
+
+        <span class="n">y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="n">sed_type</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">y_unit</span><span class="p">)</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">e_ref</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">energy_unit</span><span class="p">)</span>
+
+        <span class="c1"># get errors and ul</span>
+        <span class="n">is_ul</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_ul</span>
+        <span class="n">x_err_all</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_energy_err</span><span class="p">(</span><span class="n">sed_type</span><span class="p">)</span>
+        <span class="n">y_err_all</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_flux_err</span><span class="p">(</span><span class="n">sed_type</span><span class="p">)</span>
+
+        <span class="c1"># handle energy power</span>
+        <span class="n">e_unit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_y_energy_unit</span><span class="p">(</span><span class="n">y_unit</span><span class="p">)</span>
+        <span class="n">y_unit</span> <span class="o">=</span> <span class="n">y</span><span class="o">.</span><span class="n">unit</span> <span class="o">*</span> <span class="n">e_unit</span> <span class="o">**</span> <span class="n">energy_power</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="p">(</span><span class="n">y</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">power</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">energy_power</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">y_unit</span><span class="p">)</span>
+
+        <span class="n">y_err</span><span class="p">,</span> <span class="n">x_err</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">y_err_all</span><span class="p">:</span>
+            <span class="n">y_errn</span> <span class="o">=</span> <span class="p">(</span><span class="n">y_err_all</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">power</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">energy_power</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">y_unit</span><span class="p">)</span>
+            <span class="n">y_errp</span> <span class="o">=</span> <span class="p">(</span><span class="n">y_err_all</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">power</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">energy_power</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">y_unit</span><span class="p">)</span>
+            <span class="n">y_err</span> <span class="o">=</span> <span class="p">(</span><span class="n">y_errn</span><span class="p">[</span><span class="o">~</span><span class="n">is_ul</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">y_unit</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                     <span class="n">y_errp</span><span class="p">[</span><span class="o">~</span><span class="n">is_ul</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">y_unit</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">x_err_all</span><span class="p">:</span>
+            <span class="n">x_errn</span><span class="p">,</span> <span class="n">x_errp</span> <span class="o">=</span> <span class="n">x_err_all</span>
+            <span class="n">x_err</span> <span class="o">=</span> <span class="p">(</span><span class="n">x_errn</span><span class="p">[</span><span class="o">~</span><span class="n">is_ul</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">energy_unit</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                     <span class="n">x_errp</span><span class="p">[</span><span class="o">~</span><span class="n">is_ul</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">energy_unit</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+
+        <span class="c1"># set flux points plotting defaults</span>
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;marker&#39;</span><span class="p">,</span> <span class="s1">&#39;+&#39;</span><span class="p">)</span>
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;ls&#39;</span><span class="p">,</span> <span class="s1">&#39;None&#39;</span><span class="p">)</span>
+
+        <span class="n">ebar</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">errorbar</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="o">~</span><span class="n">is_ul</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">y</span><span class="p">[</span><span class="o">~</span><span class="n">is_ul</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">yerr</span><span class="o">=</span><span class="n">y_err</span><span class="p">,</span>
+                           <span class="n">xerr</span><span class="o">=</span><span class="n">x_err</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">is_ul</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">x_err_all</span><span class="p">:</span>
+                <span class="n">x_errn</span><span class="p">,</span> <span class="n">x_errp</span> <span class="o">=</span> <span class="n">x_err_all</span>
+                <span class="n">x_err</span> <span class="o">=</span> <span class="p">(</span><span class="n">x_errn</span><span class="p">[</span><span class="n">is_ul</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">energy_unit</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                         <span class="n">x_errp</span><span class="p">[</span><span class="n">is_ul</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">energy_unit</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+
+            <span class="n">y_ul</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="n">sed_type</span> <span class="o">+</span> <span class="s1">&#39;_ul&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+            <span class="n">y_ul</span> <span class="o">=</span> <span class="p">(</span><span class="n">y_ul</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">power</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">energy_power</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">y_unit</span><span class="p">)</span>
+
+            <span class="n">y_err</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">y_ul</span><span class="p">[</span><span class="n">is_ul</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">y_ul</span><span class="p">[</span><span class="n">is_ul</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">))</span>
+
+            <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;c&#39;</span><span class="p">,</span> <span class="n">ebar</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get_color</span><span class="p">())</span>
+
+            <span class="c1"># pop label keyword to avoid that it appears twice in the legend</span>
+            <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;label&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">errorbar</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="n">is_ul</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">y_ul</span><span class="p">[</span><span class="n">is_ul</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">xerr</span><span class="o">=</span><span class="n">x_err</span><span class="p">,</span> <span class="n">yerr</span><span class="o">=</span><span class="n">y_err</span><span class="p">,</span>
+                        <span class="n">uplims</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xscale</span><span class="p">(</span><span class="s1">&#39;log&#39;</span><span class="p">,</span> <span class="n">nonposx</span><span class="o">=</span><span class="s1">&#39;clip&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_yscale</span><span class="p">(</span><span class="s1">&#39;log&#39;</span><span class="p">,</span> <span class="n">nonposy</span><span class="o">=</span><span class="s1">&#39;clip&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Energy (</span><span class="si">{}</span><span class="s1">)&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">energy_unit</span><span class="p">))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{}</span><span class="s1"> (</span><span class="si">{}</span><span class="s1">)&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sed_type</span><span class="p">,</span> <span class="n">y_unit</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">ax</span></div></div>
+
+
+<div class="viewcode-block" id="FluxPointEstimator"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPointEstimator.html#gammapy.spectrum.FluxPointEstimator">[docs]</a><span class="k">class</span> <span class="nc">FluxPointEstimator</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Flux point estimator.</span>
+
+<span class="sd">    Computes flux points for a given spectrum observation dataset</span>
+<span class="sd">    (a 1-dim on/off observation), energy binning and spectral model.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    obs : `~gammapy.spectrum.SpectrumObservation`</span>
+<span class="sd">        Spectrum observation</span>
+<span class="sd">    groups : `~gammapy.spectrum.SpectrumEnergyGroups`</span>
+<span class="sd">        Energy groups (usually output of `~gammapy.spectrum.SpectrumEnergyGroupMaker`)</span>
+<span class="sd">    model : `~gammapy.spectrum.models.SpectralModel`</span>
+<span class="sd">        Global model (usually output of `~gammapy.spectrum.SpectrumFit`)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">groups</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">obs</span> <span class="o">=</span> <span class="n">obs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">groups</span> <span class="o">=</span> <span class="n">groups</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">flux_points</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">:</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+        <span class="n">s</span> <span class="o">+=</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obs</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
+        <span class="n">s</span> <span class="o">+=</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">groups</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
+        <span class="n">s</span> <span class="o">+=</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
+        <span class="k">return</span> <span class="n">s</span>
+
+<div class="viewcode-block" id="FluxPointEstimator.compute_points"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPointEstimator.html#gammapy.spectrum.FluxPointEstimator.compute_points">[docs]</a>    <span class="k">def</span> <span class="nf">compute_points</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">rows</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">groups</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">group</span><span class="o">.</span><span class="n">bin_type</span> <span class="o">!=</span> <span class="s1">&#39;normal&#39;</span><span class="p">:</span>
+                <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Skipping energy group:</span><span class="se">\n</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">group</span><span class="p">))</span>
+                <span class="k">continue</span>
+
+            <span class="n">row</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_flux_point</span><span class="p">(</span><span class="n">group</span><span class="p">)</span>
+            <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+
+        <span class="n">meta</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">([</span>
+            <span class="p">(</span><span class="s1">&#39;method&#39;</span><span class="p">,</span> <span class="s1">&#39;TODO&#39;</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;SED_TYPE&#39;</span><span class="p">,</span> <span class="s1">&#39;dnde&#39;</span><span class="p">),</span>
+        <span class="p">])</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">table_from_row_data</span><span class="p">(</span><span class="n">rows</span><span class="o">=</span><span class="n">rows</span><span class="p">,</span> <span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">flux_points</span> <span class="o">=</span> <span class="n">FluxPoints</span><span class="p">(</span><span class="n">table</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="FluxPointEstimator.compute_flux_point"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPointEstimator.html#gammapy.spectrum.FluxPointEstimator.compute_flux_point">[docs]</a>    <span class="k">def</span> <span class="nf">compute_flux_point</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy_group</span><span class="p">):</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Computing flux point for energy group:</span><span class="se">\n</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">energy_group</span><span class="p">))</span>
+
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_approx_model</span><span class="p">(</span>
+            <span class="n">global_model</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
+            <span class="n">energy_group</span><span class="o">=</span><span class="n">energy_group</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Put at log center of the bin</span>
+        <span class="n">energy_ref</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">energy_group</span><span class="o">.</span><span class="n">energy_min</span> <span class="o">*</span> <span class="n">energy_group</span><span class="o">.</span><span class="n">energy_max</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fit_point</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+            <span class="n">energy_group</span><span class="o">=</span><span class="n">energy_group</span><span class="p">,</span>
+            <span class="n">energy_ref</span><span class="o">=</span><span class="n">energy_ref</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="FluxPointEstimator.compute_approx_model"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPointEstimator.html#gammapy.spectrum.FluxPointEstimator.compute_approx_model">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">compute_approx_model</span><span class="p">(</span><span class="n">global_model</span><span class="p">,</span> <span class="n">energy_group</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Compute approximate model, to be used in the energy bin.</span>
+<span class="sd">        TODO: At the moment just the global model with fixed parameters is</span>
+<span class="sd">        returned</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># binning = EnergyBounds(binning)</span>
+        <span class="c1"># low_bins = binning.lower_bounds</span>
+        <span class="c1"># high_bins = binning.upper_bounds</span>
+        <span class="c1">#</span>
+        <span class="c1"># from sherpa.models import PowLaw1D</span>
+        <span class="c1">#</span>
+        <span class="c1"># if isinstance(model, models.PowerLaw):</span>
+        <span class="c1">#     temp = model.to_sherpa()</span>
+        <span class="c1">#     temp.gamma.freeze()</span>
+        <span class="c1">#     sherpa_models = [temp] * binning.nbins</span>
+        <span class="c1"># else:</span>
+        <span class="c1">#     sherpa_models = [None] * binning.nbins</span>
+        <span class="c1">#</span>
+        <span class="c1"># for low, high, sherpa_model in zip(low_bins, high_bins, sherpa_models):</span>
+        <span class="c1">#     log.info(&#39;Computing flux points in bin [{}, {}]&#39;.format(low, high))</span>
+        <span class="c1">#</span>
+        <span class="c1">#     # Make PowerLaw approximation for higher order models</span>
+        <span class="c1">#     if sherpa_model is None:</span>
+        <span class="c1">#         flux_low = model(low)</span>
+        <span class="c1">#         flux_high = model(high)</span>
+        <span class="c1">#         index = powerlaw.power_law_g_from_points(e1=low, e2=high,</span>
+        <span class="c1">#                                                  f1=flux_low,</span>
+        <span class="c1">#                                                  f2=flux_high)</span>
+        <span class="c1">#</span>
+        <span class="c1">#         log.debug(&#39;Approximated power law index: {}&#39;.format(index))</span>
+        <span class="c1">#         sherpa_model = PowLaw1D(&#39;powlaw1d.default&#39;)</span>
+        <span class="c1">#         sherpa_model.gamma = index</span>
+        <span class="c1">#         sherpa_model.gamma.freeze()</span>
+        <span class="c1">#         sherpa_model.ref = model.parameters.reference.to(&#39;keV&#39;)</span>
+        <span class="c1">#         sherpa_model.ampl = 1e-20</span>
+        <span class="c1"># return PowerLaw(</span>
+        <span class="c1">#    index=u.Quantity(2, &#39;&#39;),</span>
+        <span class="c1">#    amplitude=u.Quantity(1, &#39;m-2 s-1 TeV-1&#39;),</span>
+        <span class="c1">#    reference=u.Quantity(1, &#39;TeV&#39;),</span>
+        <span class="c1"># )</span>
+        <span class="n">approx_model</span> <span class="o">=</span> <span class="n">global_model</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">par</span> <span class="ow">in</span> <span class="n">approx_model</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">parameters</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">par</span><span class="o">.</span><span class="n">name</span> <span class="o">!=</span> <span class="s1">&#39;amplitude&#39;</span><span class="p">:</span>
+                <span class="n">par</span><span class="o">.</span><span class="n">frozen</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="n">approx_model</span></div>
+
+<div class="viewcode-block" id="FluxPointEstimator.compute_flux_point_ul"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPointEstimator.html#gammapy.spectrum.FluxPointEstimator.compute_flux_point_ul">[docs]</a>    <span class="k">def</span> <span class="nf">compute_flux_point_ul</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fit</span><span class="p">,</span> <span class="n">best_fit</span><span class="p">,</span> <span class="n">delta_ts</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">negative</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Compute upper limits for flux point values.</span>
+
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        fit : `SpectrumFit`</span>
+<span class="sd">            Instance of spectrum fit.</span>
+<span class="sd">        best_fit : `SpectrumFitResult`</span>
+<span class="sd">            Best fit result.</span>
+<span class="sd">        delta_ts : float (4)</span>
+<span class="sd">            Difference in log-likelihood for given confidence interval.</span>
+<span class="sd">            See Example below.</span>
+<span class="sd">        negative : bool</span>
+<span class="sd">            Compute limit in negative direction.</span>
+
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+<span class="sd">        To compute ~95% confidence upper limits (or 2 sigma) you can use:</span>
+
+<span class="sd">            from scipy.stats import chi2, norm</span>
+
+<span class="sd">            sigma = 2</span>
+<span class="sd">            cl = 1 - 2 * norm.sf(sigma) # using two sided p-value</span>
+<span class="sd">            delta_ts = chi2.isf(1 - cl, df=1)</span>
+
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dnde_ul : `~astropy.units.Quantity`</span>
+<span class="sd">            Flux point upper limit.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="kn">from</span> <span class="nn">scipy.optimize</span> <span class="k">import</span> <span class="n">brentq</span>
+
+        <span class="c1"># this is a prototype for fast flux point upper limit</span>
+        <span class="c1"># calculation using brentq</span>
+        <span class="n">stat_best_fit</span> <span class="o">=</span> <span class="n">best_fit</span><span class="o">.</span><span class="n">statval</span>
+        <span class="n">amplitude</span> <span class="o">=</span> <span class="n">best_fit</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="s1">&#39;amplitude&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="o">/</span> <span class="mf">1E-12</span>
+        <span class="n">amplitude_err</span> <span class="o">=</span> <span class="n">best_fit</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;amplitude&#39;</span><span class="p">)</span> <span class="o">/</span> <span class="mf">1E-12</span>
+
+        <span class="k">if</span> <span class="n">negative</span><span class="p">:</span>
+            <span class="n">amplitude_max</span> <span class="o">=</span> <span class="n">amplitude</span>
+            <span class="n">amplitude_min</span> <span class="o">=</span> <span class="n">amplitude_max</span> <span class="o">-</span> <span class="mf">1E3</span> <span class="o">*</span> <span class="n">amplitude_err</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">amplitude_max</span> <span class="o">=</span> <span class="n">amplitude</span> <span class="o">+</span> <span class="mf">1E3</span> <span class="o">*</span> <span class="n">amplitude_err</span>
+            <span class="n">amplitude_min</span> <span class="o">=</span> <span class="n">amplitude</span>
+
+        <span class="k">def</span> <span class="nf">ts_diff</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+            <span class="n">fit</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="s1">&#39;amplitude&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">x</span> <span class="o">*</span> <span class="mf">1E-12</span>
+            <span class="n">fit</span><span class="o">.</span><span class="n">predict_counts</span><span class="p">()</span>
+            <span class="n">fit</span><span class="o">.</span><span class="n">calc_statval</span><span class="p">()</span>
+            <span class="k">return</span> <span class="p">(</span><span class="n">stat_best_fit</span> <span class="o">+</span> <span class="n">delta_ts</span><span class="p">)</span> <span class="o">-</span> <span class="n">fit</span><span class="o">.</span><span class="n">total_stat</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">brentq</span><span class="p">(</span><span class="n">ts_diff</span><span class="p">,</span> <span class="n">amplitude_min</span><span class="p">,</span> <span class="n">amplitude_max</span><span class="p">,</span>
+                            <span class="n">maxiter</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">rtol</span><span class="o">=</span><span class="mf">1e-2</span><span class="p">)</span>
+            <span class="n">fit</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="s1">&#39;amplitude&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">result</span> <span class="o">*</span> <span class="mf">1E-12</span>
+            <span class="k">return</span> <span class="n">fit</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="n">fit</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="s1">&#39;reference&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+            <span class="c1"># Where the root finding fails NaN is set as amplitude</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Flux point upper limit computation failed.&#39;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="n">fit</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="s1">&#39;amplitude&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="FluxPointEstimator.compute_flux_point_sqrt_ts"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPointEstimator.html#gammapy.spectrum.FluxPointEstimator.compute_flux_point_sqrt_ts">[docs]</a>    <span class="k">def</span> <span class="nf">compute_flux_point_sqrt_ts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fit</span><span class="p">,</span> <span class="n">best_fit</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Compute sqrt(TS) for flux point.</span>
+
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        fit : `SpectrumFit`</span>
+<span class="sd">            Instance of spectrum fit.</span>
+<span class="sd">        best_fit : `SpectrumFitResult`</span>
+<span class="sd">            Best fit result.</span>
+
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        sqrt_ts : float</span>
+<span class="sd">            Sqrt(TS) for flux point.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">amplitude</span> <span class="o">=</span> <span class="n">best_fit</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="s1">&#39;amplitude&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
+        <span class="n">stat_best_fit</span> <span class="o">=</span> <span class="n">best_fit</span><span class="o">.</span><span class="n">statval</span>
+
+        <span class="n">fit</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="s1">&#39;amplitude&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">fit</span><span class="o">.</span><span class="n">predict_counts</span><span class="p">()</span>
+        <span class="n">fit</span><span class="o">.</span><span class="n">calc_statval</span><span class="p">()</span>
+        <span class="n">stat_null</span> <span class="o">=</span> <span class="n">fit</span><span class="o">.</span><span class="n">total_stat</span>
+
+        <span class="n">fit</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="s1">&#39;amplitude&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">amplitude</span>
+        <span class="n">ts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">stat_null</span> <span class="o">-</span> <span class="n">stat_best_fit</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="n">amplitude</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">ts</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="FluxPointEstimator.fit_point"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPointEstimator.html#gammapy.spectrum.FluxPointEstimator.fit_point">[docs]</a>    <span class="k">def</span> <span class="nf">fit_point</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">energy_group</span><span class="p">,</span> <span class="n">energy_ref</span><span class="p">,</span> <span class="n">sqrt_ts_threshold</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+        <span class="kn">from</span> <span class="nn">.fit</span> <span class="k">import</span> <span class="n">SpectrumFit</span>
+
+        <span class="n">energy_min</span> <span class="o">=</span> <span class="n">energy_group</span><span class="o">.</span><span class="n">energy_min</span>
+        <span class="n">energy_max</span> <span class="o">=</span> <span class="n">energy_group</span><span class="o">.</span><span class="n">energy_max</span>
+
+        <span class="c1"># Set reference and remove min amplitude</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="s1">&#39;reference&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">energy_ref</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;TeV&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span>
+
+        <span class="n">fit</span> <span class="o">=</span> <span class="n">SpectrumFit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obs</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
+
+        <span class="c1"># TODO: Notice channels contained in energy_group</span>
+        <span class="n">fit</span><span class="o">.</span><span class="n">fit_range</span> <span class="o">=</span> <span class="n">energy_min</span><span class="p">,</span> <span class="n">energy_max</span>
+
+        <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="s1">&#39;Calling Sherpa fit for flux point &#39;</span>
+            <span class="s1">&#39; in energy range:</span><span class="se">\n</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">fit</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="n">fit</span><span class="o">.</span><span class="n">fit</span><span class="p">()</span>
+        <span class="n">fit</span><span class="o">.</span><span class="n">est_errors</span><span class="p">()</span>
+
+        <span class="c1"># First result contain correct model</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="n">fit</span><span class="o">.</span><span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="n">dnde</span><span class="p">,</span> <span class="n">dnde_err</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">evaluate_error</span><span class="p">(</span><span class="n">energy_ref</span><span class="p">)</span>
+        <span class="n">sqrt_ts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_flux_point_sqrt_ts</span><span class="p">(</span><span class="n">fit</span><span class="p">,</span> <span class="n">best_fit</span><span class="o">=</span><span class="n">res</span><span class="p">)</span>
+
+        <span class="n">dnde_ul</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_flux_point_ul</span><span class="p">(</span><span class="n">fit</span><span class="p">,</span> <span class="n">best_fit</span><span class="o">=</span><span class="n">res</span><span class="p">)</span>
+        <span class="n">dnde_errp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_flux_point_ul</span><span class="p">(</span><span class="n">fit</span><span class="p">,</span> <span class="n">best_fit</span><span class="o">=</span><span class="n">res</span><span class="p">,</span> <span class="n">delta_ts</span><span class="o">=</span><span class="mf">1.</span><span class="p">)</span> <span class="o">-</span> <span class="n">dnde</span>
+        <span class="n">dnde_errn</span> <span class="o">=</span> <span class="n">dnde</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_flux_point_ul</span><span class="p">(</span><span class="n">fit</span><span class="p">,</span> <span class="n">best_fit</span><span class="o">=</span><span class="n">res</span><span class="p">,</span> <span class="n">delta_ts</span><span class="o">=</span><span class="mf">1.</span><span class="p">,</span> <span class="n">negative</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">OrderedDict</span><span class="p">([</span>
+            <span class="p">(</span><span class="s1">&#39;e_ref&#39;</span><span class="p">,</span> <span class="n">energy_ref</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;e_min&#39;</span><span class="p">,</span> <span class="n">energy_min</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;e_max&#39;</span><span class="p">,</span> <span class="n">energy_max</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;dnde&#39;</span><span class="p">,</span> <span class="n">dnde</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEFAULT_UNIT</span><span class="p">[</span><span class="s1">&#39;dnde&#39;</span><span class="p">])),</span>
+            <span class="p">(</span><span class="s1">&#39;dnde_err&#39;</span><span class="p">,</span> <span class="n">dnde_err</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEFAULT_UNIT</span><span class="p">[</span><span class="s1">&#39;dnde&#39;</span><span class="p">])),</span>
+            <span class="p">(</span><span class="s1">&#39;dnde_ul&#39;</span><span class="p">,</span> <span class="n">dnde_ul</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEFAULT_UNIT</span><span class="p">[</span><span class="s1">&#39;dnde&#39;</span><span class="p">])),</span>
+            <span class="p">(</span><span class="s1">&#39;is_ul&#39;</span><span class="p">,</span> <span class="n">sqrt_ts</span> <span class="o">&lt;</span> <span class="n">sqrt_ts_threshold</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;sqrt_ts&#39;</span><span class="p">,</span> <span class="n">sqrt_ts</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;dnde_errp&#39;</span><span class="p">,</span> <span class="n">dnde_errp</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;dnde_errn&#39;</span><span class="p">,</span> <span class="n">dnde_errn</span><span class="p">)</span>
+        <span class="p">])</span></div></div>
+
+
+<span class="k">class</span> <span class="nc">FluxPointProfiles</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Flux point likelihood profiles.</span>
+
+<span class="sd">    See :ref:`gadf:likelihood_sed`.</span>
+
+<span class="sd">    TODO: merge this class with the classes in ``fermipy/castro.py``,</span>
+<span class="sd">    which are much more advanced / feature complete.</span>
+<span class="sd">    This is just a temp solution because we don&#39;t have time for that.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    table : `~astropy.table.Table`</span>
+<span class="sd">        Table holding the data</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">table</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">table</span> <span class="o">=</span> <span class="n">table</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Read from file.&quot;&quot;&quot;</span>
+        <span class="n">filename</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">table</span><span class="o">=</span><span class="n">table</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">plot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ax</span><span class="p">):</span>
+        <span class="c1"># TODO: copy code from fermipy, don&#39;t start from scratch!</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+
+<span class="k">def</span> <span class="nf">chi2_flux_points</span><span class="p">(</span><span class="n">flux_points</span><span class="p">,</span> <span class="n">gp_model</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Chi2 statistics for a list of flux points and model.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">gp_model</span><span class="p">(</span><span class="n">flux_points</span><span class="o">.</span><span class="n">e_ref</span><span class="p">)</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">flux_points</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;dnde&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+    <span class="n">data_err</span> <span class="o">=</span> <span class="n">flux_points</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;dnde_err&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+    <span class="n">stat_per_bin</span> <span class="o">=</span> <span class="p">((</span><span class="n">data</span> <span class="o">-</span> <span class="n">model</span><span class="p">)</span> <span class="o">/</span> <span class="n">data_err</span><span class="p">)</span><span class="o">.</span><span class="n">value</span> <span class="o">**</span> <span class="mi">2</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nansum</span><span class="p">(</span><span class="n">stat_per_bin</span><span class="p">),</span> <span class="n">stat_per_bin</span>
+
+
+<span class="k">def</span> <span class="nf">chi2_flux_points_assym</span><span class="p">(</span><span class="n">flux_points</span><span class="p">,</span> <span class="n">gp_model</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Assymetric chi2 statistics for a list of flux points and model.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">gp_model</span><span class="p">(</span><span class="n">flux_points</span><span class="o">.</span><span class="n">e_ref</span><span class="p">)</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">flux_points</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;dnde&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+
+    <span class="n">data_errp</span> <span class="o">=</span> <span class="n">flux_points</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;dnde_errp&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+    <span class="n">data_errn</span> <span class="o">=</span> <span class="n">flux_points</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;dnde_errn&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+
+    <span class="n">data_err</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">model</span> <span class="o">&gt;</span> <span class="n">data</span><span class="p">,</span> <span class="n">data_errp</span><span class="p">,</span> <span class="n">data_errn</span><span class="p">)</span>
+    <span class="n">stat_per_bin</span> <span class="o">=</span> <span class="p">((</span><span class="n">data</span> <span class="o">-</span> <span class="n">model</span><span class="p">)</span> <span class="o">/</span> <span class="n">data_err</span><span class="p">)</span><span class="o">.</span><span class="n">value</span> <span class="o">**</span> <span class="mi">2</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nansum</span><span class="p">(</span><span class="n">stat_per_bin</span><span class="p">),</span> <span class="n">stat_per_bin</span>
+
+
+<div class="viewcode-block" id="FluxPointFitter"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPointFitter.html#gammapy.spectrum.FluxPointFitter">[docs]</a><span class="k">class</span> <span class="nc">FluxPointFitter</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Fit a set of flux points with a parametric model.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    optimizer : {&#39;simplex&#39;, &#39;moncar&#39;, &#39;gridsearch&#39;}</span>
+<span class="sd">        Select optimizer</span>
+<span class="sd">    error_estimator : {&#39;covar&#39;}</span>
+<span class="sd">        Select error estimator</span>
+<span class="sd">    ul_handling : {&#39;ignore&#39;}</span>
+<span class="sd">        How to handle flux point upper limits in the fit</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+
+<span class="sd">    Load flux points from file and fit with a power-law model::</span>
+
+<span class="sd">        from astropy import units as u</span>
+<span class="sd">        from gammapy.spectrum import FluxPoints, FluxPointFitter</span>
+<span class="sd">        from gammapy.spectrum.models import PowerLaw</span>
+
+<span class="sd">        filename = &#39;$GAMMAPY_EXTRA/test_datasets/spectrum/flux_points/diff_flux_points.fits&#39;</span>
+<span class="sd">        flux_points = FluxPoints.read(filename)</span>
+
+<span class="sd">        model = PowerLaw(</span>
+<span class="sd">            index=2. * u.Unit(&#39;&#39;),</span>
+<span class="sd">            amplitude=1e-12 * u.Unit(&#39;cm-2 s-1 TeV-1&#39;),</span>
+<span class="sd">            reference=1. * u.TeV,</span>
+<span class="sd">        )</span>
+
+<span class="sd">        fitter = FluxPointFitter()</span>
+<span class="sd">        result = fitter.run(flux_points, model)</span>
+<span class="sd">        print(result[&#39;best_fit_model&#39;])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stat</span><span class="o">=</span><span class="s1">&#39;chi2&#39;</span><span class="p">,</span> <span class="n">optimizer</span><span class="o">=</span><span class="s1">&#39;simplex&#39;</span><span class="p">,</span> <span class="n">error_estimator</span><span class="o">=</span><span class="s1">&#39;covar&#39;</span><span class="p">,</span>
+                 <span class="n">ul_handling</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">stat</span> <span class="o">==</span> <span class="s1">&#39;chi2&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">stat</span> <span class="o">=</span> <span class="n">chi2_flux_points</span>
+        <span class="k">elif</span> <span class="n">stat</span> <span class="o">==</span> <span class="s1">&#39;chi2assym&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">stat</span> <span class="o">=</span> <span class="n">chi2_flux_points_assym</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;&#39;</span><span class="si">{stat}</span><span class="s2">&#39; is not a valid fit statistic, please choose&quot;</span>
+                             <span class="s2">&quot; either &#39;chi2&#39; or &#39;chi2assym&#39;&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">ul_handling</span> <span class="o">!=</span> <span class="s1">&#39;ignore&#39;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s1">&#39;No handling of upper limits implemented.&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">parameters</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">([</span>
+            <span class="p">(</span><span class="s1">&#39;optimizer&#39;</span><span class="p">,</span> <span class="n">optimizer</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;error_estimator&#39;</span><span class="p">,</span> <span class="n">error_estimator</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;ul_handling&#39;</span><span class="p">,</span> <span class="n">ul_handling</span><span class="p">),</span>
+        <span class="p">])</span>
+
+    <span class="k">def</span> <span class="nf">_setup_sherpa_fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Fit flux point using sherpa&quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">sherpa.fit</span> <span class="k">import</span> <span class="n">Fit</span>
+        <span class="kn">from</span> <span class="nn">sherpa.data</span> <span class="k">import</span> <span class="n">DataSimulFit</span>
+        <span class="kn">from</span> <span class="nn">..utils.sherpa</span> <span class="k">import</span> <span class="p">(</span><span class="n">SherpaDataWrapper</span><span class="p">,</span> <span class="n">SherpaStatWrapper</span><span class="p">,</span>
+                                    <span class="n">SherpaModelWrapper</span><span class="p">,</span> <span class="n">SHERPA_OPTMETHODS</span><span class="p">)</span>
+
+        <span class="n">optimizer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="s1">&#39;optimizer&#39;</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">sed_type</span> <span class="o">==</span> <span class="s1">&#39;dnde&#39;</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">SherpaDataWrapper</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s1">&#39;Only fitting of differential flux points data &#39;</span>
+                                      <span class="s1">&#39;is supported.&#39;</span><span class="p">)</span>
+
+        <span class="n">stat</span> <span class="o">=</span> <span class="n">SherpaStatWrapper</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">stat</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">DataSimulFit</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;GPFluxPoints&#39;</span><span class="p">,</span> <span class="n">datasets</span><span class="o">=</span><span class="p">[</span><span class="n">data</span><span class="p">])</span>
+        <span class="n">method</span> <span class="o">=</span> <span class="n">SHERPA_OPTMETHODS</span><span class="p">[</span><span class="n">optimizer</span><span class="p">]</span>
+        <span class="n">models</span> <span class="o">=</span> <span class="n">SherpaModelWrapper</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Fit</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">models</span><span class="p">,</span> <span class="n">stat</span><span class="o">=</span><span class="n">stat</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">)</span>
+
+<div class="viewcode-block" id="FluxPointFitter.fit"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPointFitter.html#gammapy.spectrum.FluxPointFitter.fit">[docs]</a>    <span class="k">def</span> <span class="nf">fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Fit given model to data.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model : `~gammapy.spectrum.models.SpectralModel`</span>
+<span class="sd">            Spectral model (with fit start parameters)</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        best_fit_model : `~gammapy.spectrum.models.SpectralModel`</span>
+<span class="sd">            Best fit model</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameters</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">p</span><span class="p">[</span><span class="s1">&#39;optimizer&#39;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;simplex&#39;</span><span class="p">,</span> <span class="s1">&#39;moncar&#39;</span><span class="p">,</span> <span class="s1">&#39;gridsearch&#39;</span><span class="p">,</span> <span class="s1">&#39;levmar&#39;</span><span class="p">]:</span>
+            <span class="n">sherpa_fitter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_setup_sherpa_fit</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
+            <span class="n">sherpa_fitter</span><span class="o">.</span><span class="n">fit</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Not a valid optimizer&#39;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">model</span></div>
+
+<div class="viewcode-block" id="FluxPointFitter.statval"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPointFitter.html#gammapy.spectrum.FluxPointFitter.statval">[docs]</a>    <span class="k">def</span> <span class="nf">statval</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Compute statval for given model and data.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model : `~gammapy.spectrum.models.SpectralModel`</span>
+<span class="sd">            Spectral model</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="FluxPointFitter.dof"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPointFitter.html#gammapy.spectrum.FluxPointFitter.dof">[docs]</a>    <span class="k">def</span> <span class="nf">dof</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Degrees of freedom.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model : `~gammapy.spectrum.models.SpectralModel`</span>
+<span class="sd">            Spectral model</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">m</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">free</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">table</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">n</span> <span class="o">-</span> <span class="n">m</span></div>
+
+<div class="viewcode-block" id="FluxPointFitter.estimate_errors"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPointFitter.html#gammapy.spectrum.FluxPointFitter.estimate_errors">[docs]</a>    <span class="k">def</span> <span class="nf">estimate_errors</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Estimate errors on best fit parameters.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">sherpa_fitter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_setup_sherpa_fit</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">sherpa_fitter</span><span class="o">.</span><span class="n">est_errors</span><span class="p">()</span>
+        <span class="n">covariance</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">extra_output</span>
+        <span class="n">covar_axis</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">free</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">set_parameter_covariance</span><span class="p">(</span><span class="n">covariance</span><span class="p">,</span> <span class="n">covar_axis</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">model</span></div>
+
+<div class="viewcode-block" id="FluxPointFitter.run"><a class="viewcode-back" href="../../../api/gammapy.spectrum.FluxPointFitter.html#gammapy.spectrum.FluxPointFitter.run">[docs]</a>    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Run all fitting adn extra information steps.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data : list of `~gammapy.spectrum.FluxPoints`</span>
+<span class="sd">            Flux points.</span>
+<span class="sd">        model : `~gammapy.spectrum.models.SpectralModel`</span>
+<span class="sd">            Spectral model</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        result : `~collections.OrderedDict`</span>
+<span class="sd">            Dictionary with fit results and debug output.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">best_fit_model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
+        <span class="n">best_fit_model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">estimate_errors</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">best_fit_model</span><span class="p">)</span>
+        <span class="n">dof</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dof</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">best_fit_model</span><span class="p">)</span>
+        <span class="n">statval</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">statval</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">best_fit_model</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">OrderedDict</span><span class="p">([</span>
+            <span class="p">(</span><span class="s1">&#39;best-fit-model&#39;</span><span class="p">,</span> <span class="n">best_fit_model</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;dof&#39;</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">dof</span><span class="p">)),</span>
+            <span class="p">(</span><span class="s1">&#39;statval&#39;</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">statval</span><span class="p">)),</span>
+            <span class="p">(</span><span class="s1">&#39;statval/dof&#39;</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">statval</span> <span class="o">/</span> <span class="n">dof</span><span class="p">)),</span>
+        <span class="p">])</span></div></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2018, The Gammapy developers.<br/>
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.6.5. &nbsp;
+    Last built 08 Jan 2018. <br/>
+  </p>
+</footer>
+  </body>
+</html>

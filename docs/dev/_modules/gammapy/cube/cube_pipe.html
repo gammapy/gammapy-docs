@@ -1,0 +1,419 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>gammapy.cube.cube_pipe &#8212; gammapy v0.7.dev5391</title>
+    <link rel="stylesheet" href="../../../_static/gammapy.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.7.dev5391',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <link rel="shortcut icon" href="../../../_static/astropy_logo.ico"/>
+    <link rel="author" title="About these documents" href="../../../about.html" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+<link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+<script type="text/javascript" src="../../../_static/copybutton.js"></script>
+
+
+  </head>
+  <body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">gamma</span><span id="logotext2">py</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="Astropy Homepage" href="http://www.astropy.org"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">gammapy v0.7.dev5391</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for gammapy.cube.cube_pipe</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">astropy.units</span> <span class="k">import</span> <span class="n">Quantity</span>
+<span class="kn">from</span> <span class="nn">astropy</span> <span class="k">import</span> <span class="n">units</span> <span class="k">as</span> <span class="n">u</span>
+<span class="kn">from</span> <span class="nn">astropy.table</span> <span class="k">import</span> <span class="n">Table</span>
+<span class="kn">from</span> <span class="nn">astropy.convolution</span> <span class="k">import</span> <span class="n">Tophat2DKernel</span>
+<span class="kn">from</span> <span class="nn">..utils.energy</span> <span class="k">import</span> <span class="n">Energy</span><span class="p">,</span> <span class="n">EnergyBounds</span>
+<span class="kn">from</span> <span class="nn">..stats</span> <span class="k">import</span> <span class="n">significance</span>
+<span class="kn">from</span> <span class="nn">..irf</span> <span class="k">import</span> <span class="n">TablePSF</span>
+<span class="kn">from</span> <span class="nn">..background</span> <span class="k">import</span> <span class="n">fill_acceptance_image</span>
+<span class="kn">from</span> <span class="nn">..cube</span> <span class="k">import</span> <span class="n">SkyCube</span>
+<span class="kn">from</span> <span class="nn">.exposure</span> <span class="k">import</span> <span class="n">make_exposure_cube</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;SingleObsCubeMaker&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;StackedObsCubeMaker&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="SingleObsCubeMaker"><a class="viewcode-back" href="../../../api/gammapy.cube.SingleObsCubeMaker.html#gammapy.cube.SingleObsCubeMaker">[docs]</a><span class="k">class</span> <span class="nc">SingleObsCubeMaker</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Compute `~gammapy.cube.SkyCube` images for one observation.</span>
+
+<span class="sd">    The computed cubes are stored in a `~gammapy.cube.SkyCube` with the following name:</span>
+
+<span class="sd">    * ``counts_cube`` : Counts</span>
+<span class="sd">    * ``bkg_cube`` : Background model</span>
+<span class="sd">    * ``exposure_cube`` : Exposure</span>
+<span class="sd">    * ``excess_cube`` : Excess</span>
+<span class="sd">    * ``significance_cube`` : Significance</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    obs : `~gammapy.data.DataStoreObservation`</span>
+<span class="sd">        Observation data</span>
+<span class="sd">    empty_cube_images : `~gammapy.cube.SkyCube`</span>
+<span class="sd">        Reference Cube for images in reco energy</span>
+<span class="sd">    empty_exposure_cube : `~gammapy.cube.SkyCube`</span>
+<span class="sd">        Reference Cube for exposure in true energy</span>
+<span class="sd">    offset_band : `~astropy.coordinates.Angle`</span>
+<span class="sd">        Offset band selection</span>
+<span class="sd">    exclusion_mask : `~gammapy.cube.SkyCube`</span>
+<span class="sd">        Exclusion mask</span>
+<span class="sd">    save_bkg_scale: bool</span>
+<span class="sd">        True if you want to save the normalisation of the bkg</span>
+<span class="sd">        computed outside the exclusion region in a Table</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">empty_cube_images</span><span class="p">,</span> <span class="n">empty_exposure_cube</span><span class="p">,</span>
+                 <span class="n">offset_band</span><span class="p">,</span> <span class="n">exclusion_mask</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">save_bkg_scale</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">energy_reco</span> <span class="o">=</span> <span class="n">empty_cube_images</span><span class="o">.</span><span class="n">energies</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;edges&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">offset_band</span> <span class="o">=</span> <span class="n">offset_band</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">counts_cube</span> <span class="o">=</span> <span class="n">SkyCube</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">empty_cube_images</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bkg_cube</span> <span class="o">=</span> <span class="n">SkyCube</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">empty_cube_images</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">significance_cube</span> <span class="o">=</span> <span class="n">SkyCube</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">empty_cube_images</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">excess_cube</span> <span class="o">=</span> <span class="n">SkyCube</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">empty_cube_images</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">exposure_cube</span> <span class="o">=</span> <span class="n">SkyCube</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">empty_exposure_cube</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;m2 s&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">obs_id</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">obs_id</span>
+        <span class="n">events</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">events</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">events</span> <span class="o">=</span> <span class="n">events</span><span class="o">.</span><span class="n">select_offset</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">offset_band</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">header</span> <span class="o">=</span> <span class="n">empty_cube_images</span><span class="o">.</span><span class="n">sky_image_ref</span><span class="o">.</span><span class="n">to_image_hdu</span><span class="p">()</span><span class="o">.</span><span class="n">header</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cube_exclusion_mask</span> <span class="o">=</span> <span class="n">exclusion_mask</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">aeff</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">aeff</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">edisp</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">psf</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">psf</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bkg</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">bkg</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">obs_center</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">pointing_radec</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">livetime</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">observation_live_time_duration</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">save_bkg_scale</span> <span class="o">=</span> <span class="n">save_bkg_scale</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">save_bkg_scale</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">table_bkg_scale</span> <span class="o">=</span> <span class="n">Table</span><span class="p">(</span><span class="n">names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;OBS_ID&quot;</span><span class="p">,</span> <span class="s2">&quot;bkg_scale&quot;</span><span class="p">])</span>
+
+<div class="viewcode-block" id="SingleObsCubeMaker.make_counts_cube"><a class="viewcode-back" href="../../../api/gammapy.cube.SingleObsCubeMaker.html#gammapy.cube.SingleObsCubeMaker.make_counts_cube">[docs]</a>    <span class="k">def</span> <span class="nf">make_counts_cube</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Fill the counts cube for the events of one observation.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">counts_cube</span><span class="o">.</span><span class="n">fill_events</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">events</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SingleObsCubeMaker.make_bkg_cube"><a class="viewcode-back" href="../../../api/gammapy.cube.SingleObsCubeMaker.html#gammapy.cube.SingleObsCubeMaker.make_bkg_cube">[docs]</a>    <span class="k">def</span> <span class="nf">make_bkg_cube</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bkg_norm</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Make the background image for one observation from a bkg model.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        bkg_norm : bool</span>
+<span class="sd">            If true, apply the scaling factor from the number of counts</span>
+<span class="sd">            outside the exclusion region to the bkg image</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">idx_energy</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">energy_reco</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">energy_band</span> <span class="o">=</span> <span class="n">Energy</span><span class="p">(</span>
+                <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">energy_reco</span><span class="p">[</span><span class="n">idx_energy</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_reco</span><span class="p">[</span><span class="n">idx_energy</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">],</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">energy_reco</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span>
+            <span class="n">table</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bkg</span><span class="o">.</span><span class="n">acceptance_curve_in_energy_band</span><span class="p">(</span>
+                <span class="n">energy_band</span><span class="o">=</span><span class="n">energy_band</span><span class="p">)</span>
+            <span class="n">center</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_center</span><span class="o">.</span><span class="n">galactic</span>
+            <span class="n">bkg_hdu</span> <span class="o">=</span> <span class="n">fill_acceptance_image</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="p">,</span> <span class="n">center</span><span class="p">,</span>
+                                            <span class="n">table</span><span class="p">[</span><span class="s2">&quot;offset&quot;</span><span class="p">],</span>
+                                            <span class="n">table</span><span class="p">[</span><span class="s2">&quot;Acceptance&quot;</span><span class="p">],</span>
+                                            <span class="bp">self</span><span class="o">.</span><span class="n">offset_band</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">bkg_image</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">Quantity</span><span class="p">(</span><span class="n">bkg_hdu</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">table</span><span class="p">[</span><span class="s2">&quot;Acceptance&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span> <span class="o">*</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">bkg_cube</span><span class="o">.</span><span class="n">sky_image_ref</span><span class="o">.</span><span class="n">solid_angle</span><span class="p">()</span> <span class="o">*</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">livetime</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bkg_cube</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">idx_energy</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">bkg_image</span><span class="o">.</span><span class="n">decompose</span><span class="p">()</span><span class="o">.</span><span class="n">value</span>
+
+        <span class="k">if</span> <span class="n">bkg_norm</span><span class="p">:</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">background_norm_factor</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bkg_cube</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">scale</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">bkg_cube</span><span class="o">.</span><span class="n">data</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">save_bkg_scale</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">table_bkg_scale</span><span class="o">.</span><span class="n">add_row</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_id</span><span class="p">,</span> <span class="n">scale</span><span class="p">])</span></div>
+
+<div class="viewcode-block" id="SingleObsCubeMaker.background_norm_factor"><a class="viewcode-back" href="../../../api/gammapy.cube.SingleObsCubeMaker.html#gammapy.cube.SingleObsCubeMaker.background_norm_factor">[docs]</a>    <span class="k">def</span> <span class="nf">background_norm_factor</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Determine background scaling factor.</span>
+
+<span class="sd">        Compares the events in the counts cube and the bkg cube</span>
+<span class="sd">        outside the exclusion regions.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        scale : float</span>
+<span class="sd">            scaling factor between the counts and the bkg images outside the exclusion region.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">counts_sum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">counts_cube</span><span class="o">.</span><span class="n">data</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">cube_exclusion_mask</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">bkg_sum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bkg_cube</span><span class="o">.</span><span class="n">data</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">cube_exclusion_mask</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">scale</span> <span class="o">=</span> <span class="n">counts_sum</span> <span class="o">/</span> <span class="n">bkg_sum</span>
+
+        <span class="k">return</span> <span class="n">scale</span></div>
+
+<div class="viewcode-block" id="SingleObsCubeMaker.make_exposure_cube"><a class="viewcode-back" href="../../../api/gammapy.cube.SingleObsCubeMaker.html#gammapy.cube.SingleObsCubeMaker.make_exposure_cube">[docs]</a>    <span class="k">def</span> <span class="nf">make_exposure_cube</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute the exposure cube.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">exposure_cube</span> <span class="o">=</span> <span class="n">make_exposure_cube</span><span class="p">(</span>
+            <span class="n">pointing</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_center</span><span class="p">,</span>
+            <span class="n">livetime</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">livetime</span><span class="p">,</span>
+            <span class="n">aeff</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">aeff</span><span class="p">,</span>
+            <span class="n">ref_cube</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">exposure_cube</span><span class="p">,</span>
+            <span class="n">offset_max</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">offset_band</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="SingleObsCubeMaker.make_significance_cube"><a class="viewcode-back" href="../../../api/gammapy.cube.SingleObsCubeMaker.html#gammapy.cube.SingleObsCubeMaker.make_significance_cube">[docs]</a>    <span class="k">def</span> <span class="nf">make_significance_cube</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">radius</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Make the significance cube from the counts and bkg cubes.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        radius : float</span>
+<span class="sd">            Disk radius in pixels.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">disk</span> <span class="o">=</span> <span class="n">Tophat2DKernel</span><span class="p">(</span><span class="n">radius</span><span class="p">)</span>
+        <span class="n">disk</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="s1">&#39;peak&#39;</span><span class="p">)</span>
+        <span class="n">list_kernel</span> <span class="o">=</span> <span class="p">[</span><span class="n">disk</span><span class="o">.</span><span class="n">array</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">significance_cube</span><span class="o">.</span><span class="n">energies</span><span class="p">()))</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">counts_cube</span><span class="o">.</span><span class="n">convolve</span><span class="p">(</span><span class="n">list_kernel</span><span class="p">)</span>
+        <span class="n">bkg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bkg_cube</span><span class="o">.</span><span class="n">convolve</span><span class="p">(</span><span class="n">list_kernel</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">significance_cube</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">significance</span><span class="p">(</span><span class="n">counts</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">bkg</span><span class="o">.</span><span class="n">data</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SingleObsCubeMaker.make_excess_cube"><a class="viewcode-back" href="../../../api/gammapy.cube.SingleObsCubeMaker.html#gammapy.cube.SingleObsCubeMaker.make_excess_cube">[docs]</a>    <span class="k">def</span> <span class="nf">make_excess_cube</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute excess cube between counts and bkg cubes.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">excess_cube</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">counts_cube</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">bkg_cube</span></div></div>
+
+
+<div class="viewcode-block" id="StackedObsCubeMaker"><a class="viewcode-back" href="../../../api/gammapy.cube.StackedObsCubeMaker.html#gammapy.cube.StackedObsCubeMaker">[docs]</a><span class="k">class</span> <span class="nc">StackedObsCubeMaker</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Compute stacked cubes for many observations.</span>
+
+<span class="sd">    The computed cubes are stored in a `~gammapy.cube.SkyCube`</span>
+<span class="sd">    with the following name:</span>
+
+<span class="sd">    * ``counts_cube`` : Counts</span>
+<span class="sd">    * ``bkg_cube`` : Background model</span>
+<span class="sd">    * ``exposure_cube`` : Exposure</span>
+<span class="sd">    * ``excess_cube`` : Excess</span>
+<span class="sd">    * ``significance_cube`` : Significance</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    empty_cube_images : `~gammapy.cube.SkyCube`</span>
+<span class="sd">        Reference Cube for images in reco energy</span>
+<span class="sd">    empty_exposure_cube : `~gammapy.cube.SkyCube`</span>
+<span class="sd">        Reference Cube for exposure in true energy</span>
+<span class="sd">    offset_band : `astropy.coordinates.Angle`</span>
+<span class="sd">        Offset band selection of the events to fill the cubes</span>
+<span class="sd">    data_store : `~gammapy.data.DataStore`</span>
+<span class="sd">        Data store</span>
+<span class="sd">    obs_table : `~astropy.table.Table`</span>
+<span class="sd">        Required columns: OBS_ID</span>
+<span class="sd">    exclusion_mask : `~gammapy.cube.SkyCube`</span>
+<span class="sd">        Exclusion mask</span>
+<span class="sd">    save_bkg_scale : bool</span>
+<span class="sd">        True if you want to save the normalisation of the bkg for each run</span>
+<span class="sd">        in a table table_bkg_norm with two columns:</span>
+<span class="sd">        &quot;OBS_ID&quot; and &quot;bkg_scale&quot;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">empty_cube_images</span><span class="p">,</span> <span class="n">empty_exposure_cube</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">offset_band</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">data_store</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">obs_table</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">exclusion_mask</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">save_bkg_scale</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">empty_cube_images</span> <span class="o">=</span> <span class="n">empty_cube_images</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">empty_exposure_cube</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">empty_exposure_cube</span> <span class="o">=</span> <span class="n">SkyCube</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">empty_cube_images</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">empty_exposure_cube</span> <span class="o">=</span> <span class="n">empty_exposure_cube</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">counts_cube</span> <span class="o">=</span> <span class="n">SkyCube</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">empty_cube_images</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bkg_cube</span> <span class="o">=</span> <span class="n">SkyCube</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">empty_cube_images</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">significance_cube</span> <span class="o">=</span> <span class="n">SkyCube</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">empty_cube_images</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">excess_cube</span> <span class="o">=</span> <span class="n">SkyCube</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">empty_cube_images</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">exposure_cube</span> <span class="o">=</span> <span class="n">SkyCube</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">empty_exposure_cube</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;m2 s&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">data_store</span> <span class="o">=</span> <span class="n">data_store</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">obs_table</span> <span class="o">=</span> <span class="n">obs_table</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">offset_band</span> <span class="o">=</span> <span class="n">offset_band</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">header</span> <span class="o">=</span> <span class="n">empty_cube_images</span><span class="o">.</span><span class="n">sky_image_ref</span><span class="o">.</span><span class="n">to_image_hdu</span><span class="p">()</span><span class="o">.</span><span class="n">header</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cube_exclusion_mask</span> <span class="o">=</span> <span class="n">exclusion_mask</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">save_bkg_scale</span> <span class="o">=</span> <span class="n">save_bkg_scale</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">save_bkg_scale</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">table_bkg_scale</span> <span class="o">=</span> <span class="n">Table</span><span class="p">(</span><span class="n">names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;OBS_ID&quot;</span><span class="p">,</span> <span class="s2">&quot;bkg_scale&quot;</span><span class="p">])</span>
+
+<div class="viewcode-block" id="StackedObsCubeMaker.make_cubes"><a class="viewcode-back" href="../../../api/gammapy.cube.StackedObsCubeMaker.html#gammapy.cube.StackedObsCubeMaker.make_cubes">[docs]</a>    <span class="k">def</span> <span class="nf">make_cubes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">make_background_image</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">bkg_norm</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">radius</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute all cubes for a given set of observation.</span>
+
+<span class="sd">        Cubes computed: total counts, bkg, exposure, excess, significance.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        make_background_image : bool</span>
+<span class="sd">            True if you want to compute the background and exposure images</span>
+<span class="sd">        bkg_norm : bool</span>
+<span class="sd">            If true, apply the scaling factor to the bkg image</span>
+<span class="sd">        radius : float</span>
+<span class="sd">            Disk radius in pixels for the significance image</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">obs_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_table</span><span class="p">[</span><span class="s1">&#39;OBS_ID&#39;</span><span class="p">]:</span>
+            <span class="n">obs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_store</span><span class="o">.</span><span class="n">obs</span><span class="p">(</span><span class="n">obs_id</span><span class="p">)</span>
+            <span class="n">cube_images</span> <span class="o">=</span> <span class="n">SingleObsCubeMaker</span><span class="p">(</span><span class="n">obs</span><span class="o">=</span><span class="n">obs</span><span class="p">,</span>
+                                             <span class="n">empty_cube_images</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">empty_cube_images</span><span class="p">,</span>
+                                             <span class="n">empty_exposure_cube</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">empty_exposure_cube</span><span class="p">,</span>
+                                             <span class="n">offset_band</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">offset_band</span><span class="p">,</span>
+                                             <span class="n">exclusion_mask</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cube_exclusion_mask</span><span class="p">,</span>
+                                             <span class="n">save_bkg_scale</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">save_bkg_scale</span><span class="p">)</span>
+            <span class="n">cube_images</span><span class="o">.</span><span class="n">make_counts_cube</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">counts_cube</span><span class="o">.</span><span class="n">data</span> <span class="o">+=</span> <span class="n">cube_images</span><span class="o">.</span><span class="n">counts_cube</span><span class="o">.</span><span class="n">data</span>
+
+            <span class="k">if</span> <span class="n">make_background_image</span><span class="p">:</span>
+                <span class="n">cube_images</span><span class="o">.</span><span class="n">make_bkg_cube</span><span class="p">(</span><span class="n">bkg_norm</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">save_bkg_scale</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">table_bkg_scale</span><span class="o">.</span><span class="n">add_row</span><span class="p">(</span>
+                        <span class="n">cube_images</span><span class="o">.</span><span class="n">table_bkg_scale</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                <span class="n">cube_images</span><span class="o">.</span><span class="n">make_exposure_cube</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">bkg_cube</span><span class="o">.</span><span class="n">data</span> <span class="o">+=</span> <span class="n">cube_images</span><span class="o">.</span><span class="n">bkg_cube</span><span class="o">.</span><span class="n">data</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">exposure_cube</span><span class="o">.</span><span class="n">data</span> <span class="o">+=</span> <span class="n">cube_images</span><span class="o">.</span><span class="n">exposure_cube</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;m2 s&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">make_background_image</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">make_significance_cube</span><span class="p">(</span><span class="n">radius</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">make_excess_cube</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="StackedObsCubeMaker.make_significance_cube"><a class="viewcode-back" href="../../../api/gammapy.cube.StackedObsCubeMaker.html#gammapy.cube.StackedObsCubeMaker.make_significance_cube">[docs]</a>    <span class="k">def</span> <span class="nf">make_significance_cube</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">radius</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Make the significance cube from the counts and bkg cubes.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        radius : float</span>
+<span class="sd">            Disk radius in pixels.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">disk</span> <span class="o">=</span> <span class="n">Tophat2DKernel</span><span class="p">(</span><span class="n">radius</span><span class="p">)</span>
+        <span class="n">disk</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="s1">&#39;peak&#39;</span><span class="p">)</span>
+        <span class="n">list_kernel</span> <span class="o">=</span> <span class="p">[</span><span class="n">disk</span><span class="o">.</span><span class="n">array</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">significance_cube</span><span class="o">.</span><span class="n">energies</span><span class="p">()))</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">counts_cube</span><span class="o">.</span><span class="n">convolve</span><span class="p">(</span><span class="n">list_kernel</span><span class="p">)</span>
+        <span class="n">bkg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bkg_cube</span><span class="o">.</span><span class="n">convolve</span><span class="p">(</span><span class="n">list_kernel</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">significance_cube</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">significance</span><span class="p">(</span><span class="n">counts</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">bkg</span><span class="o">.</span><span class="n">data</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="StackedObsCubeMaker.make_excess_cube"><a class="viewcode-back" href="../../../api/gammapy.cube.StackedObsCubeMaker.html#gammapy.cube.StackedObsCubeMaker.make_excess_cube">[docs]</a>    <span class="k">def</span> <span class="nf">make_excess_cube</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute excess cube between counts and bkg cube.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">excess_cube</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">counts_cube</span><span class="o">.</span><span class="n">data</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">bkg_cube</span><span class="o">.</span><span class="n">data</span></div>
+
+    <span class="c1"># Define a method for the mean psf from a list of observation</span>
+<div class="viewcode-block" id="StackedObsCubeMaker.make_mean_psf_cube"><a class="viewcode-back" href="../../../api/gammapy.cube.StackedObsCubeMaker.html#gammapy.cube.StackedObsCubeMaker.make_mean_psf_cube">[docs]</a>    <span class="k">def</span> <span class="nf">make_mean_psf_cube</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ref_cube</span><span class="p">,</span> <span class="n">spectral_index</span><span class="o">=</span><span class="mf">2.3</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute the mean PSF for a set of observation for different energy bands.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        ref_cube : `~gammapy.cube.SkyCube`</span>
+<span class="sd">            Reference sky cube to evaluate PSF on.</span>
+<span class="sd">        spectral_index : float</span>
+<span class="sd">            Assumed spectral index to compute mean PSF in energy band.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ref_cube : `~gammapy.cube.SkyCube`</span>
+<span class="sd">            PSF mean cube</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">ref_cube</span> <span class="o">=</span> <span class="n">SkyCube</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">ref_cube</span><span class="p">)</span>
+        <span class="n">obslist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_store</span><span class="o">.</span><span class="n">obs_list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_store</span><span class="o">.</span><span class="n">obs_table</span><span class="p">[</span><span class="s2">&quot;OBS_ID&quot;</span><span class="p">])</span>
+
+        <span class="n">header</span> <span class="o">=</span> <span class="n">ref_cube</span><span class="o">.</span><span class="n">sky_image_ref</span><span class="o">.</span><span class="n">to_image_hdu</span><span class="p">()</span><span class="o">.</span><span class="n">header</span>
+        <span class="n">energy_bins</span> <span class="o">=</span> <span class="n">ref_cube</span><span class="o">.</span><span class="n">energies</span><span class="p">()</span>
+        <span class="n">center</span> <span class="o">=</span> <span class="n">ref_cube</span><span class="o">.</span><span class="n">sky_image_ref</span><span class="o">.</span><span class="n">center</span>
+
+        <span class="k">for</span> <span class="n">idx_energy</span><span class="p">,</span> <span class="n">E</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">energy_bins</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]):</span>
+            <span class="n">energy_band</span> <span class="o">=</span> <span class="n">Energy</span><span class="p">([</span><span class="n">energy_bins</span><span class="p">[</span><span class="n">idx_energy</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">energy_bins</span><span class="p">[</span><span class="n">idx_energy</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">],</span> <span class="n">energy_bins</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span>
+            <span class="n">energy</span> <span class="o">=</span> <span class="n">EnergyBounds</span><span class="o">.</span><span class="n">equal_log_spacing</span><span class="p">(</span><span class="n">energy_band</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">energy_band</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="n">energy_band</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span>
+            <span class="n">psf_energydependent</span> <span class="o">=</span> <span class="n">obslist</span><span class="o">.</span><span class="n">make_mean_psf</span><span class="p">(</span><span class="n">center</span><span class="p">,</span> <span class="n">energy</span><span class="p">,</span> <span class="n">rad</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">psf_table</span> <span class="o">=</span> <span class="n">psf_energydependent</span><span class="o">.</span><span class="n">table_psf_in_energy_band</span><span class="p">(</span>
+                    <span class="n">energy_band</span><span class="p">,</span> <span class="n">spectral_index</span><span class="o">=</span><span class="n">spectral_index</span><span class="p">)</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="n">rad</span> <span class="o">=</span> <span class="n">psf_energydependent</span><span class="o">.</span><span class="n">rad</span>
+                <span class="n">dp_domega</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">psf_energydependent</span><span class="o">.</span><span class="n">rad</span><span class="p">)),</span> <span class="s1">&#39;sr-1&#39;</span><span class="p">)</span>
+                <span class="n">psf_table</span> <span class="o">=</span> <span class="n">TablePSF</span><span class="p">(</span><span class="n">rad</span><span class="p">,</span> <span class="n">dp_domega</span><span class="p">)</span>
+
+            <span class="n">image</span> <span class="o">=</span> <span class="n">fill_acceptance_image</span><span class="p">(</span>
+                <span class="n">header</span><span class="p">,</span> <span class="n">center</span><span class="p">,</span>
+                <span class="n">psf_table</span><span class="o">.</span><span class="n">_rad</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;deg&quot;</span><span class="p">),</span>
+                <span class="n">psf_table</span><span class="o">.</span><span class="n">_dp_domega</span><span class="p">,</span>
+                <span class="n">psf_table</span><span class="o">.</span><span class="n">_rad</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;deg&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+            <span class="p">)</span>
+            <span class="n">ref_cube</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">idx_energy</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">data</span> <span class="o">/</span> <span class="n">image</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">ref_cube</span></div></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2018, The Gammapy developers.<br/>
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.6.5. &nbsp;
+    Last built 08 Jan 2018. <br/>
+  </p>
+</footer>
+  </body>
+</html>

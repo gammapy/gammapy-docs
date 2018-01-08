@@ -1,0 +1,997 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>gammapy.spectrum.observation &#8212; gammapy v0.7.dev5391</title>
+    <link rel="stylesheet" href="../../../_static/gammapy.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.7.dev5391',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <link rel="shortcut icon" href="../../../_static/astropy_logo.ico"/>
+    <link rel="author" title="About these documents" href="../../../about.html" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+<link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+<script type="text/javascript" src="../../../_static/copybutton.js"></script>
+
+
+  </head>
+  <body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">gamma</span><span id="logotext2">py</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="Astropy Homepage" href="http://www.astropy.org"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">gammapy v0.7.dev5391</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for gammapy.spectrum.observation</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="k">import</span> <span class="n">deepcopy</span>
+<span class="kn">from</span> <span class="nn">astropy.units</span> <span class="k">import</span> <span class="n">Quantity</span>
+<span class="kn">from</span> <span class="nn">..extern.six.moves</span> <span class="k">import</span> <span class="n">UserList</span>
+<span class="kn">from</span> <span class="nn">..extern.pathlib</span> <span class="k">import</span> <span class="n">Path</span>
+<span class="kn">from</span> <span class="nn">..utils.scripts</span> <span class="k">import</span> <span class="n">make_path</span>
+<span class="kn">from</span> <span class="nn">..utils.energy</span> <span class="k">import</span> <span class="n">EnergyBounds</span>
+<span class="kn">from</span> <span class="nn">..utils.table</span> <span class="k">import</span> <span class="n">table_from_row_data</span>
+<span class="kn">from</span> <span class="nn">..data</span> <span class="k">import</span> <span class="n">ObservationStats</span>
+<span class="kn">from</span> <span class="nn">..irf</span> <span class="k">import</span> <span class="n">EffectiveAreaTable</span><span class="p">,</span> <span class="n">EnergyDispersion</span>
+<span class="kn">from</span> <span class="nn">..irf</span> <span class="k">import</span> <span class="n">IRFStacker</span>
+<span class="kn">from</span> <span class="nn">.core</span> <span class="k">import</span> <span class="n">CountsSpectrum</span><span class="p">,</span> <span class="n">PHACountsSpectrum</span><span class="p">,</span> <span class="n">PHACountsSpectrumList</span>
+<span class="kn">from</span> <span class="nn">.utils</span> <span class="k">import</span> <span class="n">CountsPredictor</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;SpectrumStats&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;SpectrumObservation&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;SpectrumObservationList&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;SpectrumObservationStacker&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<div class="viewcode-block" id="SpectrumStats"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumStats.html#gammapy.spectrum.SpectrumStats">[docs]</a><span class="k">class</span> <span class="nc">SpectrumStats</span><span class="p">(</span><span class="n">ObservationStats</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Spectrum stats.</span>
+
+<span class="sd">    Extends `~gammapy.data.ObservationStats` with spectrum</span>
+<span class="sd">    specific information (energy bin info at the moment).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">energy_min</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;energy_min&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">energy_max</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;energy_max&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">SpectrumStats</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">ss</span> <span class="o">=</span> <span class="nb">super</span><span class="p">(</span><span class="n">SpectrumStats</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__str__</span><span class="p">()</span>
+        <span class="n">ss</span> <span class="o">+=</span> <span class="s1">&#39;energy range: </span><span class="si">{:.2f}</span><span class="s1"> - </span><span class="si">{:.2f}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">energy_min</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_max</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ss</span>
+
+<div class="viewcode-block" id="SpectrumStats.to_dict"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumStats.html#gammapy.spectrum.SpectrumStats.to_dict">[docs]</a>    <span class="k">def</span> <span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;TODO: document&quot;&quot;&quot;</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="nb">super</span><span class="p">(</span><span class="n">SpectrumStats</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
+        <span class="n">data</span><span class="p">[</span><span class="s1">&#39;energy_min&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_min</span>
+        <span class="n">data</span><span class="p">[</span><span class="s1">&#39;energy_max&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_max</span>
+        <span class="k">return</span> <span class="n">data</span></div></div>
+
+
+<div class="viewcode-block" id="SpectrumObservation"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservation.html#gammapy.spectrum.SpectrumObservation">[docs]</a><span class="k">class</span> <span class="nc">SpectrumObservation</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;1D spectral analysis storage class.</span>
+
+<span class="sd">    This container holds the ingredients for 1D region based spectral analysis</span>
+<span class="sd">    TODO: describe PHA, ARF, etc.</span>
+
+<span class="sd">    Meta data is stored in the ``on_vector`` attribute.</span>
+<span class="sd">    This reflects the OGIP convention.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    on_vector : `~gammapy.spectrum.PHACountsSpectrum`</span>
+<span class="sd">        On vector</span>
+<span class="sd">    aeff : `~gammapy.irf.EffectiveAreaTable`</span>
+<span class="sd">        Effective Area</span>
+<span class="sd">    off_vector : `~gammapy.spectrum.PHACountsSpectrum`, optional</span>
+<span class="sd">        Off vector</span>
+<span class="sd">    edisp : `~gammapy.irf.EnergyDispersion`, optional</span>
+<span class="sd">        Energy dispersion matrix</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    ::</span>
+<span class="sd">        from gammapy.spectrum import SpectrumObservation</span>
+<span class="sd">        filename = &#39;$GAMMAPY_EXTRA/datasets/hess-crab4_pha/pha_obs23523.fits&#39;</span>
+<span class="sd">        obs = SpectrumObservation.read(filename)</span>
+<span class="sd">        print(obs)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">on_vector</span><span class="p">,</span> <span class="n">aeff</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">off_vector</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">edisp</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span> <span class="o">=</span> <span class="n">on_vector</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">aeff</span> <span class="o">=</span> <span class="n">aeff</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span> <span class="o">=</span> <span class="n">off_vector</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span> <span class="o">=</span> <span class="n">edisp</span>
+
+    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">ss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_stats_safe_range</span><span class="o">.</span><span class="fm">__str__</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">ss</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">obs_id</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Unique identifier&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">obs_id</span>
+
+    <span class="nd">@obs_id</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">obs_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs_id</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">obs_id</span> <span class="o">=</span> <span class="n">obs_id</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">obs_id</span> <span class="o">=</span> <span class="n">obs_id</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">livetime</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Dead-time corrected observation time&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">livetime</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">alpha</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Exposure ratio between signal and background regions&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">backscal</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">backscal</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">e_reco</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Reconstruced energy bounds array.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">EnergyBounds</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">bins</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">e_true</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;True energy bounds array.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">EnergyBounds</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">bins</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">nbins</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Number of reconstruced energy bins&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">nbins</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">lo_threshold</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Low energy threshold&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">lo_threshold</span>
+
+    <span class="nd">@lo_threshold</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">lo_threshold</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">threshold</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">lo_threshold</span> <span class="o">=</span> <span class="n">threshold</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">lo_threshold</span> <span class="o">=</span> <span class="n">threshold</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">hi_threshold</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;High energy threshold&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">hi_threshold</span>
+
+    <span class="nd">@hi_threshold</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">hi_threshold</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">threshold</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">hi_threshold</span> <span class="o">=</span> <span class="n">threshold</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">hi_threshold</span> <span class="o">=</span> <span class="n">threshold</span>
+
+<div class="viewcode-block" id="SpectrumObservation.reset_thresholds"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservation.html#gammapy.spectrum.SpectrumObservation.reset_thresholds">[docs]</a>    <span class="k">def</span> <span class="nf">reset_thresholds</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Reset energy thresholds (i.e. declare all energy bins valid)&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">reset_thresholds</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">reset_thresholds</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="SpectrumObservation.compute_energy_threshold"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservation.html#gammapy.spectrum.SpectrumObservation.compute_energy_threshold">[docs]</a>    <span class="k">def</span> <span class="nf">compute_energy_threshold</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">method_lo</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">,</span> <span class="n">method_hi</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">,</span> <span class="n">reset</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute and set the safe energy threshold.</span>
+
+<span class="sd">        Set the high and low energy threshold for each observation based on a</span>
+<span class="sd">        chosen method.</span>
+
+<span class="sd">        Available methods for setting the low energy threshold:</span>
+
+<span class="sd">        * area_max : Set energy threshold at x percent of the maximum effective</span>
+<span class="sd">          area (x given as kwargs[&#39;area_percent_lo&#39;])</span>
+
+<span class="sd">        * energy_bias : Set energy threshold at energy where the energy bias</span>
+<span class="sd">          exceeds a value of x percent (given as kwargs[&#39;bias_percent_lo&#39;])</span>
+
+<span class="sd">        * none : Do not apply a lower threshold</span>
+
+<span class="sd">        Available methods for setting the high energy threshold:</span>
+
+<span class="sd">        * area_max : Set energy threshold at x percent of the maximum effective</span>
+<span class="sd">          area (x given as kwargs[&#39;area_percent_hi&#39;])</span>
+
+<span class="sd">        * energy_bias : Set energy threshold at energy where the energy bias</span>
+<span class="sd">          exceeds a value of x percent (given as kwargs[&#39;bias_percent_hi&#39;])</span>
+
+<span class="sd">        * none : Do not apply a higher energy threshold</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        method_lo : {&#39;area_max&#39;, &#39;energy_bias&#39;, &#39;none&#39;}</span>
+<span class="sd">            Method for defining the low energy threshold</span>
+
+<span class="sd">        method_hi : {&#39;area_max&#39;, &#39;energy_bias&#39;, &#39;none&#39;}</span>
+<span class="sd">            Method for defining the high energy threshold</span>
+
+<span class="sd">        reset : bool</span>
+<span class="sd">            Reset existing energy thresholds before setting the new ones</span>
+<span class="sd">            (default is `False`)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="n">reset</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">reset_thresholds</span><span class="p">()</span>
+
+        <span class="c1"># It is important to update the low and high threshold for ON and OFF</span>
+        <span class="c1"># vector, otherwise Sherpa will not understand the files</span>
+
+        <span class="c1"># Low threshold</span>
+        <span class="k">if</span> <span class="n">method_lo</span> <span class="o">==</span> <span class="s1">&#39;area_max&#39;</span><span class="p">:</span>
+            <span class="n">aeff_thres</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;area_percent_lo&#39;</span><span class="p">]</span> <span class="o">/</span> <span class="mi">100</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">max_area</span>
+            <span class="n">thres_lo</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">find_energy</span><span class="p">(</span><span class="n">aeff_thres</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">method_lo</span> <span class="o">==</span> <span class="s1">&#39;energy_bias&#39;</span><span class="p">:</span>
+            <span class="n">thres_lo</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_find_bias_energy</span><span class="p">(</span><span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;bias_percent_lo&#39;</span><span class="p">]</span> <span class="o">/</span> <span class="mi">100</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">method_lo</span> <span class="o">==</span> <span class="s1">&#39;none&#39;</span><span class="p">:</span>
+            <span class="n">thres_lo</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">e_true</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Undefine method for low threshold: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">method_lo</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">lo_threshold</span> <span class="o">=</span> <span class="n">thres_lo</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">lo_threshold</span> <span class="o">=</span> <span class="n">thres_lo</span>
+
+        <span class="c1"># High threshold</span>
+        <span class="k">if</span> <span class="n">method_hi</span> <span class="o">==</span> <span class="s1">&#39;area_max&#39;</span><span class="p">:</span>
+            <span class="n">aeff_thres</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;area_percent_hi&#39;</span><span class="p">]</span> <span class="o">/</span> <span class="mi">100</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">max_area</span>
+            <span class="n">thres_hi</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">find_energy</span><span class="p">(</span><span class="n">aeff_thres</span><span class="p">,</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">method_hi</span> <span class="o">==</span> <span class="s1">&#39;energy_bias&#39;</span><span class="p">:</span>
+            <span class="n">thres_hi</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_find_bias_energy</span><span class="p">(</span><span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;bias_percent_hi&#39;</span><span class="p">]</span> <span class="o">/</span> <span class="mi">100</span><span class="p">,</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">method_hi</span> <span class="o">==</span> <span class="s1">&#39;none&#39;</span><span class="p">:</span>
+            <span class="n">thres_hi</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">e_true</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Undefined method for high threshold: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">method_hi</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">hi_threshold</span> <span class="o">=</span> <span class="n">thres_hi</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">hi_threshold</span> <span class="o">=</span> <span class="n">thres_hi</span></div>
+
+    <span class="k">def</span> <span class="nf">_find_bias_energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bias_value</span><span class="p">,</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Helper function to interpolate between bias values to retrieve an energy&quot;&quot;&quot;</span>
+        <span class="n">e</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">e_true</span><span class="o">.</span><span class="n">log_centers</span>
+        <span class="n">bias</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">get_bias</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
+        <span class="k">with</span> <span class="n">np</span><span class="o">.</span><span class="n">errstate</span><span class="p">(</span><span class="n">invalid</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">):</span>
+            <span class="n">valid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">bias</span> <span class="o">&lt;=</span> <span class="n">bias_value</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">valid</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">reverse</span><span class="p">:</span>
+            <span class="n">idx</span> <span class="o">=</span> <span class="n">valid</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">reverse</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">idx</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">energy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">e_true</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">energy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">bias_value</span><span class="p">,</span>
+                                   <span class="p">(</span><span class="n">bias</span><span class="p">[[</span><span class="n">idx</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">idx</span><span class="p">]]</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
+                                   <span class="p">(</span><span class="n">e</span><span class="p">[[</span><span class="n">idx</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">idx</span><span class="p">]]</span><span class="o">.</span><span class="n">value</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">idx</span> <span class="o">==</span> <span class="n">e</span><span class="o">.</span><span class="n">size</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">energy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">e_true</span><span class="p">[</span><span class="n">idx</span><span class="o">+</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">energy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">bias_value</span><span class="p">,</span>
+                                   <span class="p">(</span><span class="n">bias</span><span class="p">[[</span><span class="n">idx</span><span class="p">,</span> <span class="n">idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]]</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
+                                   <span class="p">(</span><span class="n">e</span><span class="p">[[</span><span class="n">idx</span><span class="p">,</span> <span class="n">idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]]</span><span class="o">.</span><span class="n">value</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">energy</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">e_true</span><span class="o">.</span><span class="n">unit</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">background_vector</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Background `~gammapy.spectrum.CountsSpectrum`.</span>
+
+<span class="sd">        bkg = alpha * n_off</span>
+
+<span class="sd">        If alpha is a function of energy this will differ from</span>
+<span class="sd">        self.on_vector * self.total_stats.alpha because the latter returns an</span>
+<span class="sd">        average value for alpha.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">energy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">energy</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span>
+        <span class="k">return</span> <span class="n">CountsSpectrum</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">energy_lo</span><span class="o">=</span><span class="n">energy</span><span class="o">.</span><span class="n">lo</span><span class="p">,</span>
+                              <span class="n">energy_hi</span><span class="o">=</span><span class="n">energy</span><span class="o">.</span><span class="n">hi</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">excess_vector</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Excess `~gammapy.spectrum.CountsSpectrum`.</span>
+
+<span class="sd">        excess = n_on = alpha * n_off</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">energy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">energy</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">background_vector</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span>
+        <span class="k">return</span> <span class="n">CountsSpectrum</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">energy_lo</span><span class="o">=</span><span class="n">energy</span><span class="o">.</span><span class="n">lo</span><span class="p">,</span>
+                              <span class="n">energy_hi</span><span class="o">=</span><span class="n">energy</span><span class="o">.</span><span class="n">hi</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">total_stats</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Return total `~gammapy.spectrum.SpectrumStats`</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">stats_in_range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nbins</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">total_stats_safe_range</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Return total `~gammapy.spectrum.SpectrumStats` within the tresholds</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">safe_bins</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">bins_in_safe_range</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">stats_in_range</span><span class="p">(</span><span class="n">safe_bins</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">safe_bins</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+
+<div class="viewcode-block" id="SpectrumObservation.stats_in_range"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservation.html#gammapy.spectrum.SpectrumObservation.stats_in_range">[docs]</a>    <span class="k">def</span> <span class="nf">stats_in_range</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bin_min</span><span class="p">,</span> <span class="n">bin_max</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute stats for a range of energy bins.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        bin_min, bin_max: int</span>
+<span class="sd">            Bins to include</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        stats : `~gammapy.spectrum.SpectrumStats`</span>
+<span class="sd">            Stacked stats</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">bin_min</span><span class="p">,</span> <span class="n">bin_max</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">stats_list</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">stats</span><span class="p">(</span><span class="n">ii</span><span class="p">)</span> <span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="n">idx</span><span class="p">]</span>
+        <span class="n">stacked_stats</span> <span class="o">=</span> <span class="n">SpectrumStats</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">stats_list</span><span class="p">)</span>
+        <span class="n">stacked_stats</span><span class="o">.</span><span class="n">livetime</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">livetime</span>
+        <span class="n">stacked_stats</span><span class="o">.</span><span class="n">obs_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_id</span>
+        <span class="n">stacked_stats</span><span class="o">.</span><span class="n">energy_min</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">e_reco</span><span class="p">[</span><span class="n">bin_min</span><span class="p">]</span>
+        <span class="n">stacked_stats</span><span class="o">.</span><span class="n">energy_max</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">e_reco</span><span class="p">[</span><span class="n">bin_max</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">stacked_stats</span></div>
+
+<div class="viewcode-block" id="SpectrumObservation.stats"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservation.html#gammapy.spectrum.SpectrumObservation.stats">[docs]</a>    <span class="k">def</span> <span class="nf">stats</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute stats for one energy bin.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        idx : int</span>
+<span class="sd">            Energy bin index</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        stats : `~gammapy.spectrum.SpectrumStats`</span>
+<span class="sd">            Stats</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">n_off</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">value</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
+            <span class="n">a_off</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">_backscal_array</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">n_off</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">a_off</span> <span class="o">=</span> <span class="mi">1</span>  <span class="c1"># avoid zero division error</span>
+
+        <span class="k">return</span> <span class="n">SpectrumStats</span><span class="p">(</span>
+            <span class="n">energy_min</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">e_reco</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span>
+            <span class="n">energy_max</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">e_reco</span><span class="p">[</span><span class="n">idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">],</span>
+            <span class="n">n_on</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">value</span><span class="p">[</span><span class="n">idx</span><span class="p">]),</span>
+            <span class="n">n_off</span><span class="o">=</span><span class="n">n_off</span><span class="p">,</span>
+            <span class="n">a_on</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">_backscal_array</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span>
+            <span class="n">a_off</span><span class="o">=</span><span class="n">a_off</span><span class="p">,</span>
+            <span class="n">obs_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_id</span><span class="p">,</span>
+            <span class="n">livetime</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">livetime</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumObservation.stats_table"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservation.html#gammapy.spectrum.SpectrumObservation.stats_table">[docs]</a>    <span class="k">def</span> <span class="nf">stats_table</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Per-bin stats as a table.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        table : `~astropy.table.Table`</span>
+<span class="sd">            Table with stats for one energy bin in one row.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">rows</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">stats</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">e_reco</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span>
+        <span class="k">return</span> <span class="n">table_from_row_data</span><span class="p">(</span><span class="n">rows</span><span class="o">=</span><span class="n">rows</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumObservation.predicted_counts"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservation.html#gammapy.spectrum.SpectrumObservation.predicted_counts">[docs]</a>    <span class="k">def</span> <span class="nf">predicted_counts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Calculated number of predicted counts given a model.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model : `~gammapy.spectrum.models.SpectralModel`</span>
+<span class="sd">            Spectral model</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        npred : `~gammapy.spectrum.CountsSpectrum`</span>
+<span class="sd">            Predicted counts</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">predictor</span> <span class="o">=</span> <span class="n">CountsPredictor</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+                                    <span class="n">edisp</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">edisp</span><span class="p">,</span>
+                                    <span class="n">aeff</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">aeff</span><span class="p">,</span>
+                                    <span class="n">livetime</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">livetime</span><span class="p">)</span>
+        <span class="n">predictor</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">predictor</span><span class="o">.</span><span class="n">npred</span></div>
+
+<div class="viewcode-block" id="SpectrumObservation.read"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservation.html#gammapy.spectrum.SpectrumObservation.read">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">filename</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Read `~gammapy.spectrum.SpectrumObservation` from OGIP files.</span>
+
+<span class="sd">        BKG file, ARF, and RMF must be set in the PHA header and be present in</span>
+<span class="sd">        the same folder.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        filename : str</span>
+<span class="sd">            OGIP PHA file to read</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">filename</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+        <span class="n">dirname</span> <span class="o">=</span> <span class="n">filename</span><span class="o">.</span><span class="n">parent</span>
+        <span class="n">on_vector</span> <span class="o">=</span> <span class="n">PHACountsSpectrum</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+        <span class="n">rmf</span><span class="p">,</span> <span class="n">arf</span><span class="p">,</span> <span class="n">bkg</span> <span class="o">=</span> <span class="n">on_vector</span><span class="o">.</span><span class="n">rmffile</span><span class="p">,</span> <span class="n">on_vector</span><span class="o">.</span><span class="n">arffile</span><span class="p">,</span> <span class="n">on_vector</span><span class="o">.</span><span class="n">bkgfile</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">energy_dispersion</span> <span class="o">=</span> <span class="n">EnergyDispersion</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">dirname</span> <span class="o">/</span> <span class="n">rmf</span><span class="p">))</span>
+        <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span>
+            <span class="c1"># TODO : Add logger and echo warning</span>
+            <span class="n">energy_dispersion</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">off_vector</span> <span class="o">=</span> <span class="n">PHACountsSpectrum</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">dirname</span> <span class="o">/</span> <span class="n">bkg</span><span class="p">))</span>
+        <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span>
+            <span class="c1"># TODO : Add logger and echo warning</span>
+            <span class="n">off_vector</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="n">effective_area</span> <span class="o">=</span> <span class="n">EffectiveAreaTable</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">dirname</span> <span class="o">/</span> <span class="n">arf</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">on_vector</span><span class="o">=</span><span class="n">on_vector</span><span class="p">,</span>
+                   <span class="n">aeff</span><span class="o">=</span><span class="n">effective_area</span><span class="p">,</span>
+                   <span class="n">off_vector</span><span class="o">=</span><span class="n">off_vector</span><span class="p">,</span>
+                   <span class="n">edisp</span><span class="o">=</span><span class="n">energy_dispersion</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumObservation.write"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservation.html#gammapy.spectrum.SpectrumObservation.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outdir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_sherpa</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Write OGIP files.</span>
+
+<span class="sd">        If you want to use the written files with Sherpa you have to set the</span>
+<span class="sd">        ``use_sherpa`` flag. Then all files will be written in units &#39;keV&#39; and</span>
+<span class="sd">        &#39;cm2&#39;.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        outdir : `~gammapy.extern.pathlib.Path`</span>
+<span class="sd">            output directory, default: pwd</span>
+<span class="sd">        use_sherpa : bool, optional</span>
+<span class="sd">            Write Sherpa compliant files, default: False</span>
+<span class="sd">        overwrite : bool, optional</span>
+<span class="sd">            Overwrite, default: True</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">outdir</span> <span class="o">=</span> <span class="n">Path</span><span class="o">.</span><span class="n">cwd</span><span class="p">()</span> <span class="k">if</span> <span class="n">outdir</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">Path</span><span class="p">(</span><span class="n">outdir</span><span class="p">)</span>
+        <span class="n">outdir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">phafile</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">phafile</span>
+        <span class="n">bkgfile</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">bkgfile</span>
+        <span class="n">arffile</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">arffile</span>
+        <span class="n">rmffile</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">rmffile</span>
+
+        <span class="c1"># Write in keV and cm2 for sherpa</span>
+        <span class="k">if</span> <span class="n">use_sherpa</span><span class="p">:</span>
+            <span class="c1"># TODO: Change this implementation.</span>
+            <span class="c1"># write should not change the object</span>
+            <span class="c1"># put this code in a separate method that makes a copy with the changes.</span>
+            <span class="c1"># then call `.write` on that here, or remove the option and let the user do it.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">lo</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">lo</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;keV&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">hi</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">hi</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;keV&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">lo</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">lo</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;keV&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">hi</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">hi</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;keV&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;cm2&#39;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">lo</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">lo</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;keV&#39;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">hi</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">hi</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;keV&#39;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">e_reco</span><span class="o">.</span><span class="n">lo</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">e_reco</span><span class="o">.</span><span class="n">lo</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;keV&#39;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">e_reco</span><span class="o">.</span><span class="n">hi</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">e_reco</span><span class="o">.</span><span class="n">hi</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;keV&#39;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">e_true</span><span class="o">.</span><span class="n">lo</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">e_true</span><span class="o">.</span><span class="n">lo</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;keV&#39;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">e_true</span><span class="o">.</span><span class="n">hi</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">e_true</span><span class="o">.</span><span class="n">hi</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;keV&#39;</span><span class="p">)</span>
+                <span class="c1"># Set data to itself to trigger reset of the interpolator</span>
+                <span class="c1"># TODO: Make NDData notice change of axis</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">outdir</span> <span class="o">/</span> <span class="n">phafile</span><span class="p">,</span> <span class="n">clobber</span><span class="o">=</span><span class="n">overwrite</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">outdir</span> <span class="o">/</span> <span class="n">arffile</span><span class="p">,</span> <span class="n">clobber</span><span class="o">=</span><span class="n">overwrite</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">outdir</span> <span class="o">/</span> <span class="n">bkgfile</span><span class="p">,</span> <span class="n">clobber</span><span class="o">=</span><span class="n">overwrite</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">outdir</span> <span class="o">/</span> <span class="n">rmffile</span><span class="p">),</span> <span class="n">clobber</span><span class="o">=</span><span class="n">overwrite</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumObservation.peek"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservation.html#gammapy.spectrum.SpectrumObservation.peek">[docs]</a>    <span class="k">def</span> <span class="nf">peek</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">)):</span>
+        <span class="sd">&quot;&quot;&quot;Quick-look summary plots.&quot;&quot;&quot;</span>
+        <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+
+        <span class="n">fig</span><span class="p">,</span> <span class="p">((</span><span class="n">ax1</span><span class="p">,</span> <span class="n">ax2</span><span class="p">),</span> <span class="p">(</span><span class="n">ax3</span><span class="p">,</span> <span class="n">ax4</span><span class="p">))</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">nrows</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">ncols</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="n">figsize</span><span class="p">)</span>
+
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Counts&#39;</span><span class="p">)</span>
+        <span class="n">energy_unit</span> <span class="o">=</span> <span class="s1">&#39;TeV&#39;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">background_vector</span><span class="o">.</span><span class="n">plot_hist</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">ax1</span><span class="p">,</span>
+                                             <span class="n">label</span><span class="o">=</span><span class="s1">&#39;alpha * n_off&#39;</span><span class="p">,</span>
+                                             <span class="n">color</span><span class="o">=</span><span class="s1">&#39;darkblue&#39;</span><span class="p">,</span>
+                                             <span class="n">energy_unit</span><span class="o">=</span><span class="n">energy_unit</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">plot_hist</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">ax1</span><span class="p">,</span>
+                                 <span class="n">label</span><span class="o">=</span><span class="s1">&#39;n_on&#39;</span><span class="p">,</span>
+                                 <span class="n">color</span><span class="o">=</span><span class="s1">&#39;darkred&#39;</span><span class="p">,</span>
+                                 <span class="n">energy_unit</span><span class="o">=</span><span class="n">energy_unit</span><span class="p">,</span>
+                                 <span class="n">show_energy</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hi_threshold</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lo_threshold</span><span class="p">))</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="mf">0.7</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lo_threshold</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">energy_unit</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                     <span class="mf">1.3</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">hi_threshold</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">energy_unit</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">numpoints</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Effective Area&#39;</span><span class="p">)</span>
+        <span class="n">e_unit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">unit</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">ax2</span><span class="p">,</span>
+                       <span class="n">show_energy</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hi_threshold</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lo_threshold</span><span class="p">))</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="mf">0.7</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lo_threshold</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">e_unit</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                     <span class="mf">1.3</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">hi_threshold</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">e_unit</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+
+        <span class="n">ax3</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;off&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ax3</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">total_stats_safe_range</span><span class="p">),</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+
+        <span class="n">ax4</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Energy Dispersion&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">plot_matrix</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">ax4</span><span class="p">)</span>
+
+        <span class="c1"># TODO: optimize layout</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">wspace</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumObservation.to_sherpa"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservation.html#gammapy.spectrum.SpectrumObservation.to_sherpa">[docs]</a>    <span class="k">def</span> <span class="nf">to_sherpa</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Convert to `~sherpa.astro.data.DataPHA`.</span>
+
+<span class="sd">        Associated background vectors and IRFs are also translated to sherpa</span>
+<span class="sd">        objects and appended to the PHA instance.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">pha</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">to_sherpa</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pha_obs</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_id</span><span class="p">))</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">aeff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">arf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">to_sherpa</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;arf_obs</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_id</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">arf</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">rmf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">to_sherpa</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;rmf_obs</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_id</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">rmf</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="n">pha</span><span class="o">.</span><span class="n">set_response</span><span class="p">(</span><span class="n">arf</span><span class="p">,</span> <span class="n">rmf</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">bkg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">to_sherpa</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;bkg_obs</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_id</span><span class="p">))</span>
+            <span class="n">bkg</span><span class="o">.</span><span class="n">set_response</span><span class="p">(</span><span class="n">arf</span><span class="p">,</span> <span class="n">rmf</span><span class="p">)</span>
+            <span class="n">pha</span><span class="o">.</span><span class="n">set_background</span><span class="p">(</span><span class="n">bkg</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># see https://github.com/sherpa/sherpa/blob/36c1f9dabb3350b64d6f54ab627f15c862ee4280/sherpa/astro/data.py#L1400</span>
+        <span class="n">pha</span><span class="o">.</span><span class="n">_set_initial_quantity</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">pha</span></div>
+
+<div class="viewcode-block" id="SpectrumObservation.copy"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservation.html#gammapy.spectrum.SpectrumObservation.copy">[docs]</a>    <span class="k">def</span> <span class="nf">copy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;A deep copy.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="SpectrumObservationList"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservationList.html#gammapy.spectrum.SpectrumObservationList">[docs]</a><span class="k">class</span> <span class="nc">SpectrumObservationList</span><span class="p">(</span><span class="n">UserList</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;List of `~gammapy.spectrum.SpectrumObservation` objects.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">ss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span>
+        <span class="n">ss</span> <span class="o">+=</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">Number of observations: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
+        <span class="c1"># ss += &#39;\n{}&#39;.format(self.obs_id)</span>
+        <span class="k">return</span> <span class="n">ss</span>
+
+<div class="viewcode-block" id="SpectrumObservationList.obs"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservationList.html#gammapy.spectrum.SpectrumObservationList.obs">[docs]</a>    <span class="k">def</span> <span class="nf">obs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs_id</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Return one observation.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        obs_id : int</span>
+<span class="sd">            Identifier</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">obs_id_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">o</span><span class="o">.</span><span class="n">obs_id</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">]</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">obs_id_list</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">obs_id</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">obs_id</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;List of observations ids&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">o</span><span class="o">.</span><span class="n">obs_id</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">total_livetime</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Summed livetime&quot;&quot;&quot;</span>
+        <span class="n">livetimes</span> <span class="o">=</span> <span class="p">[</span><span class="n">o</span><span class="o">.</span><span class="n">livetime</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;s&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">livetimes</span><span class="p">),</span> <span class="s1">&#39;s&#39;</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">on_vector_list</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;On `~gammapy.spectrum.PHACountsSpectrumList`&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">PHACountsSpectrumList</span><span class="p">([</span><span class="n">o</span><span class="o">.</span><span class="n">on_vector</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">])</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">off_vector_list</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Off `~gammapy.spectrum.PHACountsSpectrumList`&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">PHACountsSpectrumList</span><span class="p">([</span><span class="n">o</span><span class="o">.</span><span class="n">off_vector</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">])</span>
+
+<div class="viewcode-block" id="SpectrumObservationList.stack"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservationList.html#gammapy.spectrum.SpectrumObservationList.stack">[docs]</a>    <span class="k">def</span> <span class="nf">stack</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Return stacked `~gammapy.spectrum.SpectrumObservation`&quot;&quot;&quot;</span>
+        <span class="n">stacker</span> <span class="o">=</span> <span class="n">SpectrumObservationStacker</span><span class="p">(</span><span class="n">obs_list</span><span class="o">=</span><span class="bp">self</span><span class="p">)</span>
+        <span class="n">stacker</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">stacker</span><span class="o">.</span><span class="n">stacked_obs</span></div>
+
+<div class="viewcode-block" id="SpectrumObservationList.safe_range"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservationList.html#gammapy.spectrum.SpectrumObservationList.safe_range">[docs]</a>    <span class="k">def</span> <span class="nf">safe_range</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">&#39;inclusive&#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Safe energy range</span>
+
+<span class="sd">        This is the energy range in with any / all observations have their safe</span>
+<span class="sd">        threshold</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        method : str, {&#39;inclusive&#39;, &#39;exclusive&#39;}</span>
+<span class="sd">            Maximum or minimum range</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">lo_thres</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">([</span><span class="n">obs</span><span class="o">.</span><span class="n">lo_threshold</span> <span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">])</span>
+        <span class="n">hi_thres</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">([</span><span class="n">obs</span><span class="o">.</span><span class="n">hi_threshold</span> <span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;inclusive&#39;</span><span class="p">:</span>
+            <span class="n">safe_range</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">lo_thres</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">hi_thres</span><span class="p">)]</span>
+        <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;exclusive&#39;</span><span class="p">:</span>
+            <span class="n">safe_range</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">lo_thres</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">hi_thres</span><span class="p">)]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Invalid method: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">method</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">safe_range</span></div>
+
+<div class="viewcode-block" id="SpectrumObservationList.write"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservationList.html#gammapy.spectrum.SpectrumObservationList.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outdir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">pha_typeII</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Create OGIP files</span>
+
+<span class="sd">        Each observation will be written as seperate set of FITS files by</span>
+<span class="sd">        default. If the option ``pha_typeII`` is enabled all on and off counts</span>
+<span class="sd">        spectra will be collected into one</span>
+<span class="sd">        `~gammapy.spectrum.PHACountsSpectrumList` and written to one FITS file.</span>
+<span class="sd">        All datasets will be associated to the same response files.</span>
+<span class="sd">        see</span>
+<span class="sd">        https://heasarc.gsfc.nasa.gov/docs/heasarc/ofwg/docs/spectra/ogip_92_007/node8.html</span>
+
+<span class="sd">        TODO: File written with the ``pha_typeII`` option are not read</span>
+<span class="sd">        properly with sherpa. This could be a sherpa issue. Investigate and</span>
+<span class="sd">        file issue.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        outdir : str, `~gammapy.extern.pathlib.Path`, optional</span>
+<span class="sd">            Output directory, default: pwd</span>
+<span class="sd">        pha_typeII : bool, default: False</span>
+<span class="sd">            Collect PHA datasets into one file</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">outdir</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">outdir</span><span class="p">)</span>
+        <span class="n">outdir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">pha_typeII</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
+                <span class="n">obs</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">outdir</span><span class="o">=</span><span class="n">outdir</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">onlist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_vector_list</span>
+            <span class="n">onlist</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">outdir</span> <span class="o">/</span> <span class="s1">&#39;pha2.fits&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">offlist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_vector_list</span>
+            <span class="c1"># This filename is hardcoded since it is a column in the on list</span>
+            <span class="n">offlist</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">outdir</span> <span class="o">/</span> <span class="s1">&#39;bkg.fits&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">arf_file</span> <span class="o">=</span> <span class="n">onlist</span><span class="o">.</span><span class="n">to_table</span><span class="p">()</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;ancrfile&#39;</span><span class="p">]</span>
+            <span class="n">rmf_file</span> <span class="o">=</span> <span class="n">onlist</span><span class="o">.</span><span class="n">to_table</span><span class="p">()</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;respfile&#39;</span><span class="p">]</span>
+            <span class="bp">self</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">outdir</span> <span class="o">/</span> <span class="n">arf_file</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="bp">self</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">outdir</span> <span class="o">/</span> <span class="n">rmf_file</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumObservationList.read"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservationList.html#gammapy.spectrum.SpectrumObservationList.read">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">directory</span><span class="p">,</span> <span class="n">pha_typeII</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Read multiple observations</span>
+
+<span class="sd">        This methods reads all PHA files contained in a given directory. Enable</span>
+<span class="sd">        ``pha_typeII`` to read a PHA type II file.</span>
+
+<span class="sd">        see</span>
+<span class="sd">        https://heasarc.gsfc.nasa.gov/docs/heasarc/ofwg/docs/spectra/ogip_92_007/node8.html</span>
+
+<span class="sd">        TODO: Replace with more sophisticated file managment system</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        directory : `~gammapy.extern.pathlib.Path`</span>
+<span class="sd">            Directory holding the observations</span>
+<span class="sd">        pha_typeII : bool, default: False</span>
+<span class="sd">            Read PHA typeII file</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">obs_list</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">()</span>
+        <span class="n">directory</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">pha_typeII</span><span class="p">:</span>
+            <span class="c1"># glob default order depends on OS, so we call sorted() explicitely to</span>
+            <span class="c1"># get reproducable results</span>
+            <span class="n">filelist</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">directory</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s1">&#39;pha*.fits&#39;</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">phafile</span> <span class="ow">in</span> <span class="n">filelist</span><span class="p">:</span>
+                <span class="n">obs</span> <span class="o">=</span> <span class="n">SpectrumObservation</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">phafile</span><span class="p">)</span>
+                <span class="n">obs_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># NOTE: filenames for type II PHA files are hardcoded</span>
+            <span class="n">on_vectors</span> <span class="o">=</span> <span class="n">PHACountsSpectrumList</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">directory</span> <span class="o">/</span> <span class="s1">&#39;pha2.fits&#39;</span><span class="p">)</span>
+            <span class="n">off_vectors</span> <span class="o">=</span> <span class="n">PHACountsSpectrumList</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">directory</span> <span class="o">/</span> <span class="s1">&#39;bkg.fits&#39;</span><span class="p">)</span>
+            <span class="n">aeff</span> <span class="o">=</span> <span class="n">EffectiveAreaTable</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">directory</span> <span class="o">/</span> <span class="s1">&#39;arf.fits&#39;</span><span class="p">)</span>
+            <span class="n">edisp</span> <span class="o">=</span> <span class="n">EnergyDispersion</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">directory</span> <span class="o">/</span> <span class="s1">&#39;rmf.fits&#39;</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">on</span><span class="p">,</span> <span class="n">off</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">on_vectors</span><span class="p">,</span> <span class="n">off_vectors</span><span class="p">):</span>
+                <span class="n">obs</span> <span class="o">=</span> <span class="n">SpectrumObservation</span><span class="p">(</span><span class="n">on_vector</span><span class="o">=</span><span class="n">on</span><span class="p">,</span> <span class="n">off_vector</span><span class="o">=</span><span class="n">off</span><span class="p">,</span>
+                                          <span class="n">aeff</span><span class="o">=</span><span class="n">aeff</span><span class="p">,</span> <span class="n">edisp</span><span class="o">=</span><span class="n">edisp</span><span class="p">)</span>
+                <span class="n">obs_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">obs_list</span></div>
+
+<div class="viewcode-block" id="SpectrumObservationList.peek"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservationList.html#gammapy.spectrum.SpectrumObservationList.peek">[docs]</a>    <span class="k">def</span> <span class="nf">peek</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Quickly look at observations</span>
+
+<span class="sd">        Uses IPython widgets.</span>
+<span class="sd">        TODO: Change to bokeh</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">ipywidgets</span> <span class="k">import</span> <span class="n">interact</span>
+        <span class="n">max_</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+
+        <span class="k">def</span> <span class="nf">show_obs</span><span class="p">(</span><span class="n">idx</span><span class="p">):</span>
+            <span class="bp">self</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">peek</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">interact</span><span class="p">(</span><span class="n">show_obs</span><span class="p">,</span> <span class="n">idx</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">max_</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span></div></div>
+
+
+<div class="viewcode-block" id="SpectrumObservationStacker"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservationStacker.html#gammapy.spectrum.SpectrumObservationStacker">[docs]</a><span class="k">class</span> <span class="nc">SpectrumObservationStacker</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Stack observations in a `~gammapy.spectrum.SpectrumObservationList`.</span>
+
+<span class="sd">    The stacking of :math:`j` observations is implemented as follows.</span>
+<span class="sd">    :math:`k` and :math:`l` denote a bin in reconstructed and true energy,</span>
+<span class="sd">    respectively.</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        \epsilon_{jk} =\left\{\begin{array}{cl} 1, &amp; \mbox{if</span>
+<span class="sd">            bin k is inside the energy thresholds}\\ 0, &amp; \mbox{otherwise} \end{array}\right.</span>
+
+<span class="sd">        \overline{\mathrm{n_{on}}}_k = \sum_{j} \mathrm{n_{on}}_{jk} \cdot</span>
+<span class="sd">            \epsilon_{jk}</span>
+
+<span class="sd">        \overline{\mathrm{n_{off}}}_k = \sum_{j} \mathrm{n_{off}}_{jk} \cdot</span>
+<span class="sd">            \epsilon_{jk}</span>
+
+<span class="sd">        \overline{\alpha}_k =</span>
+<span class="sd">        \frac{\overline{{b_{on}}}_k}{\overline{{b_{off}}}_k}</span>
+
+<span class="sd">        \overline{{b}_{on}}_k = 1</span>
+
+<span class="sd">        \overline{{b}_{off}}_k = \frac{1}{\sum_{j}\alpha_{jk} \cdot</span>
+<span class="sd">            \mathrm{n_{off}}_{jk} \cdot \epsilon_{jk}} \cdot \overline{\mathrm {n_{off}}}</span>
+
+<span class="sd">    Please refer to the `~gammapy.irf.IRFStacker` for the description</span>
+<span class="sd">    of how the IRFs are stacked.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    obs_list : `~gammapy.spectrum.SpectrumObservationList`</span>
+<span class="sd">        Observations to stack</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from gammapy.spectrum import SpectrumObservationList, SpectrumObservationStacker</span>
+<span class="sd">    &gt;&gt;&gt; obs_list = SpectrumObservationList.read(&#39;$GAMMAPY_EXTRA/datasets/hess-crab4_pha&#39;)</span>
+<span class="sd">    &gt;&gt;&gt; obs_stacker = SpectrumObservationStacker(obs_list)</span>
+<span class="sd">    &gt;&gt;&gt; obs_stacker.run()</span>
+<span class="sd">    &gt;&gt;&gt; print(obs_stacker.stacked_obs)</span>
+<span class="sd">    *** Observation summary report ***</span>
+<span class="sd">    Observation Id: [23523-23592]</span>
+<span class="sd">    Livetime: 0.879 h</span>
+<span class="sd">    On events: 279</span>
+<span class="sd">    Off events: 108</span>
+<span class="sd">    Alpha: 0.037</span>
+<span class="sd">    Bkg events in On region: 3.96</span>
+<span class="sd">    Excess: 275.04</span>
+<span class="sd">    Excess / Background: 69.40</span>
+<span class="sd">    Gamma rate: 0.14 1 / min</span>
+<span class="sd">    Bkg rate: 0.00 1 / min</span>
+<span class="sd">    Sigma: 37.60</span>
+<span class="sd">    energy range: 681292069.06 keV - 87992254356.91 keV</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs_list</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span> <span class="o">=</span> <span class="n">SpectrumObservationList</span><span class="p">(</span><span class="n">obs_list</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_on_vector</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_off_vector</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_aeff</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_edisp</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_bkscal_on</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_bkscal_off</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_obs</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">ss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span>
+        <span class="n">ss</span> <span class="o">+=</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ss</span>
+
+<div class="viewcode-block" id="SpectrumObservationStacker.run"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservationStacker.html#gammapy.spectrum.SpectrumObservationStacker.run">[docs]</a>    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Run all steps in the correct order.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stack_counts_vectors</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stack_aeff</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stack_edisp</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stack_obs</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="SpectrumObservationStacker.stack_counts_vectors"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservationStacker.html#gammapy.spectrum.SpectrumObservationStacker.stack_counts_vectors">[docs]</a>    <span class="k">def</span> <span class="nf">stack_counts_vectors</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Stack on and off vectors.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stack_on_vector</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stack_off_vector</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stack_backscal</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setup_counts_vectors</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="SpectrumObservationStacker.stack_on_vector"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservationStacker.html#gammapy.spectrum.SpectrumObservationStacker.stack_on_vector">[docs]</a>    <span class="k">def</span> <span class="nf">stack_on_vector</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Stack the on count vector.&quot;&quot;&quot;</span>
+        <span class="n">on_vector_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">o</span><span class="o">.</span><span class="n">on_vector</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_on_vector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_counts_spectrum</span><span class="p">(</span><span class="n">on_vector_list</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumObservationStacker.stack_off_vector"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservationStacker.html#gammapy.spectrum.SpectrumObservationStacker.stack_off_vector">[docs]</a>    <span class="k">def</span> <span class="nf">stack_off_vector</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Stack the off count vector.&quot;&quot;&quot;</span>
+        <span class="n">off_vector_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">o</span><span class="o">.</span><span class="n">off_vector</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_off_vector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_counts_spectrum</span><span class="p">(</span><span class="n">off_vector_list</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumObservationStacker.stack_counts_spectrum"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservationStacker.html#gammapy.spectrum.SpectrumObservationStacker.stack_counts_spectrum">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">stack_counts_spectrum</span><span class="p">(</span><span class="n">counts_spectrum_list</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Stack `~gammapy.spectrum.PHACountsSpectrum`.</span>
+
+<span class="sd">        * Bins outside the safe energy range are set to 0</span>
+<span class="sd">        * Attributes are set to None.</span>
+<span class="sd">        * The quality vector of the observations are combined with a logical or,</span>
+<span class="sd">          such that the low (high) threshold of the stacked obs is the minimum</span>
+<span class="sd">          low (maximum high) threshold of the observation list to be stacked.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">template</span> <span class="o">=</span> <span class="n">counts_spectrum_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">energy</span> <span class="o">=</span> <span class="n">template</span><span class="o">.</span><span class="n">energy</span>
+        <span class="n">stacked_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">energy</span><span class="o">.</span><span class="n">nbins</span><span class="p">)</span>
+        <span class="n">stacked_quality</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">energy</span><span class="o">.</span><span class="n">nbins</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">counts_spectrum_list</span><span class="p">:</span>
+            <span class="n">stacked_data</span> <span class="o">+=</span> <span class="n">spec</span><span class="o">.</span><span class="n">counts_in_safe_range</span><span class="o">.</span><span class="n">value</span>
+            <span class="n">temp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">logical_and</span><span class="p">(</span><span class="n">stacked_quality</span><span class="p">,</span>
+                                  <span class="n">spec</span><span class="o">.</span><span class="n">quality</span><span class="p">)</span>
+            <span class="n">stacked_quality</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">temp</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">PHACountsSpectrum</span><span class="p">(</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">stacked_data</span><span class="p">,</span>
+            <span class="n">energy_lo</span><span class="o">=</span><span class="n">energy</span><span class="o">.</span><span class="n">lo</span><span class="p">,</span>
+            <span class="n">energy_hi</span><span class="o">=</span><span class="n">energy</span><span class="o">.</span><span class="n">hi</span><span class="p">,</span>
+            <span class="n">quality</span><span class="o">=</span><span class="n">stacked_quality</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumObservationStacker.stack_backscal"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservationStacker.html#gammapy.spectrum.SpectrumObservationStacker.stack_backscal">[docs]</a>    <span class="k">def</span> <span class="nf">stack_backscal</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Stack ``backscal`` for on and off vector.&quot;&quot;&quot;</span>
+        <span class="n">nbins</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">e_reco</span><span class="o">.</span><span class="n">nbins</span>
+        <span class="n">bkscal_on</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">nbins</span><span class="p">)</span>
+        <span class="n">bkscal_off</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nbins</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">:</span>
+            <span class="n">bkscal_on_data</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">on_vector</span><span class="o">.</span><span class="n">_backscal_array</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+            <span class="n">bkscal_off_data</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">_backscal_array</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="n">bkscal_off</span> <span class="o">+=</span> <span class="p">(</span><span class="n">bkscal_on_data</span> <span class="o">/</span> <span class="n">bkscal_off_data</span><span class="p">)</span> <span class="o">*</span> <span class="n">obs</span><span class="o">.</span><span class="n">off_vector</span><span class="o">.</span><span class="n">counts_in_safe_range</span><span class="o">.</span><span class="n">value</span>
+
+        <span class="n">stacked_bkscal_off</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stacked_off_vector</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">value</span> <span class="o">/</span> <span class="n">bkscal_off</span>
+
+        <span class="c1"># there should be no nan values in backscal_on or backscal_off</span>
+        <span class="c1"># this leads to problems when fitting the data</span>
+        <span class="n">alpha_correction</span> <span class="o">=</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">stacked_off_vector</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">bkscal_on</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">alpha_correction</span>
+        <span class="n">stacked_bkscal_off</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">alpha_correction</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_bkscal_on</span> <span class="o">=</span> <span class="n">bkscal_on</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_bkscal_off</span> <span class="o">=</span> <span class="n">stacked_bkscal_off</span></div>
+
+<div class="viewcode-block" id="SpectrumObservationStacker.setup_counts_vectors"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservationStacker.html#gammapy.spectrum.SpectrumObservationStacker.setup_counts_vectors">[docs]</a>    <span class="k">def</span> <span class="nf">setup_counts_vectors</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Add correct attributes to stacked counts vectors.&quot;&quot;&quot;</span>
+        <span class="n">total_livetime</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="o">.</span><span class="n">total_livetime</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_on_vector</span><span class="o">.</span><span class="n">livetime</span> <span class="o">=</span> <span class="n">total_livetime</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_off_vector</span><span class="o">.</span><span class="n">livetime</span> <span class="o">=</span> <span class="n">total_livetime</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_on_vector</span><span class="o">.</span><span class="n">backscal</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stacked_bkscal_on</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_off_vector</span><span class="o">.</span><span class="n">backscal</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stacked_bkscal_off</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_on_vector</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;OBS_ID&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="o">.</span><span class="n">obs_id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_off_vector</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;OBS_ID&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="o">.</span><span class="n">obs_id</span></div>
+
+<div class="viewcode-block" id="SpectrumObservationStacker.stack_aeff"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservationStacker.html#gammapy.spectrum.SpectrumObservationStacker.stack_aeff">[docs]</a>    <span class="k">def</span> <span class="nf">stack_aeff</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Stack effective areas (weighted by livetime).</span>
+
+<span class="sd">        Calls `gammapy.irf.IRFStacker.stack_aeff`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">irf_stacker</span> <span class="o">=</span> <span class="n">IRFStacker</span><span class="p">(</span>
+            <span class="n">list_aeff</span><span class="o">=</span><span class="p">[</span><span class="n">obs</span><span class="o">.</span><span class="n">aeff</span> <span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">],</span>
+            <span class="n">list_livetime</span><span class="o">=</span><span class="p">[</span><span class="n">obs</span><span class="o">.</span><span class="n">livetime</span> <span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="n">irf_stacker</span><span class="o">.</span><span class="n">stack_aeff</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_aeff</span> <span class="o">=</span> <span class="n">irf_stacker</span><span class="o">.</span><span class="n">stacked_aeff</span></div>
+
+<div class="viewcode-block" id="SpectrumObservationStacker.stack_edisp"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservationStacker.html#gammapy.spectrum.SpectrumObservationStacker.stack_edisp">[docs]</a>    <span class="k">def</span> <span class="nf">stack_edisp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Stack energy dispersion (weighted by exposure).</span>
+
+<span class="sd">        Calls `~gammapy.irf.IRFStacker.stack_edisp`</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">irf_stacker</span> <span class="o">=</span> <span class="n">IRFStacker</span><span class="p">(</span>
+            <span class="n">list_aeff</span><span class="o">=</span><span class="p">[</span><span class="n">obs</span><span class="o">.</span><span class="n">aeff</span> <span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">],</span>
+            <span class="n">list_livetime</span><span class="o">=</span><span class="p">[</span><span class="n">obs</span><span class="o">.</span><span class="n">livetime</span> <span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">],</span>
+            <span class="n">list_edisp</span><span class="o">=</span><span class="p">[</span><span class="n">obs</span><span class="o">.</span><span class="n">edisp</span> <span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">],</span>
+            <span class="n">list_low_threshold</span><span class="o">=</span><span class="p">[</span><span class="n">obs</span><span class="o">.</span><span class="n">lo_threshold</span> <span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">],</span>
+            <span class="n">list_high_threshold</span><span class="o">=</span><span class="p">[</span><span class="n">obs</span><span class="o">.</span><span class="n">hi_threshold</span> <span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="n">irf_stacker</span><span class="o">.</span><span class="n">stack_edisp</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_edisp</span> <span class="o">=</span> <span class="n">irf_stacker</span><span class="o">.</span><span class="n">stacked_edisp</span></div>
+
+<div class="viewcode-block" id="SpectrumObservationStacker.stack_obs"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumObservationStacker.html#gammapy.spectrum.SpectrumObservationStacker.stack_obs">[docs]</a>    <span class="k">def</span> <span class="nf">stack_obs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Create stacked `~gammapy.spectrum.SpectrumObservation`&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_obs</span> <span class="o">=</span> <span class="n">SpectrumObservation</span><span class="p">(</span>
+            <span class="n">on_vector</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">stacked_on_vector</span><span class="p">,</span>
+            <span class="n">off_vector</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">stacked_off_vector</span><span class="p">,</span>
+            <span class="n">aeff</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">stacked_aeff</span><span class="p">,</span>
+            <span class="n">edisp</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">stacked_edisp</span><span class="p">,</span>
+        <span class="p">)</span></div></div>
+
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2018, The Gammapy developers.<br/>
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.6.5. &nbsp;
+    Last built 08 Jan 2018. <br/>
+  </p>
+</footer>
+  </body>
+</html>

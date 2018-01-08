@@ -1,0 +1,514 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>astropy.utils.metadata &#8212; gammapy v0.7.dev5391</title>
+    <link rel="stylesheet" href="../../../_static/gammapy.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.7.dev5391',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <link rel="shortcut icon" href="../../../_static/astropy_logo.ico"/>
+    <link rel="author" title="About these documents" href="../../../about.html" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+<link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+<script type="text/javascript" src="../../../_static/copybutton.js"></script>
+
+
+  </head>
+  <body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">gamma</span><span id="logotext2">py</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="Astropy Homepage" href="http://www.astropy.org"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">gammapy v0.7.dev5391</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for astropy.utils.metadata</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">This module contains helper functions and classes for handling metadata.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="k">import</span> <span class="n">wraps</span>
+
+<span class="kn">import</span> <span class="nn">warnings</span>
+
+<span class="kn">import</span> <span class="nn">collections</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="k">import</span> <span class="n">deepcopy</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">..utils.exceptions</span> <span class="k">import</span> <span class="n">AstropyWarning</span>
+<span class="kn">from</span> <span class="nn">..utils.misc</span> <span class="k">import</span> <span class="n">dtype_bytes_or_chars</span>
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;MergeConflictError&#39;</span><span class="p">,</span> <span class="s1">&#39;MergeConflictWarning&#39;</span><span class="p">,</span> <span class="s1">&#39;MERGE_STRATEGIES&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;common_dtype&#39;</span><span class="p">,</span> <span class="s1">&#39;MergePlus&#39;</span><span class="p">,</span> <span class="s1">&#39;MergeNpConcatenate&#39;</span><span class="p">,</span> <span class="s1">&#39;MergeStrategy&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;MergeStrategyMeta&#39;</span><span class="p">,</span> <span class="s1">&#39;enable_merge_strategies&#39;</span><span class="p">,</span> <span class="s1">&#39;merge&#39;</span><span class="p">,</span> <span class="s1">&#39;MetaData&#39;</span><span class="p">]</span>
+
+
+<span class="k">class</span> <span class="nc">MergeConflictError</span><span class="p">(</span><span class="ne">TypeError</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">class</span> <span class="nc">MergeConflictWarning</span><span class="p">(</span><span class="n">AstropyWarning</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="n">MERGE_STRATEGIES</span> <span class="o">=</span> <span class="p">[]</span>
+
+
+<span class="k">def</span> <span class="nf">common_dtype</span><span class="p">(</span><span class="n">arrs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Use numpy to find the common dtype for a list of ndarrays.</span>
+
+<span class="sd">    Only allow arrays within the following fundamental numpy data types:</span>
+<span class="sd">    ``np.bool_``, ``np.object_``, ``np.number``, ``np.character``, ``np.void``</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    arrs : list of ndarray objects</span>
+<span class="sd">        Arrays for which to find the common dtype</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dtype_str : str</span>
+<span class="sd">        String representation of dytpe (dtype ``str`` attribute)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">dtype</span><span class="p">(</span><span class="n">arr</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="s1">&#39;dtype&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s1">&#39;O&#39;</span><span class="p">))</span>
+
+    <span class="n">np_types</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">object_</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">number</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">character</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">void</span><span class="p">)</span>
+    <span class="n">uniq_types</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">issubclass</span><span class="p">(</span><span class="n">dtype</span><span class="p">(</span><span class="n">arr</span><span class="p">)</span><span class="o">.</span><span class="n">type</span><span class="p">,</span> <span class="n">np_type</span><span class="p">)</span> <span class="k">for</span> <span class="n">np_type</span> <span class="ow">in</span> <span class="n">np_types</span><span class="p">)</span>
+                     <span class="k">for</span> <span class="n">arr</span> <span class="ow">in</span> <span class="n">arrs</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">uniq_types</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="c1"># Embed into the exception the actual list of incompatible types.</span>
+        <span class="n">incompat_types</span> <span class="o">=</span> <span class="p">[</span><span class="n">dtype</span><span class="p">(</span><span class="n">arr</span><span class="p">)</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">arr</span> <span class="ow">in</span> <span class="n">arrs</span><span class="p">]</span>
+        <span class="n">tme</span> <span class="o">=</span> <span class="n">MergeConflictError</span><span class="p">(</span><span class="s1">&#39;Arrays have incompatible types </span><span class="si">{0}</span><span class="s1">&#39;</span>
+                                 <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">incompat_types</span><span class="p">))</span>
+        <span class="n">tme</span><span class="o">.</span><span class="n">_incompat_types</span> <span class="o">=</span> <span class="n">incompat_types</span>
+        <span class="k">raise</span> <span class="n">tme</span>
+
+    <span class="n">arrs</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">(</span><span class="n">arr</span><span class="p">))</span> <span class="k">for</span> <span class="n">arr</span> <span class="ow">in</span> <span class="n">arrs</span><span class="p">]</span>
+
+    <span class="c1"># For string-type arrays need to explicitly fill in non-zero</span>
+    <span class="c1"># values or the final arr_common = .. step is unpredictable.</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">arr</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">arrs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">arr</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">kind</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;S&#39;</span><span class="p">,</span> <span class="s1">&#39;U&#39;</span><span class="p">):</span>
+            <span class="n">arrs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="p">[(</span><span class="sa">u</span><span class="s1">&#39;0&#39;</span> <span class="k">if</span> <span class="n">arr</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">kind</span> <span class="o">==</span> <span class="s1">&#39;U&#39;</span> <span class="k">else</span> <span class="sa">b</span><span class="s1">&#39;0&#39;</span><span class="p">)</span> <span class="o">*</span>
+                       <span class="n">dtype_bytes_or_chars</span><span class="p">(</span><span class="n">arr</span><span class="o">.</span><span class="n">dtype</span><span class="p">)]</span>
+
+    <span class="n">arr_common</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">arr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">arr</span> <span class="ow">in</span> <span class="n">arrs</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">arr_common</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">str</span>
+
+
+<span class="k">class</span> <span class="nc">MergeStrategyMeta</span><span class="p">(</span><span class="nb">type</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Metaclass that registers MergeStrategy subclasses into the</span>
+<span class="sd">    MERGE_STRATEGIES registry.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__new__</span><span class="p">(</span><span class="n">mcls</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">bases</span><span class="p">,</span> <span class="n">members</span><span class="p">):</span>
+        <span class="bp">cls</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="n">mcls</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">bases</span><span class="p">,</span> <span class="n">members</span><span class="p">)</span>
+
+        <span class="c1"># Wrap ``merge`` classmethod to catch any exception and re-raise as</span>
+        <span class="c1"># MergeConflictError.</span>
+        <span class="k">if</span> <span class="s1">&#39;merge&#39;</span> <span class="ow">in</span> <span class="n">members</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">members</span><span class="p">[</span><span class="s1">&#39;merge&#39;</span><span class="p">],</span> <span class="nb">classmethod</span><span class="p">):</span>
+            <span class="n">orig_merge</span> <span class="o">=</span> <span class="n">members</span><span class="p">[</span><span class="s1">&#39;merge&#39;</span><span class="p">]</span><span class="o">.</span><span class="vm">__func__</span>
+
+            <span class="nd">@wraps</span><span class="p">(</span><span class="n">orig_merge</span><span class="p">)</span>
+            <span class="k">def</span> <span class="nf">merge</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">orig_merge</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="n">MergeConflictError</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+
+            <span class="bp">cls</span><span class="o">.</span><span class="n">merge</span> <span class="o">=</span> <span class="nb">classmethod</span><span class="p">(</span><span class="n">merge</span><span class="p">)</span>
+
+        <span class="c1"># Register merging class (except for base MergeStrategy class)</span>
+        <span class="k">if</span> <span class="s1">&#39;types&#39;</span> <span class="ow">in</span> <span class="n">members</span><span class="p">:</span>
+            <span class="n">types</span> <span class="o">=</span> <span class="n">members</span><span class="p">[</span><span class="s1">&#39;types&#39;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">types</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+                <span class="n">types</span> <span class="o">=</span> <span class="p">[</span><span class="n">types</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">left</span><span class="p">,</span> <span class="n">right</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="n">types</span><span class="p">):</span>
+                <span class="n">MERGE_STRATEGIES</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">,</span> <span class="bp">cls</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="bp">cls</span>
+
+
+<span class="k">class</span> <span class="nc">MergeStrategy</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">MergeStrategyMeta</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Base class for defining a strategy for merging metadata from two</span>
+<span class="sd">    sources, left and right, into a single output.</span>
+
+<span class="sd">    The primary functionality for the class is the ``merge(cls, left, right)``</span>
+<span class="sd">    class method.  This takes ``left`` and ``right`` side arguments and</span>
+<span class="sd">    returns a single merged output.</span>
+
+<span class="sd">    The first class attribute is ``types``.  This is defined as a list of</span>
+<span class="sd">    (left_types, right_types) tuples that indicate for which input types the</span>
+<span class="sd">    merge strategy applies.  In determining whether to apply this merge</span>
+<span class="sd">    strategy to a pair of (left, right) objects, a test is done:</span>
+<span class="sd">    ``isinstance(left, left_types) and isinstance(right, right_types)``.  For</span>
+<span class="sd">    example::</span>
+
+<span class="sd">      types = [(np.ndarray, np.ndarray),  # Two ndarrays</span>
+<span class="sd">               (np.ndarray, (list, tuple)),  # ndarray and (list or tuple)</span>
+<span class="sd">               ((list, tuple), np.ndarray)]  # (list or tuple) and ndarray</span>
+
+<span class="sd">    As a convenience, ``types`` can be defined as a single two-tuple instead of</span>
+<span class="sd">    a list of two-tuples, e.g. ``types = (np.ndarray, np.ndarray)``.</span>
+
+<span class="sd">    The other class attribute is ``enabled``, which defaults to ``False`` in</span>
+<span class="sd">    the base class.  By defining a subclass of ``MergeStrategy`` the new merge</span>
+<span class="sd">    strategy is automatically registered to be available for use in</span>
+<span class="sd">    merging. However, by default the new merge strategy is *not enabled*.  This</span>
+<span class="sd">    prevents inadvertently changing the behavior of unrelated code that is</span>
+<span class="sd">    performing metadata merge operations.</span>
+
+<span class="sd">    In most cases (particularly in library code that others might use) it is</span>
+<span class="sd">    recommended to leave custom strategies disabled and use the</span>
+<span class="sd">    `~astropy.utils.metadata.enable_merge_strategies` context manager to locally</span>
+<span class="sd">    enable the desired strategies.  However, if one is confident that the</span>
+<span class="sd">    new strategy will not produce unexpected behavior, then one can globally</span>
+<span class="sd">    enable it by setting the ``enabled`` class attribute to ``True``.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    Here we define a custom merge strategy that takes an int or float on</span>
+<span class="sd">    the left and right sides and returns a list with the two values.</span>
+
+<span class="sd">      &gt;&gt;&gt; from astropy.utils.metadata import MergeStrategy</span>
+<span class="sd">      &gt;&gt;&gt; class MergeNumbersAsList(MergeStrategy):</span>
+<span class="sd">      ...     types = ((int, float), (int, float))  # (left_types, right_types)</span>
+<span class="sd">      ...</span>
+<span class="sd">      ...     @classmethod</span>
+<span class="sd">      ...     def merge(cls, left, right):</span>
+<span class="sd">      ...         return [left, right]</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Set ``enabled = True`` to globally enable applying this merge strategy.</span>
+    <span class="c1"># This is not generally recommended.</span>
+    <span class="n">enabled</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="c1"># types = [(left_types, right_types), ...]</span>
+
+
+<span class="k">class</span> <span class="nc">MergePlus</span><span class="p">(</span><span class="n">MergeStrategy</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Merge ``left`` and ``right`` objects using the plus operator.  This</span>
+<span class="sd">    merge strategy is globally enabled by default.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">types</span> <span class="o">=</span> <span class="p">[(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">list</span><span class="p">),</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)]</span>
+    <span class="n">enabled</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">merge</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">left</span> <span class="o">+</span> <span class="n">right</span>
+
+
+<span class="k">class</span> <span class="nc">MergeNpConcatenate</span><span class="p">(</span><span class="n">MergeStrategy</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Merge ``left`` and ``right`` objects using np.concatenate.  This</span>
+<span class="sd">    merge strategy is globally enabled by default.</span>
+
+<span class="sd">    This will upcast a list or tuple to np.ndarray and the output is</span>
+<span class="sd">    always ndarray.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">types</span> <span class="o">=</span> <span class="p">[(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span>
+             <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)),</span>
+             <span class="p">((</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)]</span>
+    <span class="n">enabled</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">merge</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+        <span class="n">left</span><span class="p">,</span> <span class="n">right</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">left</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">right</span><span class="p">)</span>
+        <span class="n">common_dtype</span><span class="p">([</span><span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">])</span>  <span class="c1"># Ensure left and right have compatible dtype</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">])</span>
+
+
+<span class="k">def</span> <span class="nf">_both_isinstance</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">,</span> <span class="bp">cls</span><span class="p">):</span>
+    <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="bp">cls</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">right</span><span class="p">,</span> <span class="bp">cls</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_not_equal</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">left</span> <span class="o">!=</span> <span class="n">right</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+
+<span class="k">class</span> <span class="nc">_EnableMergeStrategies</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">merge_strategies</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">merge_strategies</span> <span class="o">=</span> <span class="n">merge_strategies</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">orig_enabled</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">left_type</span><span class="p">,</span> <span class="n">right_type</span><span class="p">,</span> <span class="n">merge_strategy</span> <span class="ow">in</span> <span class="n">MERGE_STRATEGIES</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">merge_strategy</span><span class="p">,</span> <span class="n">merge_strategies</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">orig_enabled</span><span class="p">[</span><span class="n">merge_strategy</span><span class="p">]</span> <span class="o">=</span> <span class="n">merge_strategy</span><span class="o">.</span><span class="n">enabled</span>
+                <span class="n">merge_strategy</span><span class="o">.</span><span class="n">enabled</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span> <span class="nf">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="k">def</span> <span class="nf">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">type</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">tb</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">merge_strategy</span><span class="p">,</span> <span class="n">enabled</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">orig_enabled</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">merge_strategy</span><span class="o">.</span><span class="n">enabled</span> <span class="o">=</span> <span class="n">enabled</span>
+
+
+<span class="k">def</span> <span class="nf">enable_merge_strategies</span><span class="p">(</span><span class="o">*</span><span class="n">merge_strategies</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Context manager to temporarily enable one or more custom metadata merge</span>
+<span class="sd">    strategies.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    Here we define a custom merge strategy that takes an int or float on</span>
+<span class="sd">    the left and right sides and returns a list with the two values.</span>
+
+<span class="sd">      &gt;&gt;&gt; from astropy.utils.metadata import MergeStrategy</span>
+<span class="sd">      &gt;&gt;&gt; class MergeNumbersAsList(MergeStrategy):</span>
+<span class="sd">      ...     types = ((int, float),  # left side types</span>
+<span class="sd">      ...              (int, float))  # right side types</span>
+<span class="sd">      ...     @classmethod</span>
+<span class="sd">      ...     def merge(cls, left, right):</span>
+<span class="sd">      ...         return [left, right]</span>
+
+<span class="sd">    By defining this class the merge strategy is automatically registered to be</span>
+<span class="sd">    available for use in merging. However, by default new merge strategies are</span>
+<span class="sd">    *not enabled*.  This prevents inadvertently changing the behavior of</span>
+<span class="sd">    unrelated code that is performing metadata merge operations.</span>
+
+<span class="sd">    In order to use the new merge strategy, use this context manager as in the</span>
+<span class="sd">    following example::</span>
+
+<span class="sd">      &gt;&gt;&gt; from astropy.table import Table, vstack</span>
+<span class="sd">      &gt;&gt;&gt; from astropy.utils.metadata import enable_merge_strategies</span>
+<span class="sd">      &gt;&gt;&gt; t1 = Table([[1]], names=[&#39;a&#39;])</span>
+<span class="sd">      &gt;&gt;&gt; t2 = Table([[2]], names=[&#39;a&#39;])</span>
+<span class="sd">      &gt;&gt;&gt; t1.meta = {&#39;m&#39;: 1}</span>
+<span class="sd">      &gt;&gt;&gt; t2.meta = {&#39;m&#39;: 2}</span>
+<span class="sd">      &gt;&gt;&gt; with enable_merge_strategies(MergeNumbersAsList):</span>
+<span class="sd">      ...    t12 = vstack([t1, t2])</span>
+<span class="sd">      &gt;&gt;&gt; t12.meta[&#39;m&#39;]</span>
+<span class="sd">      [1, 2]</span>
+
+<span class="sd">    One can supply further merge strategies as additional arguments to the</span>
+<span class="sd">    context manager.</span>
+
+<span class="sd">    As a convenience, the enabling operation is actually done by checking</span>
+<span class="sd">    whether the registered strategies are subclasses of the context manager</span>
+<span class="sd">    arguments.  This means one can define a related set of merge strategies and</span>
+<span class="sd">    then enable them all at once by enabling the base class.  As a trivial</span>
+<span class="sd">    example, *all* registered merge strategies can be enabled with::</span>
+
+<span class="sd">      &gt;&gt;&gt; with enable_merge_strategies(MergeStrategy):</span>
+<span class="sd">      ...    t12 = vstack([t1, t2])</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    merge_strategies : one or more `~astropy.utils.metadata.MergeStrategy` args</span>
+<span class="sd">        Merge strategies that will be enabled.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">return</span> <span class="n">_EnableMergeStrategies</span><span class="p">(</span><span class="o">*</span><span class="n">merge_strategies</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_warn_str_func</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;Cannot merge meta key </span><span class="si">{0!r}</span><span class="s1"> types </span><span class="si">{1!r}</span><span class="s1">&#39;</span>
+           <span class="s1">&#39; and </span><span class="si">{2!r}</span><span class="s1">, choosing </span><span class="si">{0}</span><span class="s1">=</span><span class="si">{3!r}</span><span class="s1">&#39;</span>
+           <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">left</span><span class="p">),</span> <span class="nb">type</span><span class="p">(</span><span class="n">right</span><span class="p">),</span> <span class="n">right</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">out</span>
+
+
+<span class="k">def</span> <span class="nf">_error_str_func</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;Cannot merge meta key </span><span class="si">{0!r}</span><span class="s1"> &#39;</span>
+           <span class="s1">&#39;types </span><span class="si">{1!r}</span><span class="s1"> and </span><span class="si">{2!r}</span><span class="s1">&#39;</span>
+           <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">left</span><span class="p">),</span> <span class="nb">type</span><span class="p">(</span><span class="n">right</span><span class="p">)))</span>
+    <span class="k">return</span> <span class="n">out</span>
+
+
+<span class="k">def</span> <span class="nf">merge</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">,</span> <span class="n">merge_func</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">metadata_conflicts</span><span class="o">=</span><span class="s1">&#39;warn&#39;</span><span class="p">,</span>
+          <span class="n">warn_str_func</span><span class="o">=</span><span class="n">_warn_str_func</span><span class="p">,</span>
+          <span class="n">error_str_func</span><span class="o">=</span><span class="n">_error_str_func</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Merge the ``left`` and ``right`` metadata objects.</span>
+
+<span class="sd">    This is a simplistic and limited implementation at this point.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">_both_isinstance</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">MergeConflictError</span><span class="p">(</span><span class="s1">&#39;Can only merge two dict-based objects&#39;</span><span class="p">)</span>
+
+    <span class="n">out</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">left</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">right</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="c1"># If no conflict then insert val into out dict and continue</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">out</span><span class="p">:</span>
+            <span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+        <span class="c1"># There is a conflict that must be resolved</span>
+        <span class="k">if</span> <span class="n">_both_isinstance</span><span class="p">(</span><span class="n">left</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">right</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">merge</span><span class="p">(</span><span class="n">left</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">right</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">merge_func</span><span class="p">,</span>
+                             <span class="n">metadata_conflicts</span><span class="o">=</span><span class="n">metadata_conflicts</span><span class="p">)</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">merge_func</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">for</span> <span class="n">left_type</span><span class="p">,</span> <span class="n">right_type</span><span class="p">,</span> <span class="n">merge_cls</span> <span class="ow">in</span> <span class="n">MERGE_STRATEGIES</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="n">merge_cls</span><span class="o">.</span><span class="n">enabled</span><span class="p">:</span>
+                            <span class="k">continue</span>
+                        <span class="k">if</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">left</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">left_type</span><span class="p">)</span> <span class="ow">and</span>
+                                <span class="nb">isinstance</span><span class="p">(</span><span class="n">right</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">right_type</span><span class="p">)):</span>
+                            <span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">merge_cls</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">left</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">right</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+                            <span class="k">break</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="n">MergeConflictError</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">merge_func</span><span class="p">(</span><span class="n">left</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">right</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+            <span class="k">except</span> <span class="n">MergeConflictError</span><span class="p">:</span>
+
+                <span class="c1"># Pick the metadata item that is not None, or they are both not</span>
+                <span class="c1"># None, then if they are equal, there is no conflict, and if</span>
+                <span class="c1"># they are different, there is a conflict and we pick the one</span>
+                <span class="c1"># on the right (or raise an error).</span>
+
+                <span class="k">if</span> <span class="n">left</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="c1"># This may not seem necessary since out[key] gets set to</span>
+                    <span class="c1"># right[key], but not all objects support != which is</span>
+                    <span class="c1"># needed for one of the if clauses.</span>
+                    <span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">right</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+                <span class="k">elif</span> <span class="n">right</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">left</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+                <span class="k">elif</span> <span class="n">_not_equal</span><span class="p">(</span><span class="n">left</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">right</span><span class="p">[</span><span class="n">key</span><span class="p">]):</span>
+                    <span class="k">if</span> <span class="n">metadata_conflicts</span> <span class="o">==</span> <span class="s1">&#39;warn&#39;</span><span class="p">:</span>
+                        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">warn_str_func</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">left</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">right</span><span class="p">[</span><span class="n">key</span><span class="p">]),</span>
+                                      <span class="n">MergeConflictWarning</span><span class="p">)</span>
+                    <span class="k">elif</span> <span class="n">metadata_conflicts</span> <span class="o">==</span> <span class="s1">&#39;error&#39;</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="n">MergeConflictError</span><span class="p">(</span><span class="n">error_str_func</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">left</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">right</span><span class="p">[</span><span class="n">key</span><span class="p">]))</span>
+                    <span class="k">elif</span> <span class="n">metadata_conflicts</span> <span class="o">!=</span> <span class="s1">&#39;silent&#39;</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;metadata_conflicts argument must be one &#39;</span>
+                                         <span class="s1">&#39;of &quot;silent&quot;, &quot;warn&quot;, or &quot;error&quot;&#39;</span><span class="p">)</span>
+                    <span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">right</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">right</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">out</span>
+
+
+<span class="k">class</span> <span class="nc">MetaData</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A descriptor for classes that have a ``meta`` property.</span>
+
+<span class="sd">    This can be set to any valid `~collections.Mapping`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    doc : `str`, optional</span>
+<span class="sd">        Documentation for the attribute of the class.</span>
+<span class="sd">        Default is ``&quot;&quot;``.</span>
+
+<span class="sd">        .. versionadded:: 1.2</span>
+
+<span class="sd">    copy : `bool`, optional</span>
+<span class="sd">        If ``True`` the the value is deepcopied before setting, otherwise it</span>
+<span class="sd">        is saved as reference.</span>
+<span class="sd">        Default is ``True``.</span>
+
+<span class="sd">        .. versionadded:: 1.2</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">doc</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">doc</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">copy</span> <span class="o">=</span> <span class="n">copy</span>
+
+    <span class="k">def</span> <span class="nf">__get__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">instance</span><span class="p">,</span> <span class="n">owner</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">instance</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">instance</span><span class="p">,</span> <span class="s1">&#39;_meta&#39;</span><span class="p">):</span>
+            <span class="n">instance</span><span class="o">.</span><span class="n">_meta</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">instance</span><span class="o">.</span><span class="n">_meta</span>
+
+    <span class="k">def</span> <span class="nf">__set__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">instance</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">instance</span><span class="o">.</span><span class="n">_meta</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">collections</span><span class="o">.</span><span class="n">Mapping</span><span class="p">):</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">copy</span><span class="p">:</span>
+                    <span class="n">instance</span><span class="o">.</span><span class="n">_meta</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">instance</span><span class="o">.</span><span class="n">_meta</span> <span class="o">=</span> <span class="n">value</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;meta attribute must be dict-like&quot;</span><span class="p">)</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2018, The Gammapy developers.<br/>
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.6.5. &nbsp;
+    Last built 08 Jan 2018. <br/>
+  </p>
+</footer>
+  </body>
+</html>
