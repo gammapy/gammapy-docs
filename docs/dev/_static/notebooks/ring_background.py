@@ -143,7 +143,7 @@ geom_image = geom.to_image().to_cube([energy_axis.squash()])
 
 # Make the exclusion mask
 regions = CircleSkyRegion(center=source_pos, radius=0.3 * u.deg)
-exclusion_mask = geom_image.region_mask([regions], inside=False)
+exclusion_mask = ~geom_image.region_mask([regions])
 exclusion_mask.sum_over_axes().plot();
 
 

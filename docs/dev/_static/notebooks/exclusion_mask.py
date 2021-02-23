@@ -97,7 +97,8 @@ print(regions)
 # In[ ]:
 
 
-mask_map = geom.region_mask(regions, inside=False)
+# to define the exclusion mask we take the inverse
+mask_map = ~geom.region_mask(regions)
 
 
 # In[ ]:
@@ -139,7 +140,7 @@ regions = [CircleSkyRegion(fgl[i].position, exclusion_radius) for i in idx]
 # In[ ]:
 
 
-mask_map_catalog = geom.region_mask(regions, inside=False)
+mask_map_catalog = ~geom.region_mask(regions)
 
 
 # In[ ]:

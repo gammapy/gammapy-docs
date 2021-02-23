@@ -33,7 +33,6 @@ get_ipython().system('gammapy info --no-envvar --no-system')
 import numpy as np
 import astropy.units as u
 from astropy.coordinates import SkyCoord
-from astropy.convolution import Gaussian2DKernel
 from regions import CircleSkyRegion
 from gammapy.modeling import Fit
 from gammapy.data import DataStore
@@ -48,7 +47,7 @@ from gammapy.modeling.models import (
     SkyModel,
     GaussianSpatialModel,
 )
-from gammapy.maps import MapAxis, WcsNDMap, WcsGeom, RegionGeom
+from gammapy.maps import MapAxis, WcsGeom, RegionGeom
 from gammapy.makers import (
     MapDatasetMaker,
     SafeMaskMaker,
@@ -255,7 +254,7 @@ on_region = CircleSkyRegion(center=target_position, radius=on_radius)
 # In[ ]:
 
 
-exclusion_mask = geom.to_image().region_mask([on_region], inside=False)
+exclusion_mask = ~geom.to_image().region_mask([on_region])
 exclusion_mask.plot();
 
 

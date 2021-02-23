@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>gammapy.estimators.ts_map &mdash; gammapy v0.18.3.dev694+gba96af880</title>
+  <title>gammapy.estimators.ts_map &mdash; gammapy v0.18.3.dev821+g49260126a</title>
   
 
   
@@ -78,7 +78,7 @@
             
             
               <div class="version">
-                0.18.3.dev694+gba96af880
+                0.18.3.dev821+g49260126a
               </div>
             
           
@@ -188,6 +188,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../howto.html#implement-a-custom-model">Implement a custom model</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../howto.html#energy-dependent-spatial-models">Energy Dependent Spatial Models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../howto.html#reduce-memory-budget-for-large-datasets">Reduce memory budget for large datasets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../howto.html#copy-part-of-a-datastore">Copy part of a datastore</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../../../references.html">Glossary and references</a><ul>
@@ -233,7 +234,12 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../../../makers/index.html#stacking-of-datasets">Stacking of Datasets</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../makers/index.html#combining-data-reduction-steps">Combining Data Reduction Steps</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../makers/index.html#using-gammapy-makers">Using <code class="xref py py-obj docutils literal notranslate"><span class="pre">gammapy.makers</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../makers/index.html#using-gammapy-makers">Using <code class="xref py py-obj docutils literal notranslate"><span class="pre">gammapy.makers</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../makers/fov.html">FoV background</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../makers/reflected.html">Reflected regions background</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../makers/ring.html">Ring background</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../../../makers/index.html#reference-api">Reference/API</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../../../makers/index.html#module-gammapy.makers">gammapy.makers Package</a></li>
 </ul>
@@ -533,20 +539,16 @@
 <span class="kn">from</span> <span class="nn">astropy.utils</span> <span class="kn">import</span> <span class="n">lazyproperty</span>
 <span class="kn">from</span> <span class="nn">gammapy.datasets</span> <span class="kn">import</span> <span class="n">Datasets</span>
 <span class="kn">from</span> <span class="nn">gammapy.datasets.map</span> <span class="kn">import</span> <span class="n">MapEvaluator</span>
-<span class="kn">from</span> <span class="nn">gammapy.maps</span> <span class="kn">import</span> <span class="n">Map</span><span class="p">,</span> <span class="n">WcsGeom</span>
+<span class="kn">from</span> <span class="nn">gammapy.maps</span> <span class="kn">import</span> <span class="n">Map</span>
 <span class="kn">from</span> <span class="nn">gammapy.modeling.models</span> <span class="kn">import</span> <span class="n">PointSpatialModel</span><span class="p">,</span> <span class="n">PowerLawSpectralModel</span><span class="p">,</span> <span class="n">SkyModel</span>
 <span class="kn">from</span> <span class="nn">gammapy.stats</span> <span class="kn">import</span> <span class="n">cash_sum_cython</span><span class="p">,</span> <span class="n">f_cash_root_cython</span><span class="p">,</span> <span class="n">norm_bounds_cython</span>
-<span class="kn">from</span> <span class="nn">gammapy.utils.array</span> <span class="kn">import</span> <span class="n">shape_2N</span><span class="p">,</span> <span class="n">symmetric_crop_pad_width</span>
+<span class="kn">from</span> <span class="nn">gammapy.utils.array</span> <span class="kn">import</span> <span class="n">shape_2N</span><span class="p">,</span> <span class="n">symmetric_crop_pad_width</span><span class="p">,</span> <span class="n">round_up_to_odd</span>
 <span class="kn">from</span> <span class="nn">.core</span> <span class="kn">import</span> <span class="n">Estimator</span>
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">estimate_exposure_reco_energy</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;TSMapEstimator&quot;</span><span class="p">]</span>
 
 <span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
-
-
-<span class="k">def</span> <span class="nf">round_up_to_odd</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
-    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">_extract_array</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="n">shape</span><span class="p">,</span> <span class="n">position</span><span class="p">):</span>
@@ -1220,7 +1222,7 @@
     <p>
         &#169; Copyright 2021, The Gammapy developers.
       <span class="lastupdated">
-        Last updated on 06 Feb 2021.
+        Last updated on 23 Feb 2021.
       </span>
 
     </p>

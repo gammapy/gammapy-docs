@@ -167,7 +167,7 @@ maker_safe_mask = SafeMaskMaker(methods=["offset-max"], offset_max=offset_max)
 circle = CircleSkyRegion(
     center=SkyCoord("83.63 deg", "22.14 deg"), radius=0.2 * u.deg
 )
-exclusion_mask = geom.region_mask(regions=[circle], inside=False)
+exclusion_mask = ~geom.region_mask(regions=[circle])
 maker_fov = FoVBackgroundMaker(method="fit", exclusion_mask=exclusion_mask)
 
 

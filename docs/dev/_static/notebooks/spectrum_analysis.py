@@ -10,10 +10,9 @@
 # 
 # ## Context
 # 
-# While 3D analysis allows in principle to deal with complex situations such as overlapping sources, in many cases, it is not required to extract the spectrum of a source. Spectral analysis, where all data inside a ON region are binned into 1D datasets, provides a nice alternative. 
+# While 3D analyses allow in principle to consider complex field of views containing overlapping gamma-ray sources, in many cases we might have an observation with a single, strong, point-like source in the field of view. A spectral analysis, in that case, might consider all the events inside a source (or ON) region and bin them in energy only, obtaining 1D datasets. 
 # 
-# In classical Cherenkov astronomy, it is used with a specific background estimation technique that relies on OFF measurements taken in the field-of-view in regions where the background
-# rate is assumed to be equal to the one in the ON region. 
+# In classical Cherenkov astronomy, the background estimation technique associated with this method measures the number of events in OFF regions taken in regions of the field-of-view devoid of gamma-ray emitters, where the background rate is assumed to be equal to the one in the ON region. 
 # 
 # This allows to use a specific fit statistics for ON-OFF measurements, the wstat (see `~gammapy.stats.fit_statistics`), where no background model is assumed. Background is treated as a set of nuisance parameters. This removes some systematic effects connected
 # to the choice or the quality of the background model. But this comes at the expense of larger statistical uncertainties on the fitted model parameters.
@@ -81,7 +80,7 @@ from pathlib import Path
 import astropy.units as u
 from astropy.coordinates import SkyCoord, Angle
 from regions import CircleSkyRegion
-from gammapy.maps import Map, MapAxis, RegionGeom
+from gammapy.maps import MapAxis, RegionGeom, WcsGeom
 from gammapy.modeling import Fit
 from gammapy.data import DataStore
 from gammapy.datasets import (
@@ -91,7 +90,7 @@ from gammapy.datasets import (
     FluxPointsDataset,
 )
 from gammapy.modeling.models import (
-    PowerLawSpectralModel,
+    ExpCutoffPowerLawSpectralModel,
     create_crab_spectral_model,
     SkyModel,
 )
@@ -120,7 +119,7 @@ observations = datastore.get_observations(obs_ids)
 
 # ## Define Target Region
 # 
-# The next step is to define a signal extraction region, also known as on region. In the simplest case this is just a [CircleSkyRegion](http://astropy-regions.readthedocs.io/en/latest/api/regions.CircleSkyRegion.html), but here we will use the ``Target`` class in gammapy that is useful for book-keeping if you run several analysis in a script.
+# The next step is to define a signal extraction region, also known as on region. In the simplest case this is just a [CircleSkyRegion](http://astropy-regions.readthedocs.io/en/latest/api/regions.CircleSkyRegion.html).
 
 # In[ ]:
 
@@ -146,12 +145,11 @@ exclusion_region = CircleSkyRegion(
 )
 
 skydir = target_position.galactic
-exclusion_mask = Map.create(
+geom = WcsGeom.create(
     npix=(150, 150), binsz=0.05, skydir=skydir, proj="TAN", frame="icrs"
 )
 
-mask = exclusion_mask.geom.region_mask([exclusion_region], inside=False)
-exclusion_mask.data = mask.data
+exclusion_mask = ~geom.region_mask([exclusion_region])
 exclusion_mask.plot();
 
 
@@ -163,10 +161,10 @@ exclusion_mask.plot();
 
 
 energy_axis = MapAxis.from_energy_bounds(
-    0.1, 40, 40, unit="TeV", name="energy"
+    0.1, 40, nbin=15, per_decade=True, unit="TeV", name="energy"
 )
 energy_axis_true = MapAxis.from_energy_bounds(
-    0.05, 100, 200, unit="TeV", name="energy_true"
+    0.05, 100, nbin=20, per_decade=True, unit="TeV", name="energy_true"
 )
 
 geom = RegionGeom.create(region=on_region, axes=[energy_axis])
@@ -179,7 +177,7 @@ dataset_empty = SpectrumDataset.create(
 
 
 dataset_maker = SpectrumDatasetMaker(
-    containment_correction=False, selection=["counts", "exposure", "edisp"]
+    containment_correction=True, selection=["counts", "exposure", "edisp"]
 )
 bkg_maker = ReflectedRegionsBackgroundMaker(exclusion_mask=exclusion_mask)
 safe_mask_masker = SafeMaskMaker(methods=["aeff-max"], aeff_percent=10)
@@ -278,11 +276,13 @@ for obs_id in obs_ids:
 # In[ ]:
 
 
-spectral_model = PowerLawSpectralModel(
-    index=2, amplitude=2e-11 * u.Unit("cm-2 s-1 TeV-1"), reference=1 * u.TeV
+spectral_model = ExpCutoffPowerLawSpectralModel(
+    amplitude=1e-12 * u.Unit("cm-2 s-1 TeV-1"),
+    index=2,
+    lambda_=0.1 * u.Unit("TeV-1"),
+    reference=1 * u.TeV,
 )
 model = SkyModel(spectral_model=spectral_model, name="crab")
-
 
 datasets.models = [model]
 
@@ -301,6 +301,14 @@ model_best_joint = model.copy()
 
 
 print(result_joint)
+
+
+# and check the best-fit parameters
+
+# In[ ]:
+
+
+result_joint.parameters.to_table()
 
 
 # A simple way to inspect the model residuals is using the function `~SpectrumDataset.plot_fit()`
@@ -427,15 +435,15 @@ plot_kwargs = {
 model_best_stacked.spectral_model.plot(
     **plot_kwargs, label="Stacked analysis result"
 )
-model_best_stacked.spectral_model.plot_error(**plot_kwargs)
+model_best_stacked.spectral_model.plot_error(facecolor="blue", alpha=0.3, **plot_kwargs)
 
 # plot joint model
 model_best_joint.spectral_model.plot(
     **plot_kwargs, label="Joint analysis result", ls="--"
 )
-model_best_joint.spectral_model.plot_error(**plot_kwargs)
+model_best_joint.spectral_model.plot_error(facecolor="orange", alpha=0.3, **plot_kwargs)
 
-create_crab_spectral_model("hess_pl").plot(
+create_crab_spectral_model("hess_ecpl").plot(
     **plot_kwargs, label="Crab reference"
 )
 plt.legend()
@@ -453,9 +461,3 @@ plt.legend()
 # ## What next?
 # 
 # The methods shown in this tutorial is valid for point-like or midly extended sources where we can assume that the IRF taken at the region center is valid over the whole region. If one wants to extract the 1D spectrum of a large source and properly average the response over the extraction region, one has to use a different approach explained in [the extended source spectral analysis tutorial](extended_source_spectral_analysis.ipynb).
-
-# In[ ]:
-
-
-
-

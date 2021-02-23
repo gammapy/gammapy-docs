@@ -244,12 +244,12 @@ flux_points.plot()
 
 # ## Lightcurves
 # 
-# The Fermi catalogs contain lightcurves for each source. It is available via the `source.lightcurve` property as a `~gammapy.estimators.LightCurve` object.
+# The Fermi catalogs contain lightcurves for each source. It is available via the `source.lightcurve()` method as a `~gammapy.estimators.LightCurve` object.
 
 # In[ ]:
 
 
-lightcurve = catalog_4fgl["4FGL J0349.8-2103"].lightcurve
+lightcurve = catalog_4fgl["4FGL J0349.8-2103"].lightcurve()
 
 
 # In[ ]:
