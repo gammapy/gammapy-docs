@@ -1,30 +1,42 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # Create an exclusion mask
+# # Mask maps
 # 
-# ## Introduction
-# 
-# ### Prerequisites
+# ## Prerequisites
 # 
 # - Understanding of basic analyses in 1D or 3D.
 # - Usage of `~regions` and catalogs, see the [catalog notebook](catalog.ipynb). 
 # 
-# ### Context
+# ## Context
+# 
+# ### Fit masks
+# 
+# The region of interest used for the fit can defined through the dataset `mask_fit` attribute.
+# The `mask_fit` is a map containing boolean values where pixels used in the fit are stored as True.  
+# 
+# 2D and 3D analyses usually require to work with a wider map than the region of interest so sources laying outside but reconstructed inside because of the PSF are correcly taken into account. Then the `mask_fit` have to include a margin that take into accout the PSF width. We will show an example in the boundary mask sub-section.
+# 
+# The `mask_fit` also can be used to exclude sources or complex regions for which we don't have good enough models. In that case the masking is an extra security, it is prefereable to include the available models even if the sources are masked and frozen.
+# 
+# Note that a dataset contains also a `mask_safe` attribute that is not meant to be modified directly by users. The  `mask_safe` is defined only from the cuts used in the data reductions (more details [here](https://docs.gammapy.org/dev/makers/index.html#safe-data-range-handling)).
+# 
+# ### Exclusion masks
 # 
 # Background templates stored in the DL3 IRF are often not reliable enough to be used without some corrections. A set of common techniques to perform background or normalisation from the data is implemented in gammapy: reflected regions for 1D spectrum analysis, field-of-view (FoV) background or ring background for 2D and 3D analyses.
 # 
 # To avoid contamination of the background estimate from gamma-ray bright regions these methods require to exclude those regions from the data used for the estimation. To do so, we use exclusion masks. They are maps containing boolean values where excluded pixels are stored as False.  
 # 
-# **Objective: Build an exclusion mask around the Crab nebula excluding gamma-ray sources in the region.**
 # 
-# ### Proposed approach
+# ## Proposed approach
 # 
-# Here we have to build a `Map` object, we must first define its geometry and then we can determine which pixels to exclude.
+# Even if the use cases for exclusion masks and fit masks are different, the way to create these masks is exactly the same, so in the following we show how to work with masks in general:
+# - Creating masks from scratch
+# - Combining multiple masks
+# - Extending and reducing an existing mask
+# - Reading and writing masks
 # 
-# We can rely on known sources positions and properties to build a list of regions (here `~regions.SkyRegions`) enclosing most of the signal that our detector would see from these objects. We show below how to build this list manually or from an existing catalog. 
 # 
-# Finally, we show how to build the mask from a `MapDataset`, finding pixels which contain statistically significant signal. To do so, we use the `ExcessMapEstimator`
 #  
 
 # ## Setup
@@ -41,6 +53,7 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 from astropy.coordinates import SkyCoord, Angle
+import astropy.units as u
 from regions import CircleSkyRegion
 from gammapy.maps import Map, WcsGeom
 from gammapy.utils.regions import make_region
@@ -50,13 +63,15 @@ from gammapy.estimators import ExcessMapEstimator
 from gammapy.modeling.models import FoVBackgroundModel
 
 
-# ## Create the mask from a list of regions
+# ## Masks creation
+# 
+# ### Create the mask from a list of regions
 # 
 # One can build an exclusion mask from regions. We show here how to proceed.
-
-# ### Define the geometry
 # 
-# Exclusions masks are stored in `Map` objects. One has therefore to define the geometry to use. Here we consider a region at the Galactic anticentre around the crab nebula.
+# #### Define the geometry
+# 
+# Masks are stored in `Map` objects. We must first define its geometry and then we can determine which pixels to exclude. Here we consider a region at the Galactic anticentre around the crab nebula.
 
 # In[ ]:
 
@@ -67,7 +82,9 @@ geom = WcsGeom.create(
 )
 
 
-# ### Create the list of regions
+# #### Create the list of regions
+# 
+# We can rely on known sources positions and properties to build a list of regions (here `~regions.SkyRegions`) enclosing most of the signal that our detector would see from these objects.
 # 
 # A useful function to create region objects is `~gammapy.utils.regions.make_region`. It can take strings defining regions following the "ds9" format and convert them to `regions`. 
 # 
@@ -90,7 +107,7 @@ print(regions)
 # regions = read_ds9('ds9.reg')
 
 
-# ### Create the mask map 
+# #### Create the mask map 
 # 
 # We can now create the map. We use the `WcsGeom.region_mask` method putting all pixels inside the regions to False.
 
@@ -107,7 +124,7 @@ mask_map = ~geom.region_mask(regions)
 mask_map.plot()
 
 
-# ## Create the mask from a catalog of sources
+# ### Create the mask from a catalog of sources
 # 
 # We can also build our list of regions from a list of catalog sources. Here we use the Fermi 4FGL catalog which we read using `~gammapy.catalog.SourceCatalog`.
 
@@ -149,34 +166,18 @@ mask_map_catalog = ~geom.region_mask(regions)
 mask_map_catalog.plot()
 
 
-# ### Combining masks
+# ### Create the mask from statistically significant pixels in a dataset
 # 
-# If two masks share the same geometry it is easy to combine them with `Map` arithmetics.
-
-# In[ ]:
-
-
-mask_map *= mask_map_catalog
-mask_map.plot()
-
-
-# ## Create the mask from statistically significant pixels in a dataset
+# Here we want to determine an exclusion from the data directly. We will estimate the significance of the data using the `ExcessMapEstimator`, and exclude all pixels above a given threshold.
 # 
-# Here we want to determine an exclusion from the data directly. We will estimate the significance of the data and exclude all pixels above a given threshold.
-# 
-# Here we use a dataset taken from Fermi data used in the 3FHL catalog. The dataset is already in the form of a `Datasets` object. We read it from disk. 
+# Here we use a `MapDataset` taken from Fermi data used in the 3FHL catalog. The dataset is already in the form of a `Datasets` object. We read it from disk. 
 
 # In[ ]:
 
 
 filename = "$GAMMAPY_DATA/fermi-3fhl-crab/Fermi-LAT-3FHL_datasets.yaml"
 datasets = Datasets.read(filename=filename)
-
-
-# In[ ]:
-
-
-datasets.models = [FoVBackgroundModel(dataset_name="Fermi-LAT")]
+dataset = datasets["Fermi-LAT"]
 
 
 # We now apply a significance estimation. We integrate the counts using a correlation radius of 0.4 degree and apply regular significance estimate. 
@@ -185,7 +186,7 @@ datasets.models = [FoVBackgroundModel(dataset_name="Fermi-LAT")]
 
 
 estimator = ExcessMapEstimator("0.4 deg", selection_optional=[])
-result = estimator.run(datasets["Fermi-LAT"])
+result = estimator.run(dataset)
 
 
 # Finally, we create the mask map by applying a threshold of 5 sigma to remove pixels.
@@ -193,7 +194,7 @@ result = estimator.run(datasets["Fermi-LAT"])
 # In[ ]:
 
 
-mask_map_significance = result["sqrt_ts"] < 5.0
+significance_mask = result["sqrt_ts"] < 5.0
 
 
 # Because the `ExcessMapEstimator` returns NaN for masked pixels, we need to put the NaN values to `True` to avoid incorrectly excluding them. 
@@ -202,13 +203,13 @@ mask_map_significance = result["sqrt_ts"] < 5.0
 
 
 invalid_pixels = np.isnan(result["sqrt_ts"].data)
-mask_map_significance.data[invalid_pixels] = True
+significance_mask.data[invalid_pixels] = True
 
 
 # In[ ]:
 
 
-mask_map_significance.sum_over_axes().plot();
+significance_mask.plot();
 
 
 # This method frequently yields isolated pixels or weakly significant features if one places the threshold too low. 
@@ -218,17 +219,82 @@ mask_map_significance.sum_over_axes().plot();
 # Note that scikit-image is not a required dependency of gammapy, you might need to install it.
 # 
 
-# ## Reading and writing exclusion masks
+# ## Masks operations
 # 
-# `gammapy.maps` cannot directly read/write maps with boolean content. Thus, for serialisation of exclusion masks, it is necessary to do an explicit type casting between boolean and int, as we show here.
+# If two masks share the same geometry it is easy to combine them with `Map` arithmetics.
+# 
+# OR condition is represented by `|` operator :
+
+# In[ ]:
+
+
+mask = mask_map | mask_map_catalog
+mask.plot()
+
+
+# AND condition is represented by `&` or `*` operators :
+
+# In[ ]:
+
+
+mask_map &= mask_map_catalog
+mask_map.plot()
+
+
+# The NOT operator is represented by `~` symbol:
+
+# In[ ]:
+
+
+significance_mask_inv = ~significance_mask
+significance_mask_inv.plot()
+
+
+# ## Mask modifications
+# 
+# ### Mask dilation and erosion
+# 
+# One can reduce or extend a mask using `binary_erode` and  `binary_dilate` methods, respectively.
+
+# In[ ]:
+
+
+mask = significance_mask_inv.binary_erode(width=0.2 * u.deg, kernel="disk")
+mask.plot()
+
+
+# In[ ]:
+
+
+mask = significance_mask_inv.binary_dilate(width=0.2 * u.deg)
+mask.plot()
+
+
+# ### Boundary mask
+# 
+# In the following example we use the Fermi dataset previously loaded and add its `mask_fit` taking into account a margin based on the psf width. The margin width is determined using the `containment_radius` method of the psf object and the mask is created using the `boundary_mask` method available on the geometry object.
+
+# In[ ]:
+
+
+#get PSF 95% containment radius
+energy_true = dataset.exposure.geom.axes[0].center
+psf_r95 = dataset.psf.containment_radius(fraction=0.95, energy_true=energy_true)
+#create mask_fit with margin based on PSF
+mask_fit = dataset.counts.geom.boundary_mask(psf_r95.max())
+dataset.mask_fit = mask_fit
+dataset.mask_fit.sum_over_axes().plot()
+
+
+# ## Reading and writing masks
+# 
+# `gammapy.maps` can directly read/write maps with boolean content as follows:
 
 # In[ ]:
 
 
 # To save masks to disk
-mask_map_int = mask_map.copy()
-mask_map_int.data = mask_map_int.data.astype(int)
-mask_map_int.write("exclusion_mask.fits", overwrite="True")
+mask_map.write("exclusion_mask.fits", overwrite="True")
 
 
 # In[ ]:
@@ -236,5 +302,10 @@ mask_map_int.write("exclusion_mask.fits", overwrite="True")
 
 # To read maps from disk
 mask_map = Map.read("exclusion_mask.fits")
-mask_map.data = mask_map.data.astype(bool)
+
+
+# In[ ]:
+
+
+
 
