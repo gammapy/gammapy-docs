@@ -121,7 +121,7 @@ mask_map = ~geom.region_mask(regions)
 # In[ ]:
 
 
-mask_map.plot()
+mask_map.plot();
 
 
 # ### Create the mask from a catalog of sources
@@ -163,7 +163,7 @@ mask_map_catalog = ~geom.region_mask(regions)
 # In[ ]:
 
 
-mask_map_catalog.plot()
+mask_map_catalog.plot();
 
 
 # ### Create the mask from statistically significant pixels in a dataset
@@ -229,7 +229,7 @@ significance_mask.plot();
 
 
 mask = mask_map | mask_map_catalog
-mask.plot()
+mask.plot();
 
 
 # AND condition is represented by `&` or `*` operators :
@@ -238,7 +238,7 @@ mask.plot()
 
 
 mask_map &= mask_map_catalog
-mask_map.plot()
+mask_map.plot();
 
 
 # The NOT operator is represented by `~` symbol:
@@ -247,7 +247,7 @@ mask_map.plot()
 
 
 significance_mask_inv = ~significance_mask
-significance_mask_inv.plot()
+significance_mask_inv.plot();
 
 
 # ## Mask modifications
@@ -260,14 +260,14 @@ significance_mask_inv.plot()
 
 
 mask = significance_mask_inv.binary_erode(width=0.2 * u.deg, kernel="disk")
-mask.plot()
+mask.plot();
 
 
 # In[ ]:
 
 
 mask = significance_mask_inv.binary_dilate(width=0.2 * u.deg)
-mask.plot()
+mask.plot();
 
 
 # ### Boundary mask
@@ -283,7 +283,7 @@ psf_r95 = dataset.psf.containment_radius(fraction=0.95, energy_true=energy_true)
 #create mask_fit with margin based on PSF
 mask_fit = dataset.counts.geom.boundary_mask(psf_r95.max())
 dataset.mask_fit = mask_fit
-dataset.mask_fit.sum_over_axes().plot()
+dataset.mask_fit.sum_over_axes().plot();
 
 
 # ## Reading and writing masks
