@@ -1,0 +1,502 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "\n",
+    "<div class=\"alert alert-info\">\n",
+    "\n",
+    "**This is a fixed-text formatted version of a Jupyter notebook**\n",
+    "\n",
+    "- Try online [![Binder](https://static.mybinder.org/badge.svg)](https://mybinder.org/v2/gh/gammapy/gammapy-webpage/v0.16?urlpath=lab/tree/light_curve_flare.ipynb)\n",
+    "- You can contribute with your own notebooks in this\n",
+    "[GitHub repository](https://github.com/gammapy/gammapy/tree/master/tutorials).\n",
+    "- **Source files:**\n",
+    "[light_curve_flare.ipynb](../_static/notebooks/light_curve_flare.ipynb) |\n",
+    "[light_curve_flare.py](../_static/notebooks/light_curve_flare.py)\n",
+    "</div>\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Light curve - Flare\n",
+    "\n",
+    "## Prerequisites:\n",
+    "\n",
+    "- Understanding of how the light curve estimator works, please refer to the [light curve notebook](light_curve.ipynb).\n",
+    "\n",
+    "## Context\n",
+    "\n",
+    "Frequently, especially when studying flares of bright sources, it is necessary to explore the time behaviour of a source on short time scales, in particular on time scales shorter than observing runs.\n",
+    "\n",
+    "A typical example is given by the flare of PKS 2155-304 during the night from July 29 to 30 2006. See the [following article](https://ui.adsabs.harvard.edu/abs/2009A%26A...502..749A/abstract).\n",
+    "\n",
+    "**Objective: Compute the light curve of a PKS 2155-304 flare on 5 minutes time intervals, i.e. smaller than the duration of individual observations.**\n",
+    "\n",
+    "## Proposed approach:\n",
+    "\n",
+    "We have seen in the general presentation of the light curve estimator, see [light curve notebook](light_curve.ipynb), Gammapy produces datasets in a given time interval, by default that of the parent observation. To be able to produce datasets on smaller time steps, it is necessary to split the observations into the required time intervals. \n",
+    "\n",
+    "This is easily performed with the `select_time` method of `~gammapy.data.Observations`. If you pass it a list of time intervals it will produce a list of time filtered observations in a new `~gammapy.data.Observations` object. Data reduction can then be performed and will result in datasets defined on the required time intervals and light curve estimation can proceed directly.\n",
+    "\n",
+    "In summary, we have to:\n",
+    "\n",
+    "- Select relevant `~gammapy.data.Observations` from the `~gammapy.data.DataStore`\n",
+    "- Apply the time selection in our predefined time intervals to obtain a new `~gammapy.data.Observations`\n",
+    "- Perform the data reduction (in 1D or 3D)\n",
+    "- Define the source model\n",
+    "- Extract the light curve from the reduced dataset\n",
+    "\n",
+    "Here, we will use the PKS 2155-304 observations from the H.E.S.S. first public test data release. We will use time intervals of 5 minutes duration. The tutorial is implemented with the intermediate level API.\n",
+    "\n",
+    "## Setup \n",
+    "\n",
+    "As usual, we'll start with some general imports..."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%matplotlib inline\n",
+    "import astropy.units as u\n",
+    "import numpy as np\n",
+    "from astropy.coordinates import SkyCoord\n",
+    "from astropy.time import Time\n",
+    "from regions import CircleSkyRegion\n",
+    "from astropy.coordinates import Angle\n",
+    "\n",
+    "import logging\n",
+    "\n",
+    "log = logging.getLogger(__name__)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Now let's import gammapy specific classes and functions"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from gammapy.data import DataStore\n",
+    "from gammapy.modeling.models import PowerLawSpectralModel, SkyModel\n",
+    "from gammapy.maps import MapAxis\n",
+    "from gammapy.time import LightCurveEstimator\n",
+    "from gammapy.cube import SafeMaskMaker\n",
+    "from gammapy.spectrum import (\n",
+    "    SpectrumDatasetMaker,\n",
+    "    SpectrumDataset,\n",
+    "    ReflectedRegionsBackgroundMaker,\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Select the data\n",
+    "\n",
+    "We first set the datastore."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "data_store = DataStore.from_dir(\"$GAMMAPY_DATA/hess-dl3-dr1/\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Now we select observations within 2 degrees of PKS 2155-304. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Number of selected observations : 21\n"
+     ]
+    }
+   ],
+   "source": [
+    "target_position = SkyCoord(\n",
+    "    329.71693826 * u.deg, -30.2255890 * u.deg, frame=\"icrs\"\n",
+    ")\n",
+    "selection = dict(\n",
+    "    type=\"sky_circle\",\n",
+    "    frame=\"icrs\",\n",
+    "    lon=target_position.ra,\n",
+    "    lat=target_position.dec,\n",
+    "    radius=2 * u.deg,\n",
+    ")\n",
+    "obs_ids = data_store.obs_table.select_observations(selection)[\"OBS_ID\"]\n",
+    "observations = data_store.get_observations(obs_ids)\n",
+    "print(f\"Number of selected observations : {len(observations)}\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Define time intervals\n",
+    "We create the list of time intervals. Each time interval is an `~astropy.time.Time` object, containing a start and stop time."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "[53945.85416667 53945.86111111]\n"
+     ]
+    }
+   ],
+   "source": [
+    "t0 = Time(\"2006-07-29T20:30\")\n",
+    "duration = 10 * u.min\n",
+    "n_time_bins = 35\n",
+    "times = t0 + np.arange(n_time_bins) * duration\n",
+    "time_intervals = [\n",
+    "    Time([tstart, tstop]) for tstart, tstop in zip(times[:-1], times[1:])\n",
+    "]\n",
+    "print(time_intervals[0].mjd)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Filter the observations list in time intervals\n",
+    "\n",
+    "Here we apply the list of time intervals to the observations with `~gammapy.data.Observations.select_time()`.\n",
+    "\n",
+    "This will return a new list of Observations filtered by time_intervals. For each time interval, a new observation is created that convers the intersection of the GTIs and time interval. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Number of observations after time filtering: 44\n",
+      "\n",
+      "GTI info:\n",
+      "- Number of GTIs: 1\n",
+      "- Duration: 600.0 s\n",
+      "- Start: 53945.861865555555 MET\n",
+      "- Start: 2006-07-29T20:41:05.184 (time standard: TT)\n",
+      "- Stop: 53945.86881 MET\n",
+      "- Stop: 2006-07-29T20:51:05.184 (time standard: TT)\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "short_observations = observations.select_time(time_intervals)\n",
+    "# check that observations have been filtered\n",
+    "print(\n",
+    "    f\"Number of observations after time filtering: {len(short_observations)}\\n\"\n",
+    ")\n",
+    "print(short_observations[1].gti)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "As we can see, we have now observations of duration equal to the chosen time step.\n",
+    "\n",
+    "Now data reduction and light curve extraction can proceed exactly as before."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Building 1D datasets from the new observations\n",
+    "\n",
+    "Here we will perform the data reduction in 1D with reflected regions.\n",
+    "\n",
+    "*Beware, with small time intervals the background normalization with OFF regions might become problematic.*"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Defining the geometry\n",
+    "\n",
+    "We define the energy axes. As usual, the true energy axis has to cover a wider range to ensure a good coverage of the measured energy range chosen. \n",
+    "\n",
+    "We need to define the ON extraction region. Its size follows typical spectral extraction regions for HESS analyses."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Target definition\n",
+    "e_reco = MapAxis.from_energy_bounds(0.4, 20, 10, \"TeV\").edges\n",
+    "e_true = MapAxis.from_energy_bounds(0.1, 40, 20, \"TeV\").edges\n",
+    "\n",
+    "on_region_radius = Angle(\"0.11 deg\")\n",
+    "on_region = CircleSkyRegion(center=target_position, radius=on_region_radius)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Creation of the data reduction makers\n",
+    "\n",
+    "We now create the dataset and background makers for the selected geometry."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "dataset_maker = SpectrumDatasetMaker(\n",
+    "    containment_correction=True, selection=[\"counts\", \"aeff\", \"edisp\"]\n",
+    ")\n",
+    "bkg_maker = ReflectedRegionsBackgroundMaker()\n",
+    "safe_mask_masker = SafeMaskMaker(methods=[\"aeff-max\"], aeff_percent=10)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Creation of the datasets\n",
+    "\n",
+    "Now we perform the actual data reduction in the time_intervals."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "CPU times: user 13.5 s, sys: 548 ms, total: 14.1 s\n",
+      "Wall time: 14.4 s\n"
+     ]
+    }
+   ],
+   "source": [
+    "%%time\n",
+    "datasets = []\n",
+    "\n",
+    "dataset_empty = SpectrumDataset.create(\n",
+    "    e_reco=e_reco, e_true=e_true, region=on_region\n",
+    ")\n",
+    "\n",
+    "for obs in short_observations:\n",
+    "    dataset = dataset_maker.run(dataset_empty.copy(), obs)\n",
+    "\n",
+    "    dataset_on_off = bkg_maker.run(dataset, obs)\n",
+    "    dataset_on_off = safe_mask_masker.run(dataset_on_off, obs)\n",
+    "    datasets.append(dataset_on_off)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Define the Model\n",
+    "\n",
+    "The actual flux will depend on the spectral shape assumed. For simplicity, we use the power law spectral model of index 3.4 used in the [reference paper](https://ui.adsabs.harvard.edu/abs/2009A%26A...502..749A/abstract).\n",
+    "\n",
+    "Here we use only a spectral model in the `~gammapy.modeling.models.SkyModel` object."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "spectral_model = PowerLawSpectralModel(\n",
+    "    index=3.4,\n",
+    "    amplitude=2e-11 * u.Unit(\"1 / (cm2 s TeV)\"),\n",
+    "    reference=1 * u.TeV,\n",
+    ")\n",
+    "spectral_model.parameters[\"index\"].frozen = False\n",
+    "\n",
+    "sky_model = SkyModel(\n",
+    "    spatial_model=None, spectral_model=spectral_model, name=\"pks2155\"\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Assign to model to all datasets\n",
+    "\n",
+    "We assign each dataset its spectral model"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "for dataset in datasets:\n",
+    "    dataset.models = sky_model"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Extract the light curve\n",
+    "\n",
+    "We first create the `~gammapy.time.LightCurveEstimator` for the list of datasets we just produced. We give the estimator the name of the source component to be fitted."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "lc_maker_1d = LightCurveEstimator(datasets, source=\"pks2155\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "We can now perform the light curve extraction itself. To compare with the [reference paper](https://ui.adsabs.harvard.edu/abs/2009A%26A...502..749A/abstract), we select the 0.7-20 TeV range."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "/Users/adonath/github/adonath/astropy/astropy/units/quantity.py:481: RuntimeWarning: invalid value encountered in true_divide\n",
+      "  result = super().__array_ufunc__(function, method, *arrays, **kwargs)\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "CPU times: user 3.66 s, sys: 60.3 ms, total: 3.72 s\n",
+      "Wall time: 3.81 s\n"
+     ]
+    }
+   ],
+   "source": [
+    "%%time\n",
+    "lc_1d = lc_maker_1d.run(e_ref=1 * u.TeV, e_min=0.7 * u.TeV, e_max=20.0 * u.TeV)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Finally we plot the result for the 1D lightcurve:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "<matplotlib.axes._subplots.AxesSubplot at 0x1c15668f28>"
+      ]
+     },
+     "execution_count": 14,
+     "metadata": {},
+     "output_type": "execute_result"
+    },
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 432x288 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "lc_1d.plot(marker=\"o\")"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.7.0"
+  },
+  "nbsphinx": {
+   "orphan": true
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}

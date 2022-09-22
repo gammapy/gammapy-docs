@@ -1,0 +1,570 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>gammapy.time.lightcurve &#8212; gammapy v0.7</title>
+    <link rel="stylesheet" href="../../../_static/gammapy.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.7',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <link rel="shortcut icon" href="../../../_static/astropy_logo.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+<link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+<script type="text/javascript" src="../../../_static/copybutton.js"></script>
+
+
+  </head>
+  <body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">gamma</span><span id="logotext2">py</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="Astropy Homepage" href="http://www.astropy.org"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">gammapy v0.7</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for gammapy.time.lightcurve</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">OrderedDict</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">astropy.units</span> <span class="k">as</span> <span class="nn">u</span>
+<span class="kn">from</span> <span class="nn">astropy.table</span> <span class="k">import</span> <span class="n">Table</span>
+<span class="kn">from</span> <span class="nn">astropy.time</span> <span class="k">import</span> <span class="n">Time</span>
+<span class="kn">from</span> <span class="nn">..spectrum.utils</span> <span class="k">import</span> <span class="n">CountsPredictor</span>
+<span class="kn">from</span> <span class="nn">..stats.poisson</span> <span class="k">import</span> <span class="n">excess_error</span>
+<span class="kn">from</span> <span class="nn">..utils.scripts</span> <span class="k">import</span> <span class="n">make_path</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;LightCurve&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;LightCurveEstimator&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<div class="viewcode-block" id="LightCurve"><a class="viewcode-back" href="../../../api/gammapy.time.LightCurve.html#gammapy.time.LightCurve">[docs]</a><span class="k">class</span> <span class="nc">LightCurve</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Lightcurve container.</span>
+
+<span class="sd">    The lightcurve data is stored in ``table``.</span>
+
+<span class="sd">    For now we only support times stored in MJD format!</span>
+
+<span class="sd">    TODO: specification of format is work in progress</span>
+<span class="sd">    See https://github.com/open-gamma-ray-astro/gamma-astro-data-formats/pull/61</span>
+
+<span class="sd">    Usage: :ref:`time-lc`</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    table : `~astropy.table.Table`</span>
+<span class="sd">        Table with lightcurve data</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">table</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">table</span> <span class="o">=</span> <span class="n">table</span>
+
+    <span class="k">def</span> <span class="nf">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s1">&#39;</span><span class="si">{}</span><span class="s1">(len=</span><span class="si">{}</span><span class="s1">)&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">time_scale</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Time scale (str).</span>
+
+<span class="sd">        Taken from table &quot;TIMESYS&quot; header.</span>
+<span class="sd">        Common values: &quot;TT&quot; or &quot;UTC&quot;.</span>
+<span class="sd">        Assumed default is &quot;UTC&quot;.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;TIMESYS&#39;</span><span class="p">,</span> <span class="s1">&#39;utc&#39;</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">time_format</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Time format (str).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="s1">&#39;mjd&#39;</span>
+
+    <span class="c1"># @property</span>
+    <span class="c1"># def time_ref(self):</span>
+    <span class="c1">#     &quot;&quot;&quot;Time reference (`~astropy.time.Time`).&quot;&quot;&quot;</span>
+    <span class="c1">#     return time_ref_from_dict(self.table.meta)</span>
+
+    <span class="k">def</span> <span class="nf">_make_time</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">colname</span><span class="p">):</span>
+        <span class="n">val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="n">colname</span><span class="p">]</span><span class="o">.</span><span class="n">data</span>
+        <span class="n">scale</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_scale</span>
+        <span class="nb">format</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_format</span>
+        <span class="k">return</span> <span class="n">Time</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="nb">format</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">time</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Time (`~astropy.time.Time`).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_time</span><span class="p">(</span><span class="s1">&#39;time&#39;</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">time_min</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Time bin start (`~astropy.time.Time`).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_time</span><span class="p">(</span><span class="s1">&#39;time_min&#39;</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">time_max</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Time bin end (`~astropy.time.Time`).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_time</span><span class="p">(</span><span class="s1">&#39;time_max&#39;</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">time_mid</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Time bin center (`~astropy.time.Time`).</span>
+
+<span class="sd">        ::</span>
+<span class="sd">            time_mid = time_min + 0.5 * time_delta</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_min</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_delta</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">time_delta</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Time bin width (`~astropy.time.TimeDelta`).</span>
+
+<span class="sd">        ::</span>
+<span class="sd">            time_delta = time_max - time_min</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_max</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_min</span>
+
+<div class="viewcode-block" id="LightCurve.read"><a class="viewcode-back" href="../../../api/gammapy.time.LightCurve.html#gammapy.time.LightCurve.read">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Read from file.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        filename : str</span>
+<span class="sd">            Filename</span>
+<span class="sd">        kwargs : dict</span>
+<span class="sd">            Keyword arguments passed to `astropy.table.Table.read`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">filename</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">table</span><span class="o">=</span><span class="n">table</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="LightCurve.write"><a class="viewcode-back" href="../../../api/gammapy.time.LightCurve.html#gammapy.time.LightCurve.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Write to file.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        filename : str</span>
+<span class="sd">            Filename</span>
+<span class="sd">        kwargs : dict</span>
+<span class="sd">            Keyword arguments passed to `astropy.table.Table.write`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">filename</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="LightCurve.compute_fvar"><a class="viewcode-back" href="../../../api/gammapy.time.LightCurve.html#gammapy.time.LightCurve.compute_fvar">[docs]</a>    <span class="k">def</span> <span class="nf">compute_fvar</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Calculate the fractional excess variance.</span>
+
+<span class="sd">        This method accesses the the ``FLUX`` and ``FLUX_ERR`` columns</span>
+<span class="sd">        from the lightcurve data.</span>
+
+<span class="sd">        The fractional excess variance :math:`F_{var}`, an intrinsic</span>
+<span class="sd">        variability estimator, is given by</span>
+
+<span class="sd">        .. math::</span>
+<span class="sd">            F_{var} = \sqrt{\frac{S^{2} - \bar{\sigma^{2}}}{\bar{x}^{2}}}.</span>
+
+<span class="sd">        It is the excess variance after accounting for the measurement errors</span>
+<span class="sd">        on the light curve :math:`\sigma`. :math:`S` is the variance.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        fvar, fvar_err : `~numpy.ndarray`</span>
+<span class="sd">            Fractional excess variance.</span>
+
+<span class="sd">        References</span>
+<span class="sd">        ----------</span>
+<span class="sd">        .. [Vaughan2003] &quot;On characterizing the variability properties of X-ray light</span>
+<span class="sd">           curves from active galaxies&quot;, Vaughan et al. (2003)</span>
+<span class="sd">           http://adsabs.harvard.edu/abs/2003MNRAS.345.1271V</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">flux</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;flux&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;float64&#39;</span><span class="p">)</span>
+        <span class="n">flux_err</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;flux_err&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;float64&#39;</span><span class="p">)</span>
+
+        <span class="n">flux_mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">flux</span><span class="p">)</span>
+        <span class="n">n_points</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">flux</span><span class="p">)</span>
+
+        <span class="n">s_square</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">flux</span> <span class="o">-</span> <span class="n">flux_mean</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_points</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">sig_square</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nansum</span><span class="p">(</span><span class="n">flux_err</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="n">n_points</span>
+        <span class="n">fvar</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">s_square</span> <span class="o">-</span> <span class="n">sig_square</span><span class="p">))</span> <span class="o">/</span> <span class="n">flux_mean</span>
+
+        <span class="n">sigxserr_a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span> <span class="o">/</span> <span class="n">n_points</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">sig_square</span> <span class="o">/</span> <span class="n">flux_mean</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+        <span class="n">sigxserr_b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">sig_square</span> <span class="o">/</span> <span class="n">n_points</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">fvar</span> <span class="o">/</span> <span class="n">flux_mean</span><span class="p">)</span>
+        <span class="n">sigxserr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">sigxserr_a</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">sigxserr_b</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">fvar_err</span> <span class="o">=</span> <span class="n">sigxserr</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">fvar</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">fvar</span><span class="p">,</span> <span class="n">fvar_err</span></div>
+
+<div class="viewcode-block" id="LightCurve.compute_chisq"><a class="viewcode-back" href="../../../api/gammapy.time.LightCurve.html#gammapy.time.LightCurve.compute_chisq">[docs]</a>    <span class="k">def</span> <span class="nf">compute_chisq</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Calculate the chi-square test for `LightCurve`.</span>
+
+<span class="sd">        Chisquare test is a variability estimator. It computes</span>
+<span class="sd">        deviations from the expected value here mean value</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ChiSq, P-value : tuple of float or `~numpy.ndarray`</span>
+<span class="sd">            Tuple of Chi-square and P-value</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span> <span class="nn">scipy.stats</span> <span class="k">as</span> <span class="nn">stats</span>
+        <span class="n">flux</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;flux&#39;</span><span class="p">]</span>
+        <span class="n">yexp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">flux</span><span class="p">)</span>
+        <span class="n">yobs</span> <span class="o">=</span> <span class="n">flux</span><span class="o">.</span><span class="n">data</span>
+        <span class="n">chi2</span><span class="p">,</span> <span class="n">pval</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">chisquare</span><span class="p">(</span><span class="n">yobs</span><span class="p">,</span> <span class="n">yexp</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">chi2</span><span class="p">,</span> <span class="n">pval</span></div>
+
+<div class="viewcode-block" id="LightCurve.plot"><a class="viewcode-back" href="../../../api/gammapy.time.LightCurve.html#gammapy.time.LightCurve.plot">[docs]</a>    <span class="k">def</span> <span class="nf">plot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Plot flux versus time.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        ax : `~matplotlib.axes.Axes` or None, optional.</span>
+<span class="sd">            The `~matplotlib.axes.Axes` object to be drawn on.</span>
+<span class="sd">            If None, uses the current `~matplotlib.axes.Axes`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ax : `~matplotlib.axes.Axes` or None, optional.</span>
+<span class="sd">            The `~matplotlib.axes.Axes` object to be drawn on.</span>
+<span class="sd">            If None, uses the current `~matplotlib.axes.Axes`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+        <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">gca</span><span class="p">()</span> <span class="k">if</span> <span class="n">ax</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">ax</span>
+
+        <span class="c1"># TODO: Should we plot with normal time axis labels (ISO, not MJD)?</span>
+
+        <span class="n">x</span><span class="p">,</span> <span class="n">xerr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_plot_x</span><span class="p">()</span>
+        <span class="n">y</span><span class="p">,</span> <span class="n">yerr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_plot_y</span><span class="p">()</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">errorbar</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">xerr</span><span class="o">=</span><span class="n">xerr</span><span class="p">,</span> <span class="n">yerr</span><span class="o">=</span><span class="n">yerr</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">&quot;None&quot;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">&quot;Time (MJD)&quot;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">&quot;Flux (cm-2 s-1)&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">ax</span></div>
+
+    <span class="k">def</span> <span class="nf">_get_plot_x</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">mjd</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_mid</span><span class="o">.</span><span class="n">mjd</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">xerr</span> <span class="o">=</span> <span class="n">x</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_min</span><span class="o">.</span><span class="n">mjd</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_max</span><span class="o">.</span><span class="n">mjd</span> <span class="o">-</span> <span class="n">x</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="n">xerr</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">return</span> <span class="n">x</span><span class="p">,</span> <span class="n">xerr</span>
+
+    <span class="k">def</span> <span class="nf">_get_plot_y</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;flux&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;cm-2 s-1&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span>
+
+        <span class="k">if</span> <span class="s1">&#39;flux_errp&#39;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">colnames</span><span class="p">:</span>
+            <span class="n">yp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;flux_errp&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;cm-2 s-1&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span>
+            <span class="n">yn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;flux_errn&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;cm-2 s-1&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span>
+            <span class="n">yerr</span> <span class="o">=</span> <span class="n">yn</span><span class="p">,</span> <span class="n">yp</span>
+        <span class="k">elif</span> <span class="s1">&#39;flux_err&#39;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">colnames</span><span class="p">:</span>
+            <span class="n">yerr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;flux_err&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;cm-2 s-1&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">yerr</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">return</span> <span class="n">y</span><span class="p">,</span> <span class="n">yerr</span></div>
+
+
+<div class="viewcode-block" id="LightCurveEstimator"><a class="viewcode-back" href="../../../api/gammapy.time.LightCurveEstimator.html#gammapy.time.LightCurveEstimator">[docs]</a><span class="k">class</span> <span class="nc">LightCurveEstimator</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Light curve estimator.</span>
+
+<span class="sd">    For a usage example see :gp-extra-notebook:`light_curve`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    spec_extract : `~gammapy.spectrum.SpectrumExtraction`</span>
+<span class="sd">       Contains statistics, IRF and event lists</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">spec_extract</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span> <span class="o">=</span> <span class="n">spec_extract</span><span class="o">.</span><span class="n">obs_list</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">obs_spec</span> <span class="o">=</span> <span class="n">spec_extract</span><span class="o">.</span><span class="n">observations</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">off_evt_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_off_evt_list</span><span class="p">(</span><span class="n">spec_extract</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">on_evt_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_on_evt_list</span><span class="p">(</span><span class="n">spec_extract</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_get_off_evt_list</span><span class="p">(</span><span class="n">spec_extract</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns list of OFF events for each observations</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">off_evt_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">bg</span> <span class="ow">in</span> <span class="n">spec_extract</span><span class="o">.</span><span class="n">bkg_estimate</span><span class="p">:</span>
+            <span class="n">off_evt_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">bg</span><span class="o">.</span><span class="n">off_events</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">off_evt_list</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_get_on_evt_list</span><span class="p">(</span><span class="n">spec_extract</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns list of OFF events for each observations</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">on_evt_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="n">spec_extract</span><span class="o">.</span><span class="n">bkg_estimate</span><span class="p">:</span>
+            <span class="n">on_evt_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obs</span><span class="o">.</span><span class="n">on_events</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">on_evt_list</span>
+
+<div class="viewcode-block" id="LightCurveEstimator.light_curve"><a class="viewcode-back" href="../../../api/gammapy.time.LightCurveEstimator.html#gammapy.time.LightCurveEstimator.light_curve">[docs]</a>    <span class="k">def</span> <span class="nf">light_curve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time_intervals</span><span class="p">,</span> <span class="n">spectral_model</span><span class="p">,</span> <span class="n">energy_range</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute light curve.</span>
+
+<span class="sd">        Implementation follows what is done in:</span>
+<span class="sd">        http://adsabs.harvard.edu/abs/2010A%26A...520A..83H.</span>
+
+<span class="sd">        To be discussed: assumption that threshold energy in the</span>
+<span class="sd">        same in reco and true energy.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        time_intervals : `list` of `~astropy.time.Time`</span>
+<span class="sd">            List of time intervals</span>
+<span class="sd">        spectral_model : `~gammapy.spectrum.models.SpectralModel`</span>
+<span class="sd">            Spectral model</span>
+<span class="sd">        energy_range : `~astropy.units.Quantity`</span>
+<span class="sd">            True energy range to evaluate integrated flux (true energy)</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        lc : `~gammapy.time.LightCurve`</span>
+<span class="sd">            Light curve</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">rows</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">time_interval</span> <span class="ow">in</span> <span class="n">time_intervals</span><span class="p">:</span>
+            <span class="n">row</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_flux_point</span><span class="p">(</span><span class="n">time_interval</span><span class="p">,</span> <span class="n">spectral_model</span><span class="p">,</span> <span class="n">energy_range</span><span class="p">)</span>
+            <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_lc_from_row_data</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span></div>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_make_lc_from_row_data</span><span class="p">(</span><span class="n">rows</span><span class="p">):</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">()</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;time_min&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">_</span><span class="p">[</span><span class="s1">&#39;time_min&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;time_max&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">_</span><span class="p">[</span><span class="s1">&#39;time_max&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;flux&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">_</span><span class="p">[</span><span class="s1">&#39;flux&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s1">&#39;1 / (s cm2)&#39;</span><span class="p">)</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;flux_err&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">_</span><span class="p">[</span><span class="s1">&#39;flux_err&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s1">&#39;1 / (s cm2)&#39;</span><span class="p">)</span>
+
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;livetime&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">_</span><span class="p">[</span><span class="s1">&#39;livetime&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">s</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;n_on&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">_</span><span class="p">[</span><span class="s1">&#39;n_on&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;n_off&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">_</span><span class="p">[</span><span class="s1">&#39;n_off&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;alpha&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">_</span><span class="p">[</span><span class="s1">&#39;alpha&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;measured_excess&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">_</span><span class="p">[</span><span class="s1">&#39;measured_excess&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;expected_excess&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">_</span><span class="p">[</span><span class="s1">&#39;expected_excess&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">LightCurve</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
+
+<div class="viewcode-block" id="LightCurveEstimator.compute_flux_point"><a class="viewcode-back" href="../../../api/gammapy.time.LightCurveEstimator.html#gammapy.time.LightCurveEstimator.compute_flux_point">[docs]</a>    <span class="k">def</span> <span class="nf">compute_flux_point</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time_interval</span><span class="p">,</span> <span class="n">spectral_model</span><span class="p">,</span> <span class="n">energy_range</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute one flux point for one time interval.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        time_interval : `~astropy.time.Time`</span>
+<span class="sd">            Time interval (2-element array, or a tuple of Time objects)</span>
+<span class="sd">        spectral_model : `~gammapy.spectrum.models.SpectralModel`</span>
+<span class="sd">            Spectral model</span>
+<span class="sd">        energy_range : `~astropy.units.Quantity`</span>
+<span class="sd">            True energy range to evaluate integrated flux (true energy)</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        measurements : dict</span>
+<span class="sd">            Dictionary with flux point measurement in the time interval</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tmin</span><span class="p">,</span> <span class="n">tmax</span> <span class="o">=</span> <span class="n">time_interval</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">time_interval</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">livetime</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">alpha_mean</span> <span class="o">=</span> <span class="mf">0.</span>
+        <span class="n">alpha_mean_backup</span> <span class="o">=</span> <span class="mf">0.</span>
+        <span class="n">measured_excess</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">predicted_excess</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">n_on</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">n_off</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="c1"># Loop on observations</span>
+        <span class="k">for</span> <span class="n">t_index</span><span class="p">,</span> <span class="n">obs</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">):</span>
+
+            <span class="n">spec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_spec</span><span class="p">[</span><span class="n">t_index</span><span class="p">]</span>
+
+            <span class="c1"># discard observations not matching the time interval</span>
+            <span class="n">obs_start</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">events</span><span class="o">.</span><span class="n">time</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">obs_stop</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">events</span><span class="o">.</span><span class="n">time</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">tmin</span> <span class="o">&lt;</span> <span class="n">obs_start</span> <span class="ow">and</span> <span class="n">tmax</span> <span class="o">&lt;</span> <span class="n">obs_start</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">tmin</span> <span class="o">&gt;</span> <span class="n">obs_stop</span><span class="p">):</span>
+                <span class="k">continue</span>
+
+            <span class="c1"># get ON and OFF evt list</span>
+            <span class="n">off_evt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">off_evt_list</span><span class="p">[</span><span class="n">t_index</span><span class="p">]</span>
+            <span class="n">on_evt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_evt_list</span><span class="p">[</span><span class="n">t_index</span><span class="p">]</span>
+
+            <span class="c1"># introduce the e_reco binning here, since it&#39;s also used</span>
+            <span class="c1"># in the calculation of predicted counts</span>
+            <span class="n">e_reco</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">e_reco</span>
+            <span class="n">emin</span> <span class="o">=</span> <span class="n">e_reco</span><span class="p">[</span><span class="n">e_reco</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">lo_threshold</span><span class="p">,</span> <span class="n">energy_range</span><span class="p">[</span><span class="mi">0</span><span class="p">]))]</span>
+            <span class="n">emax</span> <span class="o">=</span> <span class="n">e_reco</span><span class="p">[</span><span class="n">e_reco</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">hi_threshold</span><span class="p">,</span> <span class="n">energy_range</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+
+            <span class="c1"># compute ON events</span>
+            <span class="n">on</span> <span class="o">=</span> <span class="n">on_evt</span><span class="o">.</span><span class="n">select_energy</span><span class="p">([</span><span class="n">emin</span><span class="p">,</span> <span class="n">emax</span><span class="p">])</span>
+            <span class="n">on</span> <span class="o">=</span> <span class="n">on</span><span class="o">.</span><span class="n">select_energy</span><span class="p">(</span><span class="n">energy_range</span><span class="p">)</span>
+            <span class="n">on</span> <span class="o">=</span> <span class="n">on</span><span class="o">.</span><span class="n">select_time</span><span class="p">([</span><span class="n">tmin</span><span class="p">,</span> <span class="n">tmax</span><span class="p">])</span>
+            <span class="n">n_on_obs</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">on</span><span class="o">.</span><span class="n">table</span><span class="p">)</span>
+
+            <span class="c1"># compute OFF events</span>
+            <span class="n">off</span> <span class="o">=</span> <span class="n">off_evt</span><span class="o">.</span><span class="n">select_energy</span><span class="p">([</span><span class="n">emin</span><span class="p">,</span> <span class="n">emax</span><span class="p">])</span>
+            <span class="n">off</span> <span class="o">=</span> <span class="n">off</span><span class="o">.</span><span class="n">select_energy</span><span class="p">(</span><span class="n">energy_range</span><span class="p">)</span>
+            <span class="n">off</span> <span class="o">=</span> <span class="n">off</span><span class="o">.</span><span class="n">select_time</span><span class="p">([</span><span class="n">tmin</span><span class="p">,</span> <span class="n">tmax</span><span class="p">])</span>
+            <span class="n">n_off_obs</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">off</span><span class="o">.</span><span class="n">table</span><span class="p">)</span>
+
+            <span class="c1"># compute effective livetime (for the interval)</span>
+            <span class="k">if</span> <span class="n">tmin</span> <span class="o">&gt;=</span> <span class="n">obs_start</span> <span class="ow">and</span> <span class="n">tmax</span> <span class="o">&lt;=</span> <span class="n">obs_stop</span><span class="p">:</span>
+                <span class="c1"># interval included in obs</span>
+                <span class="n">livetime_to_add</span> <span class="o">=</span> <span class="p">(</span><span class="n">tmax</span> <span class="o">-</span> <span class="n">tmin</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;s&#39;</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">tmin</span> <span class="o">&gt;=</span> <span class="n">obs_start</span> <span class="ow">and</span> <span class="n">tmax</span> <span class="o">&gt;=</span> <span class="n">obs_stop</span><span class="p">:</span>
+                <span class="c1"># interval min above tstart from obs</span>
+                <span class="n">livetime_to_add</span> <span class="o">=</span> <span class="p">(</span><span class="n">obs_stop</span> <span class="o">-</span> <span class="n">tmin</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;s&#39;</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">tmin</span> <span class="o">&lt;=</span> <span class="n">obs_start</span> <span class="ow">and</span> <span class="n">tmax</span> <span class="o">&lt;=</span> <span class="n">obs_stop</span><span class="p">:</span>
+                <span class="c1"># interval min below tstart from obs</span>
+                <span class="n">livetime_to_add</span> <span class="o">=</span> <span class="p">(</span><span class="n">tmax</span> <span class="o">-</span> <span class="n">obs_start</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;s&#39;</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">tmin</span> <span class="o">&lt;=</span> <span class="n">obs_start</span> <span class="ow">and</span> <span class="n">tmax</span> <span class="o">&gt;=</span> <span class="n">obs_stop</span><span class="p">:</span>
+                <span class="c1"># obs included in interval</span>
+                <span class="n">livetime_to_add</span> <span class="o">=</span> <span class="p">(</span><span class="n">obs_stop</span> <span class="o">-</span> <span class="n">obs_start</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;s&#39;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">livetime_to_add</span> <span class="o">=</span> <span class="mi">0</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">sec</span>
+
+            <span class="c1"># Take into account dead time</span>
+            <span class="n">livetime_to_add</span> <span class="o">*=</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">-</span> <span class="n">obs</span><span class="o">.</span><span class="n">observation_dead_time_fraction</span><span class="p">)</span>
+
+            <span class="c1"># Compute excess</span>
+            <span class="n">obs_measured_excess</span> <span class="o">=</span> <span class="n">n_on_obs</span> <span class="o">-</span> <span class="n">spec</span><span class="o">.</span><span class="n">alpha</span> <span class="o">*</span> <span class="n">n_off_obs</span>
+
+            <span class="c1"># Compute the expected excess in the range given by the user</span>
+            <span class="c1"># but must respect the energy threshold of the observation</span>
+            <span class="c1"># (to match the energy range of the measured excess)</span>
+            <span class="c1"># We use the effective livetime and the right energy threshold</span>
+            <span class="n">e_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">logical_and</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span>
+                <span class="p">(</span><span class="n">e_reco</span> <span class="o">&gt;=</span> <span class="n">spec</span><span class="o">.</span><span class="n">lo_threshold</span><span class="p">,</span>  <span class="c1"># threshold</span>
+                 <span class="n">e_reco</span> <span class="o">&lt;=</span> <span class="n">spec</span><span class="o">.</span><span class="n">hi_threshold</span><span class="p">,</span>  <span class="c1"># threshold</span>
+                 <span class="n">e_reco</span> <span class="o">&gt;=</span> <span class="n">energy_range</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>  <span class="c1"># user</span>
+                 <span class="n">e_reco</span> <span class="o">&lt;=</span> <span class="n">energy_range</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>  <span class="c1"># user</span>
+            <span class="p">))</span>
+            <span class="n">counts_predictor</span> <span class="o">=</span> <span class="n">CountsPredictor</span><span class="p">(</span>
+                <span class="n">livetime</span><span class="o">=</span><span class="n">livetime_to_add</span><span class="p">,</span>
+                <span class="n">aeff</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">aeff</span><span class="p">,</span>
+                <span class="n">edisp</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">edisp</span><span class="p">,</span>
+                <span class="n">model</span><span class="o">=</span><span class="n">spectral_model</span>
+            <span class="p">)</span>
+            <span class="n">counts_predictor</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+            <span class="n">counts_predicted_excess</span> <span class="o">=</span> <span class="n">counts_predictor</span><span class="o">.</span><span class="n">npred</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">e_idx</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span>
+
+            <span class="n">obs_predicted_excess</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">counts_predicted_excess</span><span class="p">)</span>
+
+            <span class="c1"># compute effective normalisation between ON/OFF (for the interval)</span>
+            <span class="n">livetime</span> <span class="o">+=</span> <span class="n">livetime_to_add</span>
+            <span class="n">alpha_mean</span> <span class="o">+=</span> <span class="n">spec</span><span class="o">.</span><span class="n">alpha</span> <span class="o">*</span> <span class="n">n_off_obs</span>
+            <span class="n">alpha_mean_backup</span> <span class="o">+=</span> <span class="n">spec</span><span class="o">.</span><span class="n">alpha</span> <span class="o">*</span> <span class="n">livetime_to_add</span>
+            <span class="n">measured_excess</span> <span class="o">+=</span> <span class="n">obs_measured_excess</span>
+            <span class="n">predicted_excess</span> <span class="o">+=</span> <span class="n">obs_predicted_excess</span>
+            <span class="n">n_on</span> <span class="o">+=</span> <span class="n">n_on_obs</span>
+            <span class="n">n_off</span> <span class="o">+=</span> <span class="n">n_off_obs</span>
+
+        <span class="c1"># Fill time interval information</span>
+        <span class="n">int_flux</span> <span class="o">=</span> <span class="n">spectral_model</span><span class="o">.</span><span class="n">integral</span><span class="p">(</span><span class="n">energy_range</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">energy_range</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="n">n_off</span> <span class="o">&gt;</span> <span class="mf">0.</span><span class="p">:</span>
+            <span class="n">alpha_mean</span> <span class="o">/=</span> <span class="n">n_off</span>
+        <span class="k">if</span> <span class="n">livetime</span> <span class="o">&gt;</span> <span class="mf">0.</span><span class="p">:</span>
+            <span class="n">alpha_mean_backup</span> <span class="o">/=</span> <span class="n">livetime</span>
+        <span class="k">if</span> <span class="n">alpha_mean</span> <span class="o">==</span> <span class="mf">0.</span><span class="p">:</span>  <span class="c1"># use backup if necessary</span>
+            <span class="n">alpha_mean</span> <span class="o">=</span> <span class="n">alpha_mean_backup</span>
+
+        <span class="n">flux</span> <span class="o">=</span> <span class="n">measured_excess</span> <span class="o">/</span> <span class="n">predicted_excess</span><span class="o">.</span><span class="n">value</span>
+        <span class="n">flux</span> <span class="o">*=</span> <span class="n">int_flux</span>
+        <span class="n">flux_err</span> <span class="o">=</span> <span class="n">int_flux</span> <span class="o">/</span> <span class="n">predicted_excess</span><span class="o">.</span><span class="n">value</span>
+        <span class="c1"># Gaussian errors, TODO: should be improved</span>
+        <span class="n">flux_err</span> <span class="o">*=</span> <span class="n">excess_error</span><span class="p">(</span><span class="n">n_on</span><span class="o">=</span><span class="n">n_on</span><span class="p">,</span> <span class="n">n_off</span><span class="o">=</span><span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="n">alpha_mean</span><span class="p">)</span>
+
+        <span class="c1"># Store measurements in a dict and return that</span>
+        <span class="k">return</span> <span class="n">OrderedDict</span><span class="p">([</span>
+            <span class="p">(</span><span class="s1">&#39;time_min&#39;</span><span class="p">,</span> <span class="n">Time</span><span class="p">(</span><span class="n">tmin</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s1">&#39;mjd&#39;</span><span class="p">)),</span>
+            <span class="p">(</span><span class="s1">&#39;time_max&#39;</span><span class="p">,</span> <span class="n">Time</span><span class="p">(</span><span class="n">tmax</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s1">&#39;mjd&#39;</span><span class="p">)),</span>
+            <span class="p">(</span><span class="s1">&#39;flux&#39;</span><span class="p">,</span> <span class="n">flux</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s1">&#39;1 / (s cm2)&#39;</span><span class="p">)),</span>
+            <span class="p">(</span><span class="s1">&#39;flux_err&#39;</span><span class="p">,</span> <span class="n">flux_err</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s1">&#39;1 / (s cm2)&#39;</span><span class="p">)),</span>
+
+            <span class="p">(</span><span class="s1">&#39;livetime&#39;</span><span class="p">,</span> <span class="n">livetime</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">s</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;alpha&#39;</span><span class="p">,</span> <span class="n">alpha_mean</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;n_on&#39;</span><span class="p">,</span> <span class="n">n_on</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;n_off&#39;</span><span class="p">,</span> <span class="n">n_off</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;measured_excess&#39;</span><span class="p">,</span> <span class="n">measured_excess</span><span class="p">),</span>
+            <span class="p">(</span><span class="s1">&#39;expected_excess&#39;</span><span class="p">,</span> <span class="n">predicted_excess</span><span class="p">),</span>
+        <span class="p">])</span></div></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2018, The Gammapy developers.<br/>
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.6.7. &nbsp;
+    Last built 01 Mar 2018. <br/>
+  </p>
+</footer>
+  </body>
+</html>

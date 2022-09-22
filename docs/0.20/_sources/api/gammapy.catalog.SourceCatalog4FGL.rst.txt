@@ -1,0 +1,35 @@
+SourceCatalog4FGL
+=================
+
+.. currentmodule:: gammapy.catalog
+
+.. autoclass:: SourceCatalog4FGL
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~SourceCatalog4FGL.description
+      ~SourceCatalog4FGL.positions
+      ~SourceCatalog4FGL.tag
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~SourceCatalog4FGL.row_index
+      ~SourceCatalog4FGL.source_name
+      ~SourceCatalog4FGL.to_models
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: description
+   .. autoattribute:: positions
+   .. autoattribute:: tag
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: row_index
+   .. automethod:: source_name
+   .. automethod:: to_models

@@ -1,0 +1,873 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "\n",
+    "<div class=\"alert alert-info\">\n",
+    "\n",
+    "**This is a fixed-text formatted version of a Jupyter notebook**\n",
+    "\n",
+    "- Try online[![Binder](https://static.mybinder.org/badge.svg)](https://mybinder.org/v2/gh/gammapy/gammapy-webpage/v0.19?urlpath=lab/tree/tutorials/analysis/3D/analysis_mwl.ipynb)\n",
+    "- You may download all the notebooks in the documentation as a\n",
+    "[tar file](../../../_downloads/notebooks-0.19.tar).\n",
+    "- **Source files:**\n",
+    "[analysis_mwl.ipynb](../../../_static/notebooks/analysis_mwl.ipynb) |\n",
+    "[analysis_mwl.py](../../../_static/notebooks/analysis_mwl.py)\n",
+    "</div>\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Multi instrument joint 3D and 1D analysis\n",
+    "\n",
+    "## Prerequisites\n",
+    "\n",
+    "- Handling of Fermi-LAT data with gammapy [see the corresponding tutorial](../../data/fermi_lat.ipynb)\n",
+    "- Knowledge of spectral analysis to produce 1D On-Off datasets, [see the following tutorial](../1D/spectral_analysis.ipynb)\n",
+    "- Using flux points to directly fit a model (without forward-folding)  [see the SED fitting tutorial](../1D/sed_fitting.ipynb)\n",
+    "\n",
+    "## Context\n",
+    "\n",
+    "Some science studies require to combine heterogeneous data from various instruments to extract physical information. In particular, it is often useful to add flux measurements of a source at different energies to an analysis to better constrain the wide-band spectral parameters. This can be done using a joint fit of heterogeneous datasets.\n",
+    " \n",
+    "**Objectives: Constrain the spectral parameters of the gamma-ray emission from the Crab nebula between 10 GeV and 100 TeV, using a 3D Fermi dataset, a H.E.S.S. reduced spectrum and HAWC flux points.**\n",
+    "\n",
+    "## Proposed approach\n",
+    "\n",
+    "This tutorial illustrates how to perform a joint modeling and fitting of the Crab Nebula spectrum using different datasets.\n",
+    "The spectral parameters are optimized by combining a 3D analysis of Fermi-LAT data, a ON/OFF spectral analysis of HESS data, and flux points from HAWC.\n",
+    "\n",
+    "In this tutorial we are going to use pre-made datasets. We prepared maps of the Crab region as seen by Fermi-LAT using the same event selection than the [3FHL catalog](https://arxiv.org/abs/1702.00664) (7 years of data with energy from 10 GeV to 2 TeV). For the HESS ON/OFF analysis we used two observations from the [first public data release](https://arxiv.org/abs/1810.04516) with a significant signal from energy of about 600 GeV to 10 TeV. These observations have an offset of 0.5° and a zenith angle of 45-48°. The HAWC flux points data are taken from a [recent analysis](https://arxiv.org/pdf/1905.12518.pdf) based on 2.5 years of data with energy between 300 Gev and 300 TeV. \n",
+    "\n",
+    "## The setup\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:03:41.049929Z",
+     "iopub.status.busy": "2021-11-22T21:03:41.046646Z",
+     "iopub.status.idle": "2021-11-22T21:03:41.726882Z",
+     "shell.execute_reply": "2021-11-22T21:03:41.727070Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "from astropy import units as u\n",
+    "import matplotlib.pyplot as plt\n",
+    "from gammapy.modeling import Fit\n",
+    "from gammapy.modeling.models import Models, create_crab_spectral_model\n",
+    "from gammapy.datasets import Datasets, FluxPointsDataset, SpectrumDatasetOnOff\n",
+    "from gammapy.estimators import FluxPoints, FluxPointsEstimator\n",
+    "from gammapy.maps import MapAxis\n",
+    "from pathlib import Path"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Data and models files\n",
+    "\n",
+    "\n",
+    "The datasets serialization produce YAML files listing the datasets and models. In the following cells we show an example containning only the Fermi-LAT dataset and the Crab model. \n",
+    "\n",
+    "Fermi-LAT-3FHL_datasets.yaml:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:03:41.729249Z",
+     "iopub.status.busy": "2021-11-22T21:03:41.728938Z",
+     "iopub.status.idle": "2021-11-22T21:03:41.847116Z",
+     "shell.execute_reply": "2021-11-22T21:03:41.847472Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "datasets:\r\n",
+      "- name: Fermi-LAT\r\n",
+      "  type: MapDataset\r\n",
+      "  filename: Fermi-LAT-3FHL_data_Fermi-LAT.fits\r\n"
+     ]
+    }
+   ],
+   "source": [
+    "!cat $GAMMAPY_DATA/fermi-3fhl-crab/Fermi-LAT-3FHL_datasets.yaml"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "We used as model a point source with a log-parabola spectrum. The initial parameters were taken from the latest Fermi-LAT catalog [4FGL](https://arxiv.org/abs/1902.10045), then we have re-optimized the spectral parameters for our dataset in the 10 GeV - 2 TeV energy range (fixing the source position).\n",
+    "\n",
+    "Fermi-LAT-3FHL_models.yaml:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:03:41.851299Z",
+     "iopub.status.busy": "2021-11-22T21:03:41.849677Z",
+     "iopub.status.idle": "2021-11-22T21:03:41.977444Z",
+     "shell.execute_reply": "2021-11-22T21:03:41.978088Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "components:\r\n",
+      "-   name: Crab Nebula\r\n",
+      "    type: SkyModel\r\n",
+      "    spectral:\r\n",
+      "        type: LogParabolaSpectralModel\r\n",
+      "        parameters:\r\n",
+      "        -   name: amplitude\r\n",
+      "            value: 0.018182745349064267\r\n",
+      "            unit: cm-2 s-1 TeV-1\r\n",
+      "            min: .nan\r\n",
+      "            max: .nan\r\n",
+      "            frozen: false\r\n",
+      "            error: 0.003026327991562108\r\n",
+      "        -   name: reference\r\n",
+      "            value: 5.054833602905273e-05\r\n",
+      "            unit: TeV\r\n",
+      "            min: .nan\r\n",
+      "            max: .nan\r\n",
+      "            frozen: true\r\n",
+      "            error: 0.0\r\n",
+      "        -   name: alpha\r\n",
+      "            value: 1.652368617859867\r\n",
+      "            unit: ''\r\n",
+      "            min: .nan\r\n",
+      "            max: .nan\r\n",
+      "            frozen: false\r\n",
+      "            error: 0.05762513693893088\r\n",
+      "        -   name: beta\r\n",
+      "            value: 0.03921700077803329\r\n",
+      "            unit: ''\r\n",
+      "            min: .nan\r\n",
+      "            max: .nan\r\n",
+      "            frozen: false\r\n",
+      "            error: 0.00521472221220211\r\n",
+      "    spatial:\r\n",
+      "        type: PointSpatialModel\r\n",
+      "        frame: icrs\r\n",
+      "        parameters:\r\n",
+      "        -   name: lon_0\r\n",
+      "            value: 83.63310241699219\r\n",
+      "            unit: deg\r\n",
+      "            min: .nan\r\n",
+      "            max: .nan\r\n",
+      "            frozen: true\r\n",
+      "            error: 0.0\r\n",
+      "        -   name: lat_0\r\n",
+      "            value: 22.019899368286133\r\n",
+      "            unit: deg\r\n",
+      "            min: -90.0\r\n",
+      "            max: 90.0\r\n",
+      "            frozen: true\r\n",
+      "            error: 0.0\r\n",
+      "-   type: FoVBackgroundModel\r\n",
+      "    datasets_names:\r\n",
+      "    - Fermi-LAT\r\n",
+      "    spectral:\r\n",
+      "        type: PowerLawNormSpectralModel\r\n",
+      "        parameters:\r\n",
+      "        -   name: norm\r\n",
+      "            value: 1.3004625872247901\r\n",
+      "            unit: ''\r\n",
+      "            min: 0.0\r\n",
+      "            max: .nan\r\n",
+      "            frozen: false\r\n",
+      "            error: 0.07512322002655547\r\n",
+      "        -   name: tilt\r\n",
+      "            value: 0.0\r\n",
+      "            unit: ''\r\n",
+      "            min: .nan\r\n",
+      "            max: .nan\r\n",
+      "            frozen: true\r\n",
+      "            error: 0.0\r\n",
+      "        -   name: reference\r\n",
+      "            value: 1.0\r\n",
+      "            unit: TeV\r\n",
+      "            min: .nan\r\n",
+      "            max: .nan\r\n",
+      "            frozen: true\r\n",
+      "            error: 0.0\r\n"
+     ]
+    }
+   ],
+   "source": [
+    "!cat $GAMMAPY_DATA/fermi-3fhl-crab/Fermi-LAT-3FHL_models.yaml"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Reading  different datasets\n",
+    "\n",
+    "\n",
+    "### Fermi-LAT 3FHL: map dataset for 3D analysis\n",
+    "For now we let's use the datasets serialization only to read the 3D `MapDataset` associated to Fermi-LAT 3FHL data and models."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:03:41.985616Z",
+     "iopub.status.busy": "2021-11-22T21:03:41.984932Z",
+     "iopub.status.idle": "2021-11-22T21:03:42.013162Z",
+     "shell.execute_reply": "2021-11-22T21:03:42.013533Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "path = Path(\"$GAMMAPY_DATA/fermi-3fhl-crab\")\n",
+    "filename = path / \"Fermi-LAT-3FHL_datasets.yaml\"\n",
+    "\n",
+    "datasets = Datasets.read(filename=filename)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:03:42.016486Z",
+     "iopub.status.busy": "2021-11-22T21:03:42.016060Z",
+     "iopub.status.idle": "2021-11-22T21:03:42.041955Z",
+     "shell.execute_reply": "2021-11-22T21:03:42.042220Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Models\n",
+      "\n",
+      "Component 0: SkyModel\n",
+      "\n",
+      "  Name                      : Crab Nebula\n",
+      "  Datasets names            : None\n",
+      "  Spectral model type       : LogParabolaSpectralModel\n",
+      "  Spatial  model type       : PointSpatialModel\n",
+      "  Temporal model type       : \n",
+      "  Parameters:\n",
+      "    amplitude               :   1.82e-02   +/- 3.0e-03 1 / (cm2 s TeV)\n",
+      "    reference    (frozen)   :      0.000       TeV         \n",
+      "    alpha                   :      1.652   +/-    0.06             \n",
+      "    beta                    :      0.039   +/-    0.01             \n",
+      "    lon_0        (frozen)   :     83.633       deg         \n",
+      "    lat_0        (frozen)   :     22.020       deg         \n",
+      "\n",
+      "Component 1: FoVBackgroundModel\n",
+      "\n",
+      "  Name                      : Fermi-LAT-bkg\n",
+      "  Datasets names            : ['Fermi-LAT']\n",
+      "  Spectral model type       : PowerLawNormSpectralModel\n",
+      "  Parameters:\n",
+      "    norm                    :      1.300   +/-    0.08             \n",
+      "    tilt         (frozen)   :      0.000                   \n",
+      "    reference    (frozen)   :      1.000       TeV         \n",
+      "\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "models = Models.read(path / \"Fermi-LAT-3FHL_models.yaml\")\n",
+    "print(models)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "We get the Crab model in order to share it with the other datasets"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:03:42.044639Z",
+     "iopub.status.busy": "2021-11-22T21:03:42.044295Z",
+     "iopub.status.idle": "2021-11-22T21:03:42.045654Z",
+     "shell.execute_reply": "2021-11-22T21:03:42.045933Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "SkyModel\n",
+      "\n",
+      "  Name                      : Crab Nebula\n",
+      "  Datasets names            : None\n",
+      "  Spectral model type       : LogParabolaSpectralModel\n",
+      "  Spatial  model type       : PointSpatialModel\n",
+      "  Temporal model type       : \n",
+      "  Parameters:\n",
+      "    amplitude               :   1.82e-02   +/- 3.0e-03 1 / (cm2 s TeV)\n",
+      "    reference    (frozen)   :      0.000       TeV         \n",
+      "    alpha                   :      1.652   +/-    0.06             \n",
+      "    beta                    :      0.039   +/-    0.01             \n",
+      "    lon_0        (frozen)   :     83.633       deg         \n",
+      "    lat_0        (frozen)   :     22.020       deg         \n",
+      "\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "print(models[\"Crab Nebula\"])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### HESS-DL3: 1D ON/OFF dataset for spectral fitting\n",
+    "\n",
+    "The ON/OFF datasets can be read from PHA files following the [OGIP standards](https://heasarc.gsfc.nasa.gov/docs/heasarc/ofwg/docs/spectra/ogip_92_007/node5.html).\n",
+    "We read the PHA files from each observation, and compute a stacked dataset for simplicity.\n",
+    "Then the Crab spectral model previously defined is added to the dataset."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:03:42.048714Z",
+     "iopub.status.busy": "2021-11-22T21:03:42.048349Z",
+     "iopub.status.idle": "2021-11-22T21:03:42.141124Z",
+     "shell.execute_reply": "2021-11-22T21:03:42.141309Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "datasets_hess = Datasets()\n",
+    "\n",
+    "for obs_id in [23523, 23526]:\n",
+    "    dataset = SpectrumDatasetOnOff.read(\n",
+    "        f\"$GAMMAPY_DATA/joint-crab/spectra/hess/pha_obs{obs_id}.fits\"\n",
+    "    )\n",
+    "    datasets_hess.append(dataset)\n",
+    "\n",
+    "dataset_hess = datasets_hess.stack_reduce(name=\"HESS\")\n",
+    "\n",
+    "datasets.append(dataset_hess)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:03:42.143129Z",
+     "iopub.status.busy": "2021-11-22T21:03:42.142828Z",
+     "iopub.status.idle": "2021-11-22T21:03:42.143995Z",
+     "shell.execute_reply": "2021-11-22T21:03:42.144168Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Datasets\n",
+      "--------\n",
+      "\n",
+      "Dataset 0: \n",
+      "\n",
+      "  Type       : MapDataset\n",
+      "  Name       : Fermi-LAT\n",
+      "  Instrument : \n",
+      "  Models     : \n",
+      "\n",
+      "Dataset 1: \n",
+      "\n",
+      "  Type       : SpectrumDatasetOnOff\n",
+      "  Name       : HESS\n",
+      "  Instrument : \n",
+      "  Models     : \n",
+      "\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "print(datasets)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### HAWC: 1D dataset for flux point fitting\n",
+    "\n",
+    "The HAWC flux point are taken from https://arxiv.org/pdf/1905.12518.pdf Then these flux points are read from a pre-made FITS file and passed to a `FluxPointsDataset` together with the source spectral model.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:03:42.146194Z",
+     "iopub.status.busy": "2021-11-22T21:03:42.145853Z",
+     "iopub.status.idle": "2021-11-22T21:03:42.157554Z",
+     "shell.execute_reply": "2021-11-22T21:03:42.157730Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "# read flux points from https://arxiv.org/pdf/1905.12518.pdf\n",
+    "filename = \"$GAMMAPY_DATA/hawc_crab/HAWC19_flux_points.fits\"\n",
+    "flux_points_hawc = FluxPoints.read(\n",
+    "    filename, reference_model=create_crab_spectral_model(\"meyer\")\n",
+    ")\n",
+    "\n",
+    "dataset_hawc = FluxPointsDataset(data=flux_points_hawc, name=\"HAWC\")\n",
+    "\n",
+    "datasets.append(dataset_hawc)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:03:42.159512Z",
+     "iopub.status.busy": "2021-11-22T21:03:42.159212Z",
+     "iopub.status.idle": "2021-11-22T21:03:42.160683Z",
+     "shell.execute_reply": "2021-11-22T21:03:42.160458Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Datasets\n",
+      "--------\n",
+      "\n",
+      "Dataset 0: \n",
+      "\n",
+      "  Type       : MapDataset\n",
+      "  Name       : Fermi-LAT\n",
+      "  Instrument : \n",
+      "  Models     : \n",
+      "\n",
+      "Dataset 1: \n",
+      "\n",
+      "  Type       : SpectrumDatasetOnOff\n",
+      "  Name       : HESS\n",
+      "  Instrument : \n",
+      "  Models     : \n",
+      "\n",
+      "Dataset 2: \n",
+      "\n",
+      "  Type       : FluxPointsDataset\n",
+      "  Name       : HAWC\n",
+      "  Instrument : \n",
+      "  Models     : \n",
+      "\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "print(datasets)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Datasets serialization\n",
+    "\n",
+    "The `datasets` object contains each dataset previously defined. \n",
+    "It can be saved on disk as datasets.yaml, models.yaml, and several data files specific to each dataset. Then the `datasets` can be rebuild later from these files."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:03:42.162773Z",
+     "iopub.status.busy": "2021-11-22T21:03:42.162446Z",
+     "iopub.status.idle": "2021-11-22T21:03:42.365021Z",
+     "shell.execute_reply": "2021-11-22T21:03:42.365212Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "HDU 'MASK_FIT' not found\n"
+     ]
+    }
+   ],
+   "source": [
+    "path = Path(\"crab-3datasets\")\n",
+    "path.mkdir(exist_ok=True)\n",
+    "\n",
+    "filename = path / \"crab_10GeV_100TeV_datasets.yaml\"\n",
+    "\n",
+    "datasets.write(filename, overwrite=True)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:03:42.367143Z",
+     "iopub.status.busy": "2021-11-22T21:03:42.366852Z",
+     "iopub.status.idle": "2021-11-22T21:03:42.484340Z",
+     "shell.execute_reply": "2021-11-22T21:03:42.484740Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "datasets:\r\n",
+      "- name: Fermi-LAT\r\n",
+      "  type: MapDataset\r\n",
+      "  filename: Fermi-LAT.fits\r\n",
+      "- name: HESS\r\n",
+      "  type: SpectrumDatasetOnOff\r\n",
+      "  filename: pha_obsHESS.fits\r\n",
+      "- name: HAWC\r\n",
+      "  type: FluxPointsDataset\r\n",
+      "  filename: HAWC.fits\r\n"
+     ]
+    }
+   ],
+   "source": [
+    "!cat crab-3datasets/crab_10GeV_100TeV_datasets.yaml"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:03:42.490625Z",
+     "iopub.status.busy": "2021-11-22T21:03:42.486755Z",
+     "iopub.status.idle": "2021-11-22T21:03:42.555425Z",
+     "shell.execute_reply": "2021-11-22T21:03:42.555597Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "datasets = Datasets.read(filename)\n",
+    "datasets.models = models"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:03:42.557418Z",
+     "iopub.status.busy": "2021-11-22T21:03:42.557121Z",
+     "iopub.status.idle": "2021-11-22T21:03:42.558402Z",
+     "shell.execute_reply": "2021-11-22T21:03:42.558598Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Datasets\n",
+      "--------\n",
+      "\n",
+      "Dataset 0: \n",
+      "\n",
+      "  Type       : MapDataset\n",
+      "  Name       : Fermi-LAT\n",
+      "  Instrument : \n",
+      "  Models     : ['Crab Nebula', 'Fermi-LAT-bkg']\n",
+      "\n",
+      "Dataset 1: \n",
+      "\n",
+      "  Type       : SpectrumDatasetOnOff\n",
+      "  Name       : HESS\n",
+      "  Instrument : \n",
+      "  Models     : ['Crab Nebula']\n",
+      "\n",
+      "Dataset 2: \n",
+      "\n",
+      "  Type       : FluxPointsDataset\n",
+      "  Name       : HAWC\n",
+      "  Instrument : \n",
+      "  Models     : ['Crab Nebula']\n",
+      "\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "print(datasets)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Joint analysis\n",
+    "\n",
+    "We run the fit on the `Datasets` object that include a dataset for each instrument\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 15,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:03:42.560883Z",
+     "iopub.status.busy": "2021-11-22T21:03:42.560599Z",
+     "iopub.status.idle": "2021-11-22T21:03:43.729213Z",
+     "shell.execute_reply": "2021-11-22T21:03:43.729398Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "HDU 'MASK_FIT' not found\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "OptimizeResult\n",
+      "\n",
+      "\tbackend    : minuit\n",
+      "\tmethod     : migrad\n",
+      "\tsuccess    : True\n",
+      "\tmessage    : Optimization terminated successfully.\n",
+      "\tnfev       : 302\n",
+      "\ttotal stat : -12697.22\n",
+      "\n",
+      "OptimizeResult\n",
+      "\n",
+      "\tbackend    : minuit\n",
+      "\tmethod     : migrad\n",
+      "\tsuccess    : True\n",
+      "\tmessage    : Optimization terminated successfully.\n",
+      "\tnfev       : 302\n",
+      "\ttotal stat : -12697.22\n",
+      "\n",
+      "\n",
+      "CPU times: user 1.16 s, sys: 12.6 ms, total: 1.17 s\n",
+      "Wall time: 1.17 s\n"
+     ]
+    }
+   ],
+   "source": [
+    "%%time\n",
+    "fit_joint = Fit()\n",
+    "results_joint = fit_joint.run(datasets=datasets)\n",
+    "print(results_joint)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Let's display only the parameters of the Crab spectral model"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 16,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:03:43.732315Z",
+     "iopub.status.busy": "2021-11-22T21:03:43.732031Z",
+     "iopub.status.idle": "2021-11-22T21:03:43.733189Z",
+     "shell.execute_reply": "2021-11-22T21:03:43.733389Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "LogParabolaSpectralModel\n",
+      "\n",
+      "  type      name     value         unit        error   min max frozen link\n",
+      "-------- --------- ---------- -------------- --------- --- --- ------ ----\n",
+      "spectral amplitude 3.9740e-03 cm-2 s-1 TeV-1 3.125e-04 nan nan  False     \n",
+      "spectral reference 5.0548e-05            TeV 0.000e+00 nan nan   True     \n",
+      "spectral     alpha 1.2634e+00                1.707e-02 nan nan  False     \n",
+      "spectral      beta 6.1321e-02                9.448e-04 nan nan  False     \n"
+     ]
+    }
+   ],
+   "source": [
+    "crab_spec = datasets[0].models[\"Crab Nebula\"].spectral_model\n",
+    "print(crab_spec)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "We can compute flux points for Fermi-LAT and HESS datasets in order plot them together with the HAWC flux point."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 17,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:03:43.736062Z",
+     "iopub.status.busy": "2021-11-22T21:03:43.735787Z",
+     "iopub.status.idle": "2021-11-22T21:03:44.809153Z",
+     "shell.execute_reply": "2021-11-22T21:03:44.809330Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "# compute Fermi-LAT and HESS flux points\n",
+    "energy_edges = MapAxis.from_energy_bounds(\"10 GeV\", \"2 TeV\", nbin=5).edges\n",
+    "\n",
+    "flux_points_fermi = FluxPointsEstimator(\n",
+    "    energy_edges=energy_edges,\n",
+    "    source=\"Crab Nebula\",\n",
+    ").run([datasets[\"Fermi-LAT\"]])\n",
+    "\n",
+    "\n",
+    "energy_edges = MapAxis.from_bounds(\n",
+    "    1, 15, nbin=6, interp=\"log\", unit=\"TeV\"\n",
+    ").edges\n",
+    "\n",
+    "flux_points_hess = FluxPointsEstimator(\n",
+    "    energy_edges=energy_edges, source=\"Crab Nebula\", selection_optional=[\"ul\"]\n",
+    ").run([datasets[\"HESS\"]])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Now, Let's plot the Crab spectrum fitted and the flux points of each instrument.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 18,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:03:44.885374Z",
+     "iopub.status.busy": "2021-11-22T21:03:44.885065Z",
+     "iopub.status.idle": "2021-11-22T21:03:45.171761Z",
+     "shell.execute_reply": "2021-11-22T21:03:45.171943Z"
+    },
+    "nbsphinx-thumbnail": {
+     "tooltip": "Joint 3D analysis using 3D Fermi datasets, a H.E.S.S. reduced spectrum and HAWC flux points."
+    }
+   },
+   "outputs": [
+    {
+     "data": {
+      "image/png": "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jevSoUk83ZMakpwYR5hHHwhERGq6kAp++T2Px2havw5N69fh6A6/fz2/sIhVm3exfMNOMjdls3LzHlZt28u8rF18smw7sAYovoWQVD+KdgkxdGoaR/cWDejZOoGm8dG6QiAiUoMo+KVCEWEeOjStT4em9X/32u59BWSs3UbG2h0s27CLXzbt4ce1u/ns5x1AFlB826Bdoxi6NoslpWUDerdJoH2Tero6ICLe2z8Oi8Y28QkFv1RZbFQ4fds2pm/bg4em3JmTz6Jft7B4zXZ+WreLZZv28NYPG3ktfSMAUWFGh8RoujevR+9WDUltm0jbxNjDXxnQL7+I+EBYWBgpKSkHlqdNm0abNm18+h4DBgxgzpw5v1t/zz33EBsby8033/y71zZv3kzz5s156qmnGD9+PFdffTWzZ88mLy+PlStX0qlTJwDuuOMORo8eXeXaFPzic/ExEQzq1IxBnZodWJdfWMTP63cyf9UWFq3ZweL12bz34ybemL8RyCA20kO3pnXolVSffm0T6dsukXqlny7YtvK30RIn9tcQySJSZTExMSxYsKDS+xUUFBAe7l1slhX6h/P2229z9NFHM3XqVMaPH8/EiRMBWLVqFcOHD69SzWVR8IvvlTE8cgTQreQLgPqQH+/h5331WbA3kQU5jVmwvimTfk3gudlrMBztI7aQGr2evnXWM2LPO4QX5GCgIZJFQkk1fehPT0/nxhtvZPfu3SQkJDB58mSaNWvGkCFDGDBgALNnz2bkyJFMnz6d3r17k56ezubNm5kyZQoPPPAAixYt4txzz+W+++4DIDY2lt27d1eqhqlTp/Kvf/2L888/n7Vr19KiRQuf/5yg4JcAirAiukVvo1v0Ni5gGQDZhREsyE0kbU8T5uc2ZfruTkzN7sHIqFcOHhApPxccqN+gSBAq3XioaF6UKn5Yz8nJoVevXgAkJyfz1ltvce211/L++++TmJjIm2++ye23386LL74IwI4dO/jqq68AmD59OpGRkcyaNYvHH3+c008/nfT0dBo2bEi7du244YYbaNSoUaVrysrKYsOGDfTr149zzjmHN998kxtvvLFKP9/hKPjF946g5RwHHFvyBcUDL2Ws28Gu11tTf+8qPDgKnZHpmnNu1rWkJtVjYIdEju/anFYN6+gJApFg44d5UQ691L948WIWL17MSSedBEBhYSHNmv12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\n",
+      "text/plain": [
+       "<Figure size 576x432 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "# display spectrum and flux points\n",
+    "plt.figure(figsize=(8, 6))\n",
+    "\n",
+    "energy_bounds = [0.01, 300] * u.TeV\n",
+    "sed_type = \"e2dnde\"\n",
+    "\n",
+    "ax = crab_spec.plot(\n",
+    "    energy_bounds=energy_bounds, sed_type=sed_type, label=\"Model\"\n",
+    ")\n",
+    "crab_spec.plot_error(ax=ax, energy_bounds=energy_bounds, sed_type=sed_type)\n",
+    "\n",
+    "flux_points_fermi.plot(ax=ax, sed_type=sed_type, label=\"Fermi-LAT\")\n",
+    "flux_points_hess.plot(ax=ax, sed_type=sed_type, label=\"HESS\")\n",
+    "flux_points_hawc.plot(ax=ax, sed_type=sed_type, label=\"HAWC\")\n",
+    "\n",
+    "ax.set_xlim(energy_bounds)\n",
+    "plt.legend();"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.9.0"
+  },
+  "nbsphinx": {
+   "orphan": true
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}

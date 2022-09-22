@@ -1,0 +1,52 @@
+name: building
+on:
+  [workflow_dispatch, repository_dispatch]
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+    env:
+      GAMMAPY_DATA: /home/runner/work/gammapy-docs/gammapy-docs/gammapy-datasets
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v2
+      - name: get env file
+        run: curl -O https://raw.githubusercontent.com/gammapy/gammapy/master/environment-dev.yml
+      - name: create and activate env
+        uses: mamba-org/provision-with-micromamba@main
+        with:
+          environment-file: environment-dev.yml
+      - name: install gammapy
+        run: |
+          git clone https://github.com/gammapy/gammapy.git
+          cd gammapy
+          pip install -e .
+          pip install psrecord
+          conda info
+          conda list
+          gammapy info
+      - name: download datasets
+        run: gammapy download datasets
+      - name: doc building
+        run: |
+          cd gammapy
+          make docs-sphinx
+      - name: copy docs
+        run: |
+          rm -rf docs/dev
+          cp -r gammapy/docs/_build/html docs/dev
+          rm -rf gammapy
+      - name: postbuild release
+        if: github.event.client_payload.release!=''
+        run: |
+          release="${{ github.event.client_payload.release }}"
+          cp -r docs/dev docs/${release}
+          sed -i -E 's|url=\.\./.*"|url=../${release}"|' docs/stable/index.html
+      - name: commit changes
+        uses: stefanzweifel/git-auto-commit-action@v4.1.6
+        if: success()
+        with:
+          commit_author: GitHub Actions <actions@github.com>
+          commit_message: commit docs dev version

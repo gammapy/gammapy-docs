@@ -1,0 +1,443 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>gammapy.astro.source.snr &#8212; gammapy v0.7</title>
+    <link rel="stylesheet" href="../../../../_static/gammapy.css" type="text/css" />
+    <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../../',
+        VERSION:     '0.7',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <link rel="shortcut icon" href="../../../../_static/astropy_logo.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+<link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+<script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+
+
+  </head>
+  <body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">gamma</span><span id="logotext2">py</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="Astropy Homepage" href="http://www.astropy.org"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">gammapy v0.7</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for gammapy.astro.source.snr</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
+<span class="sd">&quot;&quot;&quot;Supernova remnant (SNR) source models&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">astropy.units</span> <span class="k">import</span> <span class="n">Quantity</span>
+<span class="kn">import</span> <span class="nn">astropy.constants</span> <span class="k">as</span> <span class="nn">const</span>
+<span class="kn">from</span> <span class="nn">astropy.utils</span> <span class="k">import</span> <span class="n">lazyproperty</span>
+<span class="kn">from</span> <span class="nn">...extern.validator</span> <span class="k">import</span> <span class="n">validate_physical_type</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;SNR&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;SNRTrueloveMcKee&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<div class="viewcode-block" id="SNR"><a class="viewcode-back" href="../../../../api/gammapy.astro.source.SNR.html#gammapy.astro.source.SNR">[docs]</a><span class="k">class</span> <span class="nc">SNR</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Simple supernova remnant (SNR) evolution model.</span>
+
+<span class="sd">    The model is based on the Sedov-Taylor solution for strong explosions.</span>
+
+<span class="sd">    Reference: http://adsabs.harvard.edu/abs/1950RSPSA.201..159T</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    e_sn : `~astropy.units.Quantity`</span>
+<span class="sd">        SNR energy (erg), equal to the SN energy after neutrino losses</span>
+<span class="sd">    theta : `~astropy.units.Quantity`</span>
+<span class="sd">        Fraction of E_SN that goes into cosmic rays</span>
+<span class="sd">    n_ISM : `~astropy.units.Quantity`</span>
+<span class="sd">        ISM density (g cm^-3)</span>
+<span class="sd">    m_ejecta : `~astropy.units.Quantity`</span>
+<span class="sd">        Ejecta mass (g)</span>
+<span class="sd">    t_stop : `~astropy.units.Quantity`</span>
+<span class="sd">        Post-shock temperature where gamma-ray emission stops.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">e_sn</span><span class="o">=</span><span class="n">Quantity</span><span class="p">(</span><span class="mf">1e51</span><span class="p">,</span> <span class="s1">&#39;erg&#39;</span><span class="p">),</span> <span class="n">theta</span><span class="o">=</span><span class="n">Quantity</span><span class="p">(</span><span class="mf">0.1</span><span class="p">),</span>
+                 <span class="n">n_ISM</span><span class="o">=</span><span class="n">Quantity</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;cm-3&#39;</span><span class="p">),</span> <span class="n">m_ejecta</span><span class="o">=</span><span class="n">const</span><span class="o">.</span><span class="n">M_sun</span><span class="p">,</span>
+                 <span class="n">t_stop</span><span class="o">=</span><span class="n">Quantity</span><span class="p">(</span><span class="mf">1e6</span><span class="p">,</span> <span class="s1">&#39;K&#39;</span><span class="p">),</span> <span class="n">age</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">morphology</span><span class="o">=</span><span class="s1">&#39;Shell2D&#39;</span><span class="p">,</span>
+                 <span class="n">spectral_index</span><span class="o">=</span><span class="mf">2.1</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">e_sn</span> <span class="o">=</span> <span class="n">e_sn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">theta</span> <span class="o">=</span> <span class="n">theta</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rho_ISM</span> <span class="o">=</span> <span class="n">n_ISM</span> <span class="o">*</span> <span class="n">const</span><span class="o">.</span><span class="n">m_p</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_ISM</span> <span class="o">=</span> <span class="n">n_ISM</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">m_ejecta</span> <span class="o">=</span> <span class="n">m_ejecta</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">t_stop</span> <span class="o">=</span> <span class="n">t_stop</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">morphology</span> <span class="o">=</span> <span class="n">morphology</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">spectral_index</span> <span class="o">=</span> <span class="n">spectral_index</span>
+        <span class="k">if</span> <span class="n">age</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">validate_physical_type</span><span class="p">(</span><span class="s1">&#39;age&#39;</span><span class="p">,</span> <span class="n">age</span><span class="p">,</span> <span class="s1">&#39;time&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">age</span> <span class="o">=</span> <span class="n">age</span>
+
+<div class="viewcode-block" id="SNR.radius"><a class="viewcode-back" href="../../../../api/gammapy.astro.source.SNR.html#gammapy.astro.source.SNR.radius">[docs]</a>    <span class="k">def</span> <span class="nf">radius</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Outer shell radius at age t.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        t : `~astropy.units.Quantity`</span>
+<span class="sd">            Time after birth of the SNR.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        The radius during the free expansion phase is given by:</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            r_{SNR}(t) \\approx 0.01 \\textnormal{}</span>
+<span class="sd">            \\left(\\frac{E_{SN}}{10^{51}erg}\\right)^{1/2}</span>
+<span class="sd">            \\left(\\frac{M_{ej}}{M_{\\odot}}\\right)^{-1/2} t</span>
+
+<span class="sd">        The radius during the Sedov-Taylor phase evolves like:</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            r_{SNR}(t) \\approx \\left(\\frac{E_{SN}}{\\rho_{ISM}}\\right)^{1/5}t^{2/5}</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">validate_physical_type</span><span class="p">(</span><span class="s1">&#39;t&#39;</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="s1">&#39;time&#39;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">):</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">age</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Need time variable or age attribute.&#39;</span><span class="p">)</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">t</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">sedov_taylor_begin</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">_radius_sedov_taylor</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;cm&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">_radius_free_expansion</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;cm&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="s1">&#39;cm&#39;</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_radius_free_expansion</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Shock radius at age t during free expansion phase.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        t : `~astropy.units.Quantity`</span>
+<span class="sd">            Time after birth of the SNR.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># proportional constant for the free expansion phase</span>
+        <span class="n">term_1</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">e_sn</span> <span class="o">/</span> <span class="n">Quantity</span><span class="p">(</span><span class="mf">1e51</span><span class="p">,</span> <span class="s1">&#39;erg&#39;</span><span class="p">))</span> <span class="o">**</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">term_2</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">m_ejecta</span> <span class="o">/</span> <span class="n">const</span><span class="o">.</span><span class="n">M_sun</span><span class="p">)</span> <span class="o">**</span> <span class="p">(</span><span class="o">-</span><span class="mf">1.</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Quantity</span><span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="s1">&#39;pc/yr&#39;</span><span class="p">)</span> <span class="o">*</span> <span class="n">term_1</span> <span class="o">*</span> <span class="n">term_2</span> <span class="o">*</span> <span class="n">t</span>
+
+    <span class="k">def</span> <span class="nf">_radius_sedov_taylor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Shock radius  at age t  during Sedov Taylor phase.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        t : `~astropy.units.Quantity`</span>
+<span class="sd">            Time after birth of the SNR.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">R_FE</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_radius_free_expansion</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sedov_taylor_begin</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">R_FE</span> <span class="o">*</span> <span class="p">(</span><span class="n">t</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">sedov_taylor_begin</span><span class="p">)</span> <span class="o">**</span> <span class="p">(</span><span class="mf">2.</span> <span class="o">/</span> <span class="mi">5</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SNR.radius_inner"><a class="viewcode-back" href="../../../../api/gammapy.astro.source.SNR.html#gammapy.astro.source.SNR.radius_inner">[docs]</a>    <span class="k">def</span> <span class="nf">radius_inner</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">fraction</span><span class="o">=</span><span class="mf">0.0914</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Inner radius  at age t  of the SNR shell.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        t : `~astropy.units.Quantity`</span>
+<span class="sd">            Time after birth of the SNR.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">radius</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">fraction</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SNR.luminosity_tev"><a class="viewcode-back" href="../../../../api/gammapy.astro.source.SNR.html#gammapy.astro.source.SNR.luminosity_tev">[docs]</a>    <span class="k">def</span> <span class="nf">luminosity_tev</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">energy_min</span><span class="o">=</span><span class="n">Quantity</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;TeV&#39;</span><span class="p">)):</span>
+        <span class="sd">&quot;&quot;&quot;Gamma-ray luminosity above ``energy_min`` at age ``t``.</span>
+
+<span class="sd">        The luminosity is assumed constant in a given age interval and zero</span>
+<span class="sd">        before and after. The assumed spectral index is 2.1.</span>
+
+<span class="sd">        Reference: http://adsabs.harvard.edu/abs/1994A%26A...287..959D (Formula (7)).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        t : `~astropy.units.Quantity`</span>
+<span class="sd">            Time after birth of the SNR.</span>
+<span class="sd">        energy_min : `~astropy.units.Quantity`</span>
+<span class="sd">            Lower energy limit for the luminosity.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        The gamma-ray luminosity above 1 TeV is given by:</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            L_{\\gamma}(\\geq 1TeV) \\approx 10^{34} \\theta</span>
+<span class="sd">            \\left(\\frac{E_{SN}}{10^{51} erg}\\right)</span>
+<span class="sd">            \\left(\\frac{\\rho_{ISM}}{1.66\\cdot 10^{-24} g/cm^{3}} \\right)</span>
+<span class="sd">            \\textnormal{ph} s^{-1}</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">validate_physical_type</span><span class="p">(</span><span class="s1">&#39;t&#39;</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="s1">&#39;time&#39;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">):</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">age</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Need time variable or age attribute.&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Flux in 1 k distance according to Drury formula 9</span>
+        <span class="n">term_0</span> <span class="o">=</span> <span class="n">energy_min</span> <span class="o">/</span> <span class="n">Quantity</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;TeV&#39;</span><span class="p">)</span>
+        <span class="n">term_1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">e_sn</span> <span class="o">/</span> <span class="n">Quantity</span><span class="p">(</span><span class="mf">1e51</span><span class="p">,</span> <span class="s1">&#39;erg&#39;</span><span class="p">)</span>
+        <span class="n">term_2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rho_ISM</span> <span class="o">/</span> <span class="p">(</span><span class="n">Quantity</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;cm-3&#39;</span><span class="p">)</span> <span class="o">*</span> <span class="n">const</span><span class="o">.</span><span class="n">m_p</span><span class="p">)</span>
+        <span class="n">L</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theta</span> <span class="o">*</span> <span class="n">term_0</span> <span class="o">**</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">spectral_index</span><span class="p">)</span> <span class="o">*</span> <span class="n">term_1</span> <span class="o">*</span> <span class="n">term_2</span>
+
+        <span class="c1"># Corresponding luminosity</span>
+        <span class="n">L</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">select</span><span class="p">([</span><span class="n">t</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sedov_taylor_begin</span><span class="p">,</span> <span class="n">t</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sedov_taylor_end</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">L</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">Quantity</span><span class="p">(</span><span class="mf">1.0768E34</span><span class="p">,</span> <span class="s1">&#39;s-1&#39;</span><span class="p">)</span> <span class="o">*</span> <span class="n">L</span></div>
+
+    <span class="nd">@lazyproperty</span>
+    <span class="k">def</span> <span class="nf">sedov_taylor_begin</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Characteristic time scale when the Sedov-Taylor phase of the SNR&#39;s evolution begins.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        The beginning of the Sedov-Taylor phase of the SNR is defined by the condition,</span>
+<span class="sd">        that the swept up mass of the surrounding medium equals the mass of the</span>
+<span class="sd">        ejected mass. The time scale is given by:</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            t_{begin} \\approx 200 \\ \\textnormal{}</span>
+<span class="sd">            \\left(\\frac{E_{SN}}{10^{51}erg}\\right)^{-1/2}</span>
+<span class="sd">            \\left(\\frac{M_{ej}}{M_{\\odot}}\\right)^{5/6}</span>
+<span class="sd">            \\left(\\frac{\\rho_{ISM}}{10^{-24}g/cm^3}\\right)^{-1/3}</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">term1</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">e_sn</span> <span class="o">/</span> <span class="n">Quantity</span><span class="p">(</span><span class="mf">1e51</span><span class="p">,</span> <span class="s1">&#39;erg&#39;</span><span class="p">))</span> <span class="o">**</span> <span class="p">(</span><span class="o">-</span><span class="mf">1.</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">term2</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">m_ejecta</span> <span class="o">/</span> <span class="n">const</span><span class="o">.</span><span class="n">M_sun</span><span class="p">)</span> <span class="o">**</span> <span class="p">(</span><span class="mf">5.</span> <span class="o">/</span> <span class="mi">6</span><span class="p">)</span>
+        <span class="n">term3</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rho_ISM</span> <span class="o">/</span> <span class="p">(</span><span class="n">Quantity</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;cm-3&#39;</span><span class="p">)</span> <span class="o">*</span> <span class="n">const</span><span class="o">.</span><span class="n">m_p</span><span class="p">))</span> <span class="o">**</span> <span class="p">(</span><span class="o">-</span><span class="mf">1.</span> <span class="o">/</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Quantity</span><span class="p">(</span><span class="mi">200</span><span class="p">,</span> <span class="s1">&#39;yr&#39;</span><span class="p">)</span> <span class="o">*</span> <span class="n">term1</span> <span class="o">*</span> <span class="n">term2</span> <span class="o">*</span> <span class="n">term3</span>
+
+    <span class="nd">@lazyproperty</span>
+    <span class="k">def</span> <span class="nf">sedov_taylor_end</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Characteristic time scale when the Sedov-Taylor phase of the SNR&#39;s evolution ends.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        The end of the Sedov-Taylor phase of the SNR is defined by the condition, that the</span>
+<span class="sd">        temperature at the shock drops below T = 10^6 K. The time scale is given by:</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            t_{end} \\approx 43000 \\textnormal{ }</span>
+<span class="sd">            \\left(\\frac{m}{1.66\\cdot 10^{-24}g}\\right)^{5/6}</span>
+<span class="sd">            \\left(\\frac{E_{SN}}{10^{51}erg}\\right)^{1/3}</span>
+<span class="sd">            \\left(\\frac{\\rho_{ISM}}{1.66\\cdot 10^{-24}g/cm^3}\\right)^{-1/3}</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">term1</span> <span class="o">=</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">const</span><span class="o">.</span><span class="n">m_p</span><span class="o">.</span><span class="n">cgs</span> <span class="o">/</span> <span class="p">(</span><span class="mi">100</span> <span class="o">*</span> <span class="n">const</span><span class="o">.</span><span class="n">k_B</span><span class="o">.</span><span class="n">cgs</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">t_stop</span><span class="p">)</span>
+        <span class="n">term2</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">e_sn</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">rho_ISM</span><span class="p">)</span> <span class="o">**</span> <span class="p">(</span><span class="mf">2.</span> <span class="o">/</span> <span class="mi">5</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">((</span><span class="n">term1</span> <span class="o">*</span> <span class="n">term2</span><span class="p">)</span> <span class="o">**</span> <span class="p">(</span><span class="mf">5.</span> <span class="o">/</span> <span class="mi">6</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;yr&#39;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SNRTrueloveMcKee"><a class="viewcode-back" href="../../../../api/gammapy.astro.source.SNRTrueloveMcKee.html#gammapy.astro.source.SNRTrueloveMcKee">[docs]</a><span class="k">class</span> <span class="nc">SNRTrueloveMcKee</span><span class="p">(</span><span class="n">SNR</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;SNR model according to Truelove &amp; McKee (1999).</span>
+
+<span class="sd">    Reference: http://adsabs.harvard.edu/abs/1999ApJS..120..299T</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">SNRTrueloveMcKee</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="c1"># Characteristic dimensions</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">r_c</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">m_ejecta</span> <span class="o">**</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">/</span> <span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">rho_ISM</span> <span class="o">**</span> <span class="p">(</span><span class="o">-</span><span class="mf">1.</span> <span class="o">/</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">t_c</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">e_sn</span> <span class="o">**</span> <span class="p">(</span><span class="o">-</span><span class="mf">1.</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">m_ejecta</span> <span class="o">**</span> <span class="p">(</span><span class="mf">5.</span> <span class="o">/</span> <span class="mi">6</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">rho_ISM</span> <span class="o">**</span> <span class="p">(</span><span class="o">-</span><span class="mf">1.</span> <span class="o">/</span> <span class="mi">3</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SNRTrueloveMcKee.radius"><a class="viewcode-back" href="../../../../api/gammapy.astro.source.SNRTrueloveMcKee.html#gammapy.astro.source.SNRTrueloveMcKee.radius">[docs]</a>    <span class="k">def</span> <span class="nf">radius</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Outer shell radius at age t.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        t : `~astropy.units.Quantity`</span>
+<span class="sd">            Time after birth of the SNR.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        The radius during the free expansion phase is given by:</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            R_{SNR}(t) = 1.12R_{ch}\\left(\\frac{t}{t_{ch}}\\right)^{2/3}</span>
+
+<span class="sd">        The radius during the Sedov-Taylor phase evolves like:</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            R_{SNR}(t) = \\left[R_{SNR, ST}^{5/2} + \\left(2.026\\frac{E_{SN}}</span>
+<span class="sd">            {\\rho_{ISM}}\\right)^{1/2}(t - t_{ST})\\right]^{2/5}</span>
+
+<span class="sd">        Using the characteristic dimensions:</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            R_{ch} = M_{ej}^{1/3}\\rho_{ISM}^{-1/3} \\ \\</span>
+<span class="sd">            \\textnormal{and} \\ \\ t_{ch} = E_{SN}^{-1/2}M_{ej}^{5/6}\\rho_{ISM}^{-1/3}</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">validate_physical_type</span><span class="p">(</span><span class="s1">&#39;t&#39;</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="s1">&#39;time&#39;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">):</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">age</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Need time variable or age attribute.&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Evaluate `_radius_sedov_taylor` on `t &gt; self.sedov_taylor_begin`</span>
+        <span class="c1"># only to avoid a warning</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">t</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">sedov_taylor_begin</span>
+        <span class="n">r</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_radius_sedov_taylor</span><span class="p">(</span><span class="n">t</span><span class="p">[</span><span class="n">mask</span><span class="p">])</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;cm&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span>
+        <span class="n">r</span><span class="p">[</span><span class="o">~</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_radius_free_expansion</span><span class="p">(</span><span class="n">t</span><span class="p">[</span><span class="o">~</span><span class="n">mask</span><span class="p">])</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;cm&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span>
+        <span class="k">return</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="s1">&#39;cm&#39;</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_radius_free_expansion</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Shock radius at age t during free expansion phase.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        t : `~astropy.units.Quantity`</span>
+<span class="sd">            Time after birth of the SNR.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="mf">1.12</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">r_c</span> <span class="o">*</span> <span class="p">(</span><span class="n">t</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">t_c</span><span class="p">)</span> <span class="o">**</span> <span class="p">(</span><span class="mf">2.</span> <span class="o">/</span> <span class="mi">3</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_radius_sedov_taylor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Shock radius  at age t during Sedov Taylor phase.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        t : `~astropy.units.Quantity`</span>
+<span class="sd">            Time after birth of the SNR.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">term1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_radius_free_expansion</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sedov_taylor_begin</span><span class="p">)</span> <span class="o">**</span> <span class="p">(</span><span class="mf">5.</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">term2</span> <span class="o">=</span> <span class="p">(</span><span class="mf">2.026</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">e_sn</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">rho_ISM</span><span class="p">))</span> <span class="o">**</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">term1</span> <span class="o">+</span> <span class="n">term2</span> <span class="o">*</span> <span class="p">(</span><span class="n">t</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">sedov_taylor_begin</span><span class="p">))</span> <span class="o">**</span> <span class="p">(</span><span class="mf">2.</span> <span class="o">/</span> <span class="mi">5</span><span class="p">)</span>
+
+    <span class="nd">@lazyproperty</span>
+    <span class="k">def</span> <span class="nf">sedov_taylor_begin</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Characteristic time scale when the Sedov-Taylor phase starts.</span>
+
+<span class="sd">        Given by :math:`t_{ST} \\approx 0.52 t_{ch}`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="mf">0.52</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">t_c</span>
+
+<div class="viewcode-block" id="SNRTrueloveMcKee.radius_reverse_shock"><a class="viewcode-back" href="../../../../api/gammapy.astro.source.SNRTrueloveMcKee.html#gammapy.astro.source.SNRTrueloveMcKee.radius_reverse_shock">[docs]</a>    <span class="k">def</span> <span class="nf">radius_reverse_shock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">t</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Reverse shock radius at age t.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        t : `~astropy.units.Quantity`</span>
+<span class="sd">            Time after birth of the SNR.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Initially the reverse shock co-evolves with the radius of the SNR:</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            R_{RS}(t) = \\frac{1}{1.19}r_{SNR}(t)</span>
+
+<span class="sd">        After a time :math:`t_{core} \\simeq 0.25t_{ch}` the reverse shock reaches</span>
+<span class="sd">        the core and then propagates as:</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            R_{RS}(t) = \\left[1.49 - 0.16 \\frac{t - t_{core}}{t_{ch}} - 0.46</span>
+<span class="sd">            \\ln \\left(\\frac{t}{t_{core}}\\right)\\right]\\frac{R_{ch}}{t_{ch}}t</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">validate_physical_type</span><span class="p">(</span><span class="s1">&#39;t&#39;</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="s1">&#39;time&#39;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">):</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">age</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Need time variable or age attribute.&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Time when reverse shock reaches the &quot;core&quot;</span>
+        <span class="n">t_core</span> <span class="o">=</span> <span class="mf">0.25</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">t_c</span>
+
+        <span class="n">term1</span> <span class="o">=</span> <span class="p">(</span><span class="n">t</span> <span class="o">-</span> <span class="n">t_core</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">t_c</span><span class="p">)</span>
+        <span class="n">term2</span> <span class="o">=</span> <span class="p">(</span><span class="mf">1.49</span> <span class="o">-</span> <span class="mf">0.16</span> <span class="o">*</span> <span class="n">term1</span> <span class="o">-</span> <span class="mf">0.46</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">t</span> <span class="o">/</span> <span class="n">t_core</span><span class="p">))</span>
+        <span class="n">R_1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_radius_free_expansion</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="o">/</span> <span class="mf">1.19</span>
+        <span class="n">R_RS</span> <span class="o">=</span> <span class="n">term2</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">r_c</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">t_c</span><span class="p">)</span> <span class="o">*</span> <span class="n">t</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">t</span> <span class="o">&lt;</span> <span class="n">t_core</span><span class="p">,</span>
+                     <span class="n">R_1</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;cm&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                     <span class="n">R_RS</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;cm&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="s1">&#39;cm&#39;</span><span class="p">)</span></div></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2018, The Gammapy developers.<br/>
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.6.7. &nbsp;
+    Last built 01 Mar 2018. <br/>
+  </p>
+</footer>
+  </body>
+</html>

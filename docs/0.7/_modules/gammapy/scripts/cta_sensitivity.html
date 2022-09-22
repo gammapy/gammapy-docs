@@ -1,0 +1,401 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>gammapy.scripts.cta_sensitivity &#8212; gammapy v0.7</title>
+    <link rel="stylesheet" href="../../../_static/gammapy.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.7',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <link rel="shortcut icon" href="../../../_static/astropy_logo.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+<link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+<script type="text/javascript" src="../../../_static/copybutton.js"></script>
+
+
+  </head>
+  <body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">gamma</span><span id="logotext2">py</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="Astropy Homepage" href="http://www.astropy.org"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">gammapy v0.7</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for gammapy.scripts.cta_sensitivity</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">astropy.table</span> <span class="k">import</span> <span class="n">Table</span><span class="p">,</span> <span class="n">Column</span>
+<span class="kn">import</span> <span class="nn">astropy.units</span> <span class="k">as</span> <span class="nn">u</span>
+<span class="kn">from</span> <span class="nn">gammapy.utils.scripts</span> <span class="k">import</span> <span class="n">get_parser</span><span class="p">,</span> <span class="n">set_up_logging_from_args</span>
+<span class="kn">from</span> <span class="nn">gammapy.stats</span> <span class="k">import</span> <span class="n">significance_on_off</span>
+<span class="kn">from</span> <span class="nn">gammapy.spectrum.models</span> <span class="k">import</span> <span class="n">PowerLaw</span>
+<span class="kn">from</span> <span class="nn">gammapy.spectrum.utils</span> <span class="k">import</span> <span class="n">CountsPredictor</span>
+<span class="kn">from</span> <span class="nn">gammapy.scripts</span> <span class="k">import</span> <span class="n">CTAPerf</span>
+
+<span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;SensitivityEstimator&#39;</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="SensitivityEstimator"><a class="viewcode-back" href="../../../api/gammapy.scripts.SensitivityEstimator.html#gammapy.scripts.SensitivityEstimator">[docs]</a><span class="k">class</span> <span class="nc">SensitivityEstimator</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Estimate differential sensitivity for the ON/OFF method, ie 1D analysis</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    irf : `~gammapy.scripts.CTAPerf`</span>
+<span class="sd">        IRF object</span>
+<span class="sd">    livetime : `~astropy.units.Quantity`</span>
+<span class="sd">        Livetime (object with the units of time), e.g. 5*u.h</span>
+<span class="sd">    slope : `float`, optional</span>
+<span class="sd">        Index of the spectral shape (Power-law), should be positive (&gt;0)</span>
+<span class="sd">    alpha : `float`, optional</span>
+<span class="sd">        On/OFF normalisation</span>
+<span class="sd">    sigma : `float`, optional</span>
+<span class="sd">        Minimum significance</span>
+<span class="sd">    gamma_min : `float`, optional</span>
+<span class="sd">        Minimum number of gamma-rays</span>
+<span class="sd">    bkg_sys : `float`, optional</span>
+<span class="sd">        Fraction of Background systematics relative to the number of ON counts</span>
+<span class="sd">    random: : `int`, optional</span>
+<span class="sd">        Number of random trial to derive the number of gamma-rays</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+
+<span class="sd">    Compute and plot a sensitivity curve for CTA::</span>
+
+<span class="sd">        from gammapy.scripts import CTAPerf, SensitivityEstimator</span>
+<span class="sd">        filename = &#39;$GAMMAPY_EXTRA/datasets/cta/perf_prod2/point_like_non_smoothed/South_5h.fits.gz&#39;</span>
+<span class="sd">        irf = CTAPerf.read(filename)</span>
+<span class="sd">        sens = SensitivityEstimator(irf=irf, livetime=&#39;5h&#39;)</span>
+<span class="sd">        sens.run()</span>
+<span class="sd">        sens.print_results()</span>
+<span class="sd">        sens.plot()</span>
+
+<span class="sd">    Further examples in :gp-extra-notebook:`cta_sensitivity` .</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    For the moment, only the differential point-like sensitivity is computed at a fixed offset.</span>
+<span class="sd">    This class allows to determine for each reconstructed energy bin the flux associated to the number of gamma-ray</span>
+<span class="sd">    events for which the significance is &#39;sigma&#39;, and being larger than &#39;gamma_min&#39; and &#39;bkg_sys&#39;% larger than the</span>
+<span class="sd">    number of background events in the ON region</span>
+
+<span class="sd">    TODO:</span>
+
+<span class="sd">    - make the computation for any source size</span>
+<span class="sd">    - compute the integral sensitivity</span>
+<span class="sd">    - Add options to use different spectral shape?</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">irf</span><span class="p">,</span> <span class="n">livetime</span><span class="p">,</span> <span class="n">slope</span><span class="o">=</span><span class="mf">2.</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">sigma</span><span class="o">=</span><span class="mf">5.</span><span class="p">,</span> <span class="n">gamma_min</span><span class="o">=</span><span class="mf">10.</span><span class="p">,</span> <span class="n">bkg_sys</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">random</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">irf</span> <span class="o">=</span> <span class="n">irf</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">livetime</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">livetime</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;s&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">slope</span> <span class="o">=</span> <span class="n">slope</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sigma</span> <span class="o">=</span> <span class="n">sigma</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gamma_min</span> <span class="o">=</span> <span class="n">gamma_min</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bkg_sys</span> <span class="o">=</span> <span class="n">bkg_sys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">random</span> <span class="o">=</span> <span class="n">random</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">energy</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">diff_sens</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="SensitivityEstimator.get_bkg"><a class="viewcode-back" href="../../../api/gammapy.scripts.SensitivityEstimator.html#gammapy.scripts.SensitivityEstimator.get_bkg">[docs]</a>    <span class="k">def</span> <span class="nf">get_bkg</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bkg_rate</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Return the Background rate for each energy bin</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        bkg_rate : `~gammapy.scripts.BgRateTable`</span>
+<span class="sd">            Table of background rate</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        rate : `~numpy.ndarray`</span>
+<span class="sd">            Return an array of background counts (bins in reconstructed energy)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">bkg</span> <span class="o">=</span> <span class="n">bkg_rate</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">livetime</span>
+        <span class="k">return</span> <span class="n">bkg</span><span class="o">.</span><span class="n">value</span></div>
+
+<div class="viewcode-block" id="SensitivityEstimator.get_excess"><a class="viewcode-back" href="../../../api/gammapy.scripts.SensitivityEstimator.html#gammapy.scripts.SensitivityEstimator.get_excess">[docs]</a>    <span class="k">def</span> <span class="nf">get_excess</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bkg_counts</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute the gamma-ray excess for each energy bin.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        bkg_counts : `~numpy.ndarray`</span>
+<span class="sd">            Array of background counts (bins in reconstructed energy)</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        count : `~numpy.ndarray`</span>
+<span class="sd">            Array of gamma-ray excess (bins in reconstructed energy)</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Find the number of needed gamma excess events using newtons method.</span>
+<span class="sd">        Defines a function `significance_on_off(x, off, alpha) - self.sigma`</span>
+<span class="sd">        and uses scipy.optimize.newton to find the `x` for which this function</span>
+<span class="sd">        is zero.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">scipy.optimize</span> <span class="k">import</span> <span class="n">newton</span>
+
+        <span class="k">def</span> <span class="nf">target_function</span><span class="p">(</span><span class="n">on</span><span class="p">,</span> <span class="n">off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">significance_on_off</span><span class="p">(</span><span class="n">on</span><span class="p">,</span> <span class="n">off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">&#39;lima&#39;</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">sigma</span>
+
+        <span class="n">excess</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">bkg_counts</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">energy_bin</span><span class="p">,</span> <span class="n">bg_count</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">bkg_counts</span><span class="p">):</span>
+            <span class="c1"># if the number of bg events is to small just return the predefined minimum</span>
+            <span class="k">if</span> <span class="n">bg_count</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">excess</span><span class="p">[</span><span class="n">energy_bin</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gamma_min</span>
+                <span class="k">continue</span>
+
+            <span class="n">off</span> <span class="o">=</span> <span class="n">bg_count</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span>
+            <span class="c1"># provide a proper start guess for the minimizer</span>
+            <span class="n">on</span> <span class="o">=</span> <span class="n">bg_count</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">gamma_min</span>
+            <span class="n">e</span> <span class="o">=</span> <span class="n">newton</span><span class="p">(</span><span class="n">target_function</span><span class="p">,</span> <span class="n">x0</span><span class="o">=</span><span class="n">on</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">off</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">))</span>
+
+            <span class="c1"># excess is defined as the number of on events minues the number of background events</span>
+            <span class="n">excess</span><span class="p">[</span><span class="n">energy_bin</span><span class="p">]</span> <span class="o">=</span> <span class="n">e</span> <span class="o">-</span> <span class="n">bg_count</span>
+
+        <span class="k">return</span> <span class="n">excess</span></div>
+
+<div class="viewcode-block" id="SensitivityEstimator.get_1TeV_differential_flux"><a class="viewcode-back" href="../../../api/gammapy.scripts.SensitivityEstimator.html#gammapy.scripts.SensitivityEstimator.get_1TeV_differential_flux">[docs]</a>    <span class="k">def</span> <span class="nf">get_1TeV_differential_flux</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">excess_counts</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">aeff</span><span class="p">,</span> <span class="n">rmf</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute the differential fluxes at 1 TeV.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        excess_counts : `~numpy.ndarray`</span>
+<span class="sd">            Array of gamma-ray excess (bins in reconstructed energy)</span>
+<span class="sd">        model : `~gammapy.spectrum.models.SpectralModel`</span>
+<span class="sd">            Spectral model</span>
+<span class="sd">        aeff : `~gammapy.irf.EffectiveAreaTable`</span>
+<span class="sd">            Effective area</span>
+<span class="sd">        rmf : `~gammapy.irf.EnergyDispersion`</span>
+<span class="sd">            RMF</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        flux : `~astropy.units.Quantity`</span>
+<span class="sd">            Array of 1TeV fluxes (bins in reconstructed energy)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Compute expected excess</span>
+        <span class="n">predictor</span> <span class="o">=</span> <span class="n">CountsPredictor</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">aeff</span><span class="o">=</span><span class="n">aeff</span><span class="p">,</span> <span class="n">edisp</span><span class="o">=</span><span class="n">rmf</span><span class="p">,</span> <span class="n">livetime</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">livetime</span><span class="p">)</span>
+        <span class="n">predictor</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="n">predictor</span><span class="o">.</span><span class="n">npred</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">value</span>
+
+        <span class="c1"># Conversion in flux</span>
+        <span class="n">flux</span> <span class="o">=</span> <span class="n">excess_counts</span> <span class="o">/</span> <span class="n">counts</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s1">&#39;cm-2 s-1 TeV-1&#39;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">flux</span></div>
+
+<div class="viewcode-block" id="SensitivityEstimator.run"><a class="viewcode-back" href="../../../api/gammapy.scripts.SensitivityEstimator.html#gammapy.scripts.SensitivityEstimator.run">[docs]</a>    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Run the algorithm to compute the differential sensitivity as explained in the document of the class.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Creation of the spectral shape</span>
+        <span class="n">norm</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s1">&#39;cm-2 s-1 TeV-1&#39;</span><span class="p">)</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">slope</span>
+        <span class="n">ref</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">TeV</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">PowerLaw</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="n">norm</span><span class="p">,</span> <span class="n">reference</span><span class="o">=</span><span class="n">ref</span><span class="p">)</span>
+
+        <span class="c1"># Get the bins in reconstructed  energy</span>
+        <span class="n">reco_energy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">irf</span><span class="o">.</span><span class="n">bkg</span><span class="o">.</span><span class="n">energy</span>
+
+        <span class="c1"># Start the computation</span>
+        <span class="n">bkg_counts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_bkg</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">irf</span><span class="o">.</span><span class="n">bkg</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">random</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">excess_counts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_excess</span><span class="p">(</span><span class="n">bkg_counts</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ex</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_excess</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">poisson</span><span class="p">(</span><span class="n">bkg_counts</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">random</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+                <span class="n">ex</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_excess</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">poisson</span><span class="p">(</span><span class="n">bkg_counts</span><span class="p">))</span>
+            <span class="n">excess_counts</span> <span class="o">=</span> <span class="n">ex</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">random</span><span class="p">)</span>
+
+        <span class="n">phi_0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_1TeV_differential_flux</span><span class="p">(</span><span class="n">excess_counts</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">irf</span><span class="o">.</span><span class="n">aeff</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">irf</span><span class="o">.</span><span class="n">rmf</span><span class="p">)</span>
+        <span class="n">energy</span> <span class="o">=</span> <span class="n">reco_energy</span><span class="o">.</span><span class="n">log_center</span><span class="p">()</span>
+        <span class="n">dnde_model</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="n">energy</span><span class="o">=</span><span class="n">energy</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span> <span class="n">amplitude</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">reference</span><span class="o">=</span><span class="n">ref</span><span class="p">)</span>
+        <span class="n">diff_flux</span> <span class="o">=</span> <span class="p">(</span><span class="n">phi_0</span> <span class="o">*</span> <span class="n">dnde_model</span> <span class="o">*</span> <span class="n">energy</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;erg / (cm2 s)&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">energy</span> <span class="o">=</span> <span class="n">reco_energy</span><span class="o">.</span><span class="n">log_center</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">diff_sens</span> <span class="o">=</span> <span class="n">diff_flux</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">diff_sensi_table</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Differential sensitivity table (`~astropy.table.Table`).&quot;&quot;&quot;</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">()</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;ENERGY&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">energy</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">unit</span><span class="p">,</span>
+                                 <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Reconstructed Energy&#39;</span><span class="p">)</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;FLUX&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">diff_sens</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">diff_sens</span><span class="o">.</span><span class="n">unit</span><span class="p">,</span>
+                               <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Differential flux&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">table</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">_ref_diff_sensi</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Reference differential sensitivity table (`~astropy.table.Table`)&quot;&quot;&quot;</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">()</span>
+        <span class="n">energy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">irf</span><span class="o">.</span><span class="n">sens</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">log_center</span><span class="p">()</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;ENERGY&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">energy</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="n">energy</span><span class="o">.</span><span class="n">unit</span><span class="p">,</span>
+                                 <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Reconstructed Energy&#39;</span><span class="p">)</span>
+        <span class="n">flux</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">irf</span><span class="o">.</span><span class="n">sens</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;FLUX&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">flux</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="n">flux</span><span class="o">.</span><span class="n">unit</span><span class="p">,</span>
+                               <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Differential flux&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">table</span>
+
+<div class="viewcode-block" id="SensitivityEstimator.print_results"><a class="viewcode-back" href="../../../api/gammapy.scripts.SensitivityEstimator.html#gammapy.scripts.SensitivityEstimator.print_results">[docs]</a>    <span class="k">def</span> <span class="nf">print_results</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Print results to the console.&quot;&quot;&quot;</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;** Sensitivity **&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">diff_sensi_table</span><span class="o">.</span><span class="n">pprint</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">log</span><span class="o">.</span><span class="n">getEffectiveLevel</span><span class="p">()</span> <span class="o">==</span> <span class="mi">10</span><span class="p">:</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;** ROOT Sensitivity **&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_ref_diff_sensi</span><span class="o">.</span><span class="n">pprint</span><span class="p">()</span>
+            <span class="n">rel_diff</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">diff_sensi_table</span><span class="p">[</span><span class="s1">&#39;FLUX&#39;</span><span class="p">]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ref_diff_sensi</span><span class="p">[</span><span class="s1">&#39;FLUX&#39;</span><span class="p">])</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ref_diff_sensi</span><span class="p">[</span><span class="s1">&#39;FLUX&#39;</span><span class="p">]</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;** Relative Difference (ref=ROOT)**&quot;</span><span class="p">)</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">rel_diff</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SensitivityEstimator.plot"><a class="viewcode-back" href="../../../api/gammapy.scripts.SensitivityEstimator.html#gammapy.scripts.SensitivityEstimator.plot">[docs]</a>    <span class="k">def</span> <span class="nf">plot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Plot the sensitivity curve.&quot;&quot;&quot;</span>
+        <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+
+        <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">canvas</span><span class="o">.</span><span class="n">set_window_title</span><span class="p">(</span><span class="s2">&quot;Sensitivity&quot;</span><span class="p">)</span>
+        <span class="n">ax</span> <span class="o">=</span> <span class="n">ax</span> <span class="ow">or</span> <span class="n">plt</span><span class="o">.</span><span class="n">gca</span><span class="p">()</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">diff_sens</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span>
+                <span class="n">label</span><span class="o">=</span><span class="sa">r</span><span class="s2">&quot;        $\sigma$=&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot; T=&quot;</span> <span class="o">+</span> \
+                      <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">livetime</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;h&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;h </span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="sa">r</span><span class="s2">&quot;$\alpha$=&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">)</span> <span class="o">+</span> \
+                      <span class="sa">r</span><span class="s2">&quot; Syst$_</span><span class="si">{BKG}</span><span class="s2">$=&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bkg_sys</span> <span class="o">*</span> <span class="mi">100</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;%&quot;</span> <span class="o">+</span> <span class="sa">r</span><span class="s2">&quot; $\gamma_</span><span class="si">{min}</span><span class="s2">$=&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gamma_min</span><span class="p">))</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xscale</span><span class="p">(</span><span class="s1">&#39;log&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_yscale</span><span class="p">(</span><span class="s1">&#39;log&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Reco Energy [</span><span class="si">{}</span><span class="s1">]&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">unit</span><span class="p">))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Sensitivity [</span><span class="si">{}</span><span class="s1">]&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">diff_sens</span><span class="o">.</span><span class="n">unit</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">log</span><span class="o">.</span><span class="n">getEffectiveLevel</span><span class="p">()</span> <span class="o">==</span> <span class="mi">10</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">irf</span><span class="o">.</span><span class="n">sens</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;ROOT&quot;</span><span class="p">)</span>
+
+        <span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">ax</span></div></div>
+
+
+<span class="k">def</span> <span class="nf">sensitivity_estimate_cli</span><span class="p">(</span><span class="n">args</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Sensitivity estimator command line interface.</span>
+
+<span class="sd">    Uses `~gammapy.scripts.SensitivityEstimator`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">parser</span> <span class="o">=</span> <span class="n">get_parser</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="n">SensitivityEstimator</span><span class="o">.</span><span class="vm">__doc__</span><span class="p">,</span> <span class="n">function</span><span class="o">=</span><span class="n">SensitivityEstimator</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;irffile&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;IRF file (containing the path)&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;livetime&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Livetime in hours (units in u.h)&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;-slope&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">2.</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Slope of the power law (&gt;0)&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;-alpha&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Optional: ON/OFF normalisation&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;-sigma&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">5.</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Optional: number of sigma for the sensitivity&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;-gamma_min&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">10.</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Optional: minimum number of gamma-rays&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;-bkg_sys&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Optional: Fraction of Background systematics relative to the number of ON counts&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;-nrand&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Optional: Number of random trial to derive the number of gamma-rays&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;-l&quot;</span><span class="p">,</span> <span class="s2">&quot;--loglevel&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s1">&#39;info&#39;</span><span class="p">,</span>
+                        <span class="n">choices</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;debug&#39;</span><span class="p">,</span> <span class="s1">&#39;info&#39;</span><span class="p">,</span> <span class="s1">&#39;warning&#39;</span><span class="p">,</span> <span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="s1">&#39;critical&#39;</span><span class="p">],</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s2">&quot;Set the logging level&quot;</span><span class="p">)</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+    <span class="n">set_up_logging_from_args</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+
+    <span class="n">IRFs</span> <span class="o">=</span> <span class="n">CTAPerf</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">irffile</span><span class="p">)</span>
+
+    <span class="n">sensi</span> <span class="o">=</span> <span class="n">SensitivityEstimator</span><span class="p">(</span><span class="n">irf</span><span class="o">=</span><span class="n">IRFs</span><span class="p">,</span>
+                                 <span class="n">livetime</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">livetime</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s1">&#39;h&#39;</span><span class="p">),</span>
+                                 <span class="n">slope</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">slope</span><span class="p">,</span>
+                                 <span class="n">alpha</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">alpha</span><span class="p">,</span>
+                                 <span class="n">sigma</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">sigma</span><span class="p">,</span>
+                                 <span class="n">gamma_min</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">gamma_min</span><span class="p">,</span>
+                                 <span class="n">bkg_sys</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">bkg_sys</span><span class="p">,</span>
+                                 <span class="n">random</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">nrand</span><span class="p">)</span>
+    <span class="n">sensi</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+    <span class="n">sensi</span><span class="o">.</span><span class="n">print_results</span><span class="p">()</span>
+    <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+    <span class="n">sensi</span><span class="o">.</span><span class="n">plot</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">sensitivity_estimate_cli</span><span class="p">()</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2018, The Gammapy developers.<br/>
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.6.7. &nbsp;
+    Last built 01 Mar 2018. <br/>
+  </p>
+</footer>
+  </body>
+</html>

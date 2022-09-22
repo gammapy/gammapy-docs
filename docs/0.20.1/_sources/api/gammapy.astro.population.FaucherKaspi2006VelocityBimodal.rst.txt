@@ -1,0 +1,143 @@
+FaucherKaspi2006VelocityBimodal
+===============================
+
+.. currentmodule:: gammapy.astro.population
+
+.. autoclass:: FaucherKaspi2006VelocityBimodal
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~FaucherKaspi2006VelocityBimodal.amplitude
+      ~FaucherKaspi2006VelocityBimodal.bbox_with_units
+      ~FaucherKaspi2006VelocityBimodal.bounding_box
+      ~FaucherKaspi2006VelocityBimodal.bounds
+      ~FaucherKaspi2006VelocityBimodal.col_fit_deriv
+      ~FaucherKaspi2006VelocityBimodal.cov_matrix
+      ~FaucherKaspi2006VelocityBimodal.eqcons
+      ~FaucherKaspi2006VelocityBimodal.fit_deriv
+      ~FaucherKaspi2006VelocityBimodal.fittable
+      ~FaucherKaspi2006VelocityBimodal.fixed
+      ~FaucherKaspi2006VelocityBimodal.has_user_bounding_box
+      ~FaucherKaspi2006VelocityBimodal.has_user_inverse
+      ~FaucherKaspi2006VelocityBimodal.ineqcons
+      ~FaucherKaspi2006VelocityBimodal.input_units
+      ~FaucherKaspi2006VelocityBimodal.input_units_allow_dimensionless
+      ~FaucherKaspi2006VelocityBimodal.input_units_equivalencies
+      ~FaucherKaspi2006VelocityBimodal.input_units_strict
+      ~FaucherKaspi2006VelocityBimodal.inputs
+      ~FaucherKaspi2006VelocityBimodal.inverse
+      ~FaucherKaspi2006VelocityBimodal.linear
+      ~FaucherKaspi2006VelocityBimodal.meta
+      ~FaucherKaspi2006VelocityBimodal.model_constraints
+      ~FaucherKaspi2006VelocityBimodal.model_set_axis
+      ~FaucherKaspi2006VelocityBimodal.n_inputs
+      ~FaucherKaspi2006VelocityBimodal.n_outputs
+      ~FaucherKaspi2006VelocityBimodal.n_submodels
+      ~FaucherKaspi2006VelocityBimodal.name
+      ~FaucherKaspi2006VelocityBimodal.outputs
+      ~FaucherKaspi2006VelocityBimodal.param_names
+      ~FaucherKaspi2006VelocityBimodal.param_sets
+      ~FaucherKaspi2006VelocityBimodal.parameter_constraints
+      ~FaucherKaspi2006VelocityBimodal.parameters
+      ~FaucherKaspi2006VelocityBimodal.return_units
+      ~FaucherKaspi2006VelocityBimodal.separable
+      ~FaucherKaspi2006VelocityBimodal.sigma_1
+      ~FaucherKaspi2006VelocityBimodal.sigma_2
+      ~FaucherKaspi2006VelocityBimodal.standard_broadcasting
+      ~FaucherKaspi2006VelocityBimodal.stds
+      ~FaucherKaspi2006VelocityBimodal.sync_constraints
+      ~FaucherKaspi2006VelocityBimodal.tied
+      ~FaucherKaspi2006VelocityBimodal.uses_quantity
+      ~FaucherKaspi2006VelocityBimodal.w
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~FaucherKaspi2006VelocityBimodal.__call__
+      ~FaucherKaspi2006VelocityBimodal.coerce_units
+      ~FaucherKaspi2006VelocityBimodal.copy
+      ~FaucherKaspi2006VelocityBimodal.deepcopy
+      ~FaucherKaspi2006VelocityBimodal.evaluate
+      ~FaucherKaspi2006VelocityBimodal.get_bounding_box
+      ~FaucherKaspi2006VelocityBimodal.has_inverse
+      ~FaucherKaspi2006VelocityBimodal.input_shape
+      ~FaucherKaspi2006VelocityBimodal.output_units
+      ~FaucherKaspi2006VelocityBimodal.prepare_inputs
+      ~FaucherKaspi2006VelocityBimodal.prepare_outputs
+      ~FaucherKaspi2006VelocityBimodal.rename
+      ~FaucherKaspi2006VelocityBimodal.render
+      ~FaucherKaspi2006VelocityBimodal.set_slice_args
+      ~FaucherKaspi2006VelocityBimodal.strip_units_from_tree
+      ~FaucherKaspi2006VelocityBimodal.sum_of_implicit_terms
+      ~FaucherKaspi2006VelocityBimodal.with_units_from_data
+      ~FaucherKaspi2006VelocityBimodal.without_units_for_data
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: amplitude
+   .. autoattribute:: bbox_with_units
+   .. autoattribute:: bounding_box
+   .. autoattribute:: bounds
+   .. autoattribute:: col_fit_deriv
+   .. autoattribute:: cov_matrix
+   .. autoattribute:: eqcons
+   .. autoattribute:: fit_deriv
+   .. autoattribute:: fittable
+   .. autoattribute:: fixed
+   .. autoattribute:: has_user_bounding_box
+   .. autoattribute:: has_user_inverse
+   .. autoattribute:: ineqcons
+   .. autoattribute:: input_units
+   .. autoattribute:: input_units_allow_dimensionless
+   .. autoattribute:: input_units_equivalencies
+   .. autoattribute:: input_units_strict
+   .. autoattribute:: inputs
+   .. autoattribute:: inverse
+   .. autoattribute:: linear
+   .. autoattribute:: meta
+   .. autoattribute:: model_constraints
+   .. autoattribute:: model_set_axis
+   .. autoattribute:: n_inputs
+   .. autoattribute:: n_outputs
+   .. autoattribute:: n_submodels
+   .. autoattribute:: name
+   .. autoattribute:: outputs
+   .. autoattribute:: param_names
+   .. autoattribute:: param_sets
+   .. autoattribute:: parameter_constraints
+   .. autoattribute:: parameters
+   .. autoattribute:: return_units
+   .. autoattribute:: separable
+   .. autoattribute:: sigma_1
+   .. autoattribute:: sigma_2
+   .. autoattribute:: standard_broadcasting
+   .. autoattribute:: stds
+   .. autoattribute:: sync_constraints
+   .. autoattribute:: tied
+   .. autoattribute:: uses_quantity
+   .. autoattribute:: w
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: __call__
+   .. automethod:: coerce_units
+   .. automethod:: copy
+   .. automethod:: deepcopy
+   .. automethod:: evaluate
+   .. automethod:: get_bounding_box
+   .. automethod:: has_inverse
+   .. automethod:: input_shape
+   .. automethod:: output_units
+   .. automethod:: prepare_inputs
+   .. automethod:: prepare_outputs
+   .. automethod:: rename
+   .. automethod:: render
+   .. automethod:: set_slice_args
+   .. automethod:: strip_units_from_tree
+   .. automethod:: sum_of_implicit_terms
+   .. automethod:: with_units_from_data
+   .. automethod:: without_units_for_data

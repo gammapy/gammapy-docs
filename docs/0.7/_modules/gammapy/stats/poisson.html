@@ -1,0 +1,649 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>gammapy.stats.poisson &#8212; gammapy v0.7</title>
+    <link rel="stylesheet" href="../../../_static/gammapy.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.7',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <link rel="shortcut icon" href="../../../_static/astropy_logo.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+<link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+<script type="text/javascript" src="../../../_static/copybutton.js"></script>
+
+
+  </head>
+  <body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">gamma</span><span id="logotext2">py</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="Astropy Homepage" href="http://www.astropy.org"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">gammapy v0.7</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for gammapy.stats.poisson</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Poisson significance computations for these two cases.</span>
+
+<span class="sd">* known background level ``mu_bkg``</span>
+<span class="sd">* background estimated from ``n_off`</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;background&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;background_error&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;excess&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;excess_error&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;significance&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;significance_on_off&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;excess_matching_significance&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;excess_matching_significance_on_off&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">__doctest_skip__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="background"><a class="viewcode-back" href="../../../api/gammapy.stats.background.html#gammapy.stats.background">[docs]</a><span class="k">def</span> <span class="nf">background</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Estimate background in the on-region from an off-region observation.</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        \mu_{background} = \alpha \times n_{off}</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_off : array_like</span>
+<span class="sd">        Observed number of counts in the off region</span>
+<span class="sd">    alpha : array_like</span>
+<span class="sd">        On / off region exposure ratio for background events</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    background : ndarray</span>
+<span class="sd">        Background estimate for the on region</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; background(n_off=4, alpha=0.1)</span>
+<span class="sd">    0.4</span>
+<span class="sd">    &gt;&gt;&gt; background(n_off=9, alpha=0.2)</span>
+<span class="sd">    1.8</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">n_off</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">alpha</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">alpha</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">alpha</span> <span class="o">*</span> <span class="n">n_off</span></div>
+
+
+<div class="viewcode-block" id="background_error"><a class="viewcode-back" href="../../../api/gammapy.stats.background_error.html#gammapy.stats.background_error">[docs]</a><span class="k">def</span> <span class="nf">background_error</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Estimate standard error on background</span>
+<span class="sd">    in the on region from an off-region observation.</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">          \Delta\mu_{bkg} = \alpha \times \sqrt{n_{off}}</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_off : array_like</span>
+<span class="sd">        Observed number of counts in the off region</span>
+<span class="sd">    alpha : array_like</span>
+<span class="sd">        On / off region exposure ratio for background events</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    background : ndarray</span>
+<span class="sd">        Background estimate for the on region</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; background_error(n_off=4, alpha=0.1)</span>
+<span class="sd">    0.2</span>
+<span class="sd">    &gt;&gt;&gt; background_error(n_off=9, alpha=0.2)</span>
+<span class="sd">    0.6</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">n_off</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">alpha</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">alpha</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">alpha</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_off</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="excess"><a class="viewcode-back" href="../../../api/gammapy.stats.excess.html#gammapy.stats.excess">[docs]</a><span class="k">def</span> <span class="nf">excess</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Estimate excess in the on region for an on-off observation.</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">          \mu_{excess} = n_{on} - \alpha \times n_{off}</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_on : array_like</span>
+<span class="sd">        Observed number of counts in the on region</span>
+<span class="sd">    n_off : array_like</span>
+<span class="sd">        Observed number of counts in the off region</span>
+<span class="sd">    alpha : array_like</span>
+<span class="sd">        On / off region exposure ratio for background events</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    excess : ndarray</span>
+<span class="sd">        Excess estimate for the on region</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; excess(n_on=10, n_off=20, alpha=0.1)</span>
+<span class="sd">    8.0</span>
+<span class="sd">    &gt;&gt;&gt; excess(n_on=4, n_off=9, alpha=0.5)</span>
+<span class="sd">    -0.5</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">n_on</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">n_off</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">alpha</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">alpha</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">n_on</span> <span class="o">-</span> <span class="n">alpha</span> <span class="o">*</span> <span class="n">n_off</span></div>
+
+
+<div class="viewcode-block" id="excess_error"><a class="viewcode-back" href="../../../api/gammapy.stats.excess_error.html#gammapy.stats.excess_error">[docs]</a><span class="k">def</span> <span class="nf">excess_error</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Estimate error on excess for an on-off measurement.</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        \Delta\mu_{excess} = \sqrt{n_{on} + \alpha ^ 2 \times n_{off}}</span>
+
+<span class="sd">    TODO: Implement better error and limit estimates (Li &amp; Ma, Rolke)!</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_on : array_like</span>
+<span class="sd">        Observed number of counts in the on region</span>
+<span class="sd">    n_off : array_like</span>
+<span class="sd">        Observed number of counts in the off region</span>
+<span class="sd">    alpha : array_like</span>
+<span class="sd">        On / off region exposure ratio for background events</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    excess_error : ndarray</span>
+<span class="sd">        Excess error estimate</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; excess_error(n_on=10, n_off=20, alpha=0.1)</span>
+<span class="sd">    3.1937438845342623...</span>
+<span class="sd">    &gt;&gt;&gt; excess_error(n_on=4, n_off=9, alpha=0.5)</span>
+<span class="sd">    2.5</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">n_on</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">n_off</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">alpha</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">alpha</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+    <span class="n">variance</span> <span class="o">=</span> <span class="n">n_on</span> <span class="o">+</span> <span class="p">(</span><span class="n">alpha</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="n">n_off</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">variance</span><span class="p">)</span></div>
+
+
+<span class="c1"># TODO: rename this function to something more explicit.</span>
+<span class="c1"># It currently has the same name as the `gammapy/stats/significance.py`</span>
+<span class="c1"># and shadows in in `gammapy/stats/__init.py`</span>
+<span class="c1"># Maybe `significance_poisson`?</span>
+<div class="viewcode-block" id="significance"><a class="viewcode-back" href="../../../api/gammapy.stats.significance.html#gammapy.stats.significance">[docs]</a><span class="k">def</span> <span class="nf">significance</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">mu_bkg</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">&#39;lima&#39;</span><span class="p">,</span> <span class="n">n_on_min</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Compute significance for an observed number of counts and known background.</span>
+
+<span class="sd">    The simple significance estimate :math:`S_{simple}` is given by</span>
+
+<span class="sd">    .. math ::</span>
+
+<span class="sd">        S_{simple} = (n_{on} - \mu_{bkg}) / \sqrt{\mu_{bkg}}</span>
+
+<span class="sd">    The Li &amp; Ma significance estimate corresponds to the Li &amp; Ma formula (17)</span>
+<span class="sd">    in the limiting case of known background :math:`\mu_{bkg} = \alpha \times n_{off}`</span>
+<span class="sd">    with :math:`\alpha \to 0`.</span>
+<span class="sd">    The following formula for :math:`S_{lima}` was obtained with Mathematica:</span>
+
+<span class="sd">    .. math ::</span>
+
+<span class="sd">        S_{lima} = \left[ 2 n_{on} \log \left( \frac{n_{on}}{\mu_{bkg}} \right) - n_{on} + \mu_{bkg} \right] ^ {1/2}</span>
+
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_on : array_like</span>
+<span class="sd">        Observed number of counts</span>
+<span class="sd">    mu_bkg : array_like</span>
+<span class="sd">        Known background level</span>
+<span class="sd">    method : str</span>
+<span class="sd">        Select method: &#39;lima&#39; or &#39;simple&#39;</span>
+<span class="sd">    n_on_min : float</span>
+<span class="sd">        Minimum ``n_on`` (return ``NaN`` for smaller values)</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    significance : ndarray</span>
+<span class="sd">        Significance according to the method chosen.</span>
+
+<span class="sd">    References</span>
+<span class="sd">    ----------</span>
+<span class="sd">    .. [1] Li and Ma, &quot;Analysis methods for results in gamma-ray astronomy&quot;,</span>
+<span class="sd">       `Link &lt;http://adsabs.harvard.edu/abs/1983ApJ...272..317L&gt;`_</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    excess, significance_on_off</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; significance(n_on=11, mu_bkg=9, method=&#39;lima&#39;)</span>
+<span class="sd">    0.64401498442763649</span>
+<span class="sd">    &gt;&gt;&gt; significance(n_on=11, mu_bkg=9, method=&#39;simple&#39;)</span>
+<span class="sd">    0.66666666666666663</span>
+<span class="sd">    &gt;&gt;&gt; significance(n_on=7, mu_bkg=9, method=&#39;lima&#39;)</span>
+<span class="sd">    -0.69397262486881672</span>
+<span class="sd">    &gt;&gt;&gt; significance(n_on=7, mu_bkg=9, method=&#39;simple&#39;)</span>
+<span class="sd">    -0.66666666666666663</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">n_on</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">mu_bkg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">mu_bkg</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;simple&#39;</span><span class="p">:</span>
+        <span class="n">func</span> <span class="o">=</span> <span class="n">_significance_simple</span>
+    <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;lima&#39;</span><span class="p">:</span>
+        <span class="n">func</span> <span class="o">=</span> <span class="n">_significance_lima</span>
+    <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;direct&#39;</span><span class="p">:</span>
+        <span class="n">func</span> <span class="o">=</span> <span class="n">_significance_direct</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Invalid method: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">method</span><span class="p">))</span>
+
+    <span class="c1"># For low `n_on` values, don&#39;t try to compute a significance and return `NaN`.</span>
+    <span class="n">n_on</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">atleast_1d</span><span class="p">(</span><span class="n">n_on</span><span class="p">)</span>
+    <span class="n">mu_bkg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">atleast_1d</span><span class="p">(</span><span class="n">mu_bkg</span><span class="p">)</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_on</span> <span class="o">&gt;=</span> <span class="n">n_on_min</span><span class="p">)</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">n_on</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+    <span class="n">s</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="n">n_on</span><span class="p">[</span><span class="n">mask</span><span class="p">],</span> <span class="n">mu_bkg</span><span class="p">[</span><span class="n">mask</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="n">s</span></div>
+
+
+<span class="k">def</span> <span class="nf">_significance_simple</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">mu_bkg</span><span class="p">):</span>
+    <span class="c1"># TODO: check this formula against ???</span>
+    <span class="n">excess</span> <span class="o">=</span> <span class="n">n_on</span> <span class="o">-</span> <span class="n">mu_bkg</span>
+    <span class="n">bkg_err</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">mu_bkg</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">excess</span> <span class="o">/</span> <span class="n">bkg_err</span>
+
+
+<span class="k">def</span> <span class="nf">_significance_lima</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">mu_bkg</span><span class="p">):</span>
+    <span class="n">sign</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="n">n_on</span> <span class="o">-</span> <span class="n">mu_bkg</span><span class="p">)</span>
+    <span class="n">val</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_on</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">n_on</span> <span class="o">/</span> <span class="n">mu_bkg</span><span class="p">)</span> <span class="o">-</span> <span class="n">n_on</span> <span class="o">+</span> <span class="n">mu_bkg</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">sign</span> <span class="o">*</span> <span class="n">val</span>
+
+
+<span class="k">def</span> <span class="nf">_significance_direct</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">mu_bkg</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Compute significance directly via Poisson probability.</span>
+
+<span class="sd">    Use this method for small ``n_on &lt; 10``.</span>
+<span class="sd">    In this case the Li &amp; Ma formula isn&#39;t correct any more.</span>
+
+<span class="sd">    TODO: add large unit test coverage (where is it numerically precise enough)?</span>
+<span class="sd">    TODO: check coverage with MC simulation</span>
+
+<span class="sd">    I&#39;m getting a positive significance for zero observed counts and small mu_bkg.</span>
+<span class="sd">    That doesn&#39;t make too much sense ...</span>
+
+<span class="sd">    &gt;&gt;&gt; stats.poisson._significance_direct(0, 2)</span>
+<span class="sd">    -1.1015196284987503</span>
+<span class="sd">    &gt;&gt;&gt; stats.poisson._significance_direct(0, 0.1)</span>
+<span class="sd">    1.309617799458493</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">scipy.stats</span> <span class="k">import</span> <span class="n">norm</span><span class="p">,</span> <span class="n">poisson</span>
+
+    <span class="c1"># Compute tail probability to see n_on or more counts</span>
+    <span class="n">probability</span> <span class="o">=</span> <span class="n">poisson</span><span class="o">.</span><span class="n">sf</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">mu_bkg</span><span class="p">)</span>
+
+    <span class="c1"># Convert probability to a significance</span>
+    <span class="n">significance</span> <span class="o">=</span> <span class="n">norm</span><span class="o">.</span><span class="n">isf</span><span class="p">(</span><span class="n">probability</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">significance</span>
+
+
+<div class="viewcode-block" id="significance_on_off"><a class="viewcode-back" href="../../../api/gammapy.stats.significance_on_off.html#gammapy.stats.significance_on_off">[docs]</a><span class="k">def</span> <span class="nf">significance_on_off</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">&#39;lima&#39;</span><span class="p">,</span>
+                        <span class="n">neglect_background_uncertainty</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Compute significance of an on-off observation.</span>
+
+<span class="sd">    TODO: describe available methods.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_on : array_like</span>
+<span class="sd">        Observed number of counts in the on region</span>
+<span class="sd">    n_off : array_like</span>
+<span class="sd">        Observed number of counts in the off region</span>
+<span class="sd">    alpha : array_like</span>
+<span class="sd">        On / off region exposure ratio for background events</span>
+<span class="sd">    method : {&#39;lima&#39;, &#39;simple&#39;, &#39;direct&#39;}</span>
+<span class="sd">        Select method</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    significance : array</span>
+<span class="sd">        Significance according to the method chosen.</span>
+
+<span class="sd">    References</span>
+<span class="sd">    ----------</span>
+<span class="sd">    .. [1] Li and Ma, &quot;Analysis methods for results in gamma-ray astronomy&quot;,</span>
+<span class="sd">       `Link &lt;http://adsabs.harvard.edu/abs/1983ApJ...272..317L&gt;`_</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    significance, excess_matching_significance_on_off</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; significance_on_off(n_on=10, n_off=20, alpha=0.1, method=&#39;lima&#39;)</span>
+<span class="sd">    3.6850322319420274</span>
+<span class="sd">    &gt;&gt;&gt; significance_on_off(n_on=10, n_off=20, alpha=0.1, method=&#39;simple&#39;)</span>
+<span class="sd">    2.5048971643405982</span>
+<span class="sd">    &gt;&gt;&gt; significance_on_off(n_on=10, n_off=20, alpha=0.1, method=&#39;direct&#39;)</span>
+<span class="sd">    3.5281644971409953</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">n_on</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">n_off</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">alpha</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">alpha</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;simple&#39;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">neglect_background_uncertainty</span><span class="p">:</span>
+            <span class="n">mu_bkg</span> <span class="o">=</span> <span class="n">background</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">_significance_simple</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">mu_bkg</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">_significance_simple_on_off</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;lima&#39;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">neglect_background_uncertainty</span><span class="p">:</span>
+            <span class="n">mu_bkg</span> <span class="o">=</span> <span class="n">background</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">_significance_lima</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">mu_bkg</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">_significance_lima_on_off</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;direct&#39;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">neglect_background_uncertainty</span><span class="p">:</span>
+            <span class="n">mu_bkg</span> <span class="o">=</span> <span class="n">background</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">_significance_direct</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">mu_bkg</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">_significance_direct_on_off</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Invalid method: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">method</span><span class="p">))</span></div>
+
+
+<span class="k">def</span> <span class="nf">_significance_simple_on_off</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Compute significance with a simple, somewhat biased formula.</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        S = \mu_{excess} / \Delta\mu_{excess}</span>
+
+<span class="sd">        where</span>
+
+<span class="sd">        \mu_{excess} = n_{on} - \alpha \times n_{off}</span>
+
+<span class="sd">        \Delta\mu_{excess} = \sqrt{n_{on} + \alpha ^ 2 \times n_{off}}</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    This function implements formula (5) of Li &amp; Ma.</span>
+<span class="sd">    Li &amp; Ma show that it is somewhat biased,</span>
+<span class="sd">    but it does have the advantage of being analytically invertible,</span>
+<span class="sd">    i.e. there is an analytical formula for the inverse,</span>
+<span class="sd">    which is often used in practice as part of sensitivity computation.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">excess_</span> <span class="o">=</span> <span class="n">excess</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span>
+    <span class="n">excess_error_</span> <span class="o">=</span> <span class="n">excess_error</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">excess_</span> <span class="o">/</span> <span class="n">excess_error_</span>
+
+
+<span class="k">def</span> <span class="nf">_significance_lima_on_off</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Compute significance with the Li &amp; Ma formula (17).&quot;&quot;&quot;</span>
+    <span class="n">sign</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="n">excess</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">))</span>
+
+    <span class="n">tt</span> <span class="o">=</span> <span class="p">(</span><span class="n">alpha</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_on</span> <span class="o">+</span> <span class="n">n_off</span><span class="p">)</span>
+    <span class="n">ll</span> <span class="o">=</span> <span class="n">n_on</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">n_on</span> <span class="o">*</span> <span class="n">tt</span> <span class="o">/</span> <span class="n">alpha</span><span class="p">)</span>
+    <span class="n">mm</span> <span class="o">=</span> <span class="n">n_off</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">n_off</span> <span class="o">*</span> <span class="n">tt</span><span class="p">)</span>
+    <span class="n">val</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="p">(</span><span class="n">ll</span> <span class="o">+</span> <span class="n">mm</span><span class="p">)))</span>
+
+    <span class="k">return</span> <span class="n">sign</span> <span class="o">*</span> <span class="n">val</span>
+
+
+<span class="k">def</span> <span class="nf">_significance_direct_on_off</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Compute significance directly via Poisson probability.</span>
+
+<span class="sd">    Use this method for small n_on &lt; 10.</span>
+<span class="sd">    In this case the Li &amp; Ma formula isn&#39;t correct any more.</span>
+
+<span class="sd">    * TODO: add reference</span>
+<span class="sd">    * TODO: add large unit test coverage (where is it numerically precise enough)?</span>
+<span class="sd">    * TODO: check coverage with MC simulation</span>
+<span class="sd">    * TODO: implement in Cython and vectorize n_on (accept numpy  array n_on as input)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">math</span> <span class="k">import</span> <span class="n">factorial</span> <span class="k">as</span> <span class="n">fac</span>
+    <span class="kn">from</span> <span class="nn">scipy.stats</span> <span class="k">import</span> <span class="n">norm</span>
+
+    <span class="c1"># Compute tail probability to see n_on or more counts</span>
+    <span class="n">probability</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n_on</span><span class="p">):</span>
+        <span class="n">term_1</span> <span class="o">=</span> <span class="n">alpha</span> <span class="o">**</span> <span class="n">n</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">alpha</span><span class="p">)</span> <span class="o">**</span> <span class="p">(</span><span class="n">n_off</span> <span class="o">+</span> <span class="n">n</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">term_2</span> <span class="o">=</span> <span class="n">fac</span><span class="p">(</span><span class="n">n_off</span> <span class="o">+</span> <span class="n">n</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">fac</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">*</span> <span class="n">fac</span><span class="p">(</span><span class="n">n_off</span><span class="p">))</span>
+        <span class="n">probability</span> <span class="o">-=</span> <span class="n">term_1</span> <span class="o">*</span> <span class="n">term_2</span>
+
+    <span class="c1"># Convert probability to a significance</span>
+    <span class="n">significance</span> <span class="o">=</span> <span class="n">norm</span><span class="o">.</span><span class="n">isf</span><span class="p">(</span><span class="n">probability</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">significance</span>
+
+
+<div class="viewcode-block" id="excess_matching_significance"><a class="viewcode-back" href="../../../api/gammapy.stats.excess_matching_significance.html#gammapy.stats.excess_matching_significance">[docs]</a><span class="k">def</span> <span class="nf">excess_matching_significance</span><span class="p">(</span><span class="n">mu_bkg</span><span class="p">,</span> <span class="n">significance</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">&#39;lima&#39;</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Compute excess matching a given significance.</span>
+
+<span class="sd">    This function is the inverse of `significance`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    mu_bkg : array_like</span>
+<span class="sd">        Known background level</span>
+<span class="sd">    significance : array_like</span>
+<span class="sd">        Significance</span>
+<span class="sd">    method : {&#39;lima&#39;, &#39;simple&#39;}</span>
+<span class="sd">        Select method</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    excess : ndarray</span>
+<span class="sd">        Excess</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    significance, excess_matching_significance_on_off</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; excess_matching_significance(mu_bkg=0.2, significance=5, method=&#39;lima&#39;)</span>
+<span class="sd">    TODO</span>
+<span class="sd">    &gt;&gt;&gt; excess_matching_significance(mu_bkg=0.2, significance=5, method=&#39;simple&#39;)</span>
+<span class="sd">    TODO</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">mu_bkg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">mu_bkg</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">significance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">significance</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;simple&#39;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_excess_matching_significance_simple</span><span class="p">(</span><span class="n">mu_bkg</span><span class="p">,</span> <span class="n">significance</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;lima&#39;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_excess_matching_significance_lima</span><span class="p">(</span><span class="n">mu_bkg</span><span class="p">,</span> <span class="n">significance</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Invalid method: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">method</span><span class="p">))</span></div>
+
+
+<span class="k">def</span> <span class="nf">_excess_matching_significance_simple</span><span class="p">(</span><span class="n">mu_bkg</span><span class="p">,</span> <span class="n">significance</span><span class="p">):</span>
+    <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+
+<span class="k">def</span> <span class="nf">_excess_matching_significance_lima</span><span class="p">(</span><span class="n">mu_bkg</span><span class="p">,</span> <span class="n">significance</span><span class="p">):</span>
+    <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+
+<div class="viewcode-block" id="excess_matching_significance_on_off"><a class="viewcode-back" href="../../../api/gammapy.stats.excess_matching_significance_on_off.html#gammapy.stats.excess_matching_significance_on_off">[docs]</a><span class="k">def</span> <span class="nf">excess_matching_significance_on_off</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">significance</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">&#39;lima&#39;</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Compute sensitivity of an on-off observation.</span>
+
+<span class="sd">    This function is the inverse of `significance_on_off`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_off : array_like</span>
+<span class="sd">        Observed number of counts in the off region</span>
+<span class="sd">    alpha : array_like</span>
+<span class="sd">        On / off region exposure ratio for background events</span>
+<span class="sd">    significance : array_like</span>
+<span class="sd">        Desired significance level</span>
+<span class="sd">    method : {&#39;lima&#39;, &#39;simple&#39;}</span>
+<span class="sd">        Which method?</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    excess : `numpy.ndarray`</span>
+<span class="sd">        Excess</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    significance_on_off, excess_matching_significance</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; excess_matching_significance_on_off(n_off=20,alpha=0.1,significance=5,method=&#39;lima&#39;)</span>
+<span class="sd">    12.038</span>
+<span class="sd">    &gt;&gt;&gt; excess_matching_significance_on_off(n_off=20,alpha=0.1,significance=5,method=&#39;simple&#39;)</span>
+<span class="sd">    27.034</span>
+<span class="sd">    &gt;&gt;&gt; excess_matching_significance_on_off(n_off=20,alpha=0.1,significance=0,method=&#39;lima&#39;)</span>
+<span class="sd">    2.307301461e-09</span>
+<span class="sd">    &gt;&gt;&gt; excess_matching_significance_on_off(n_off=20,alpha=0.1,significance=0,method=&#39;simple&#39;)</span>
+<span class="sd">    0.0</span>
+<span class="sd">    &gt;&gt;&gt; excess_matching_significance_on_off(n_off=20,alpha=0.1,significance=-10,method=&#39;lima&#39;)</span>
+<span class="sd">    nan</span>
+<span class="sd">    &gt;&gt;&gt; excess_matching_significance_on_off(n_off=20,alpha=0.1,significance=-10,method=&#39;simple&#39;)</span>
+<span class="sd">    nan</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">n_off</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">alpha</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">alpha</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">significance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">significance</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;simple&#39;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_excess_matching_significance_on_off_simple</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">significance</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;lima&#39;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_excess_matching_significance_on_off_lima</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">significance</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Invalid method: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">method</span><span class="p">))</span></div>
+
+
+<span class="k">def</span> <span class="nf">_excess_matching_significance_on_off_simple</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">significance</span><span class="p">):</span>
+    <span class="c1"># TODO: can these equations be simplified?</span>
+    <span class="n">significance2</span> <span class="o">=</span> <span class="n">significance</span> <span class="o">**</span> <span class="mi">2</span>
+    <span class="n">determinant</span> <span class="o">=</span> <span class="n">significance2</span> <span class="o">+</span> <span class="mi">4</span> <span class="o">*</span> <span class="n">n_off</span> <span class="o">*</span> <span class="n">alpha</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">alpha</span><span class="p">)</span>
+    <span class="n">temp</span> <span class="o">=</span> <span class="n">significance2</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">n_off</span> <span class="o">*</span> <span class="n">alpha</span>
+    <span class="n">n_on</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">temp</span> <span class="o">+</span> <span class="n">significance</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">determinant</span><span class="p">)))</span>
+    <span class="k">return</span> <span class="n">n_on</span> <span class="o">-</span> <span class="n">background</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_excess_matching_significance_on_off_lima</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">significance</span><span class="p">):</span>
+    <span class="kn">from</span> <span class="nn">scipy.optimize</span> <span class="k">import</span> <span class="n">fsolve</span>
+
+    <span class="c1"># Significance not well-defined for n_on &lt; 0</span>
+    <span class="c1"># Return Nan if given significance can&#39;t be reached</span>
+    <span class="n">s0</span> <span class="o">=</span> <span class="n">_significance_lima_on_off</span><span class="p">(</span><span class="n">n_on</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span> <span class="n">n_off</span><span class="o">=</span><span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">s0</span> <span class="o">&gt;=</span> <span class="n">significance</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+
+    <span class="k">def</span> <span class="nf">target_significance</span><span class="p">(</span><span class="n">n_on</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">n_on</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">_significance_lima_on_off</span><span class="p">(</span><span class="n">n_on</span><span class="p">,</span> <span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span> <span class="o">-</span> <span class="n">significance</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># This high value is to tell the optimiser to stay n_on &gt;= 0</span>
+            <span class="k">return</span> <span class="mf">1e10</span>
+
+    <span class="n">excess_guess</span> <span class="o">=</span> <span class="n">_excess_matching_significance_on_off_simple</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">significance</span><span class="p">)</span>
+    <span class="n">n_on_guess</span> <span class="o">=</span> <span class="n">excess_guess</span> <span class="o">+</span> <span class="n">background</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span>
+
+    <span class="c1"># solver options to control robustness / accuracy / speed</span>
+    <span class="n">opts</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">factor</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+    <span class="n">n_on</span> <span class="o">=</span> <span class="n">fsolve</span><span class="p">(</span><span class="n">target_significance</span><span class="p">,</span> <span class="n">n_on_guess</span><span class="p">,</span> <span class="o">**</span><span class="n">opts</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">n_on</span> <span class="o">-</span> <span class="n">background</span><span class="p">(</span><span class="n">n_off</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span>
+
+
+<span class="n">_excess_matching_significance_on_off_lima</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vectorize</span><span class="p">(</span><span class="n">_excess_matching_significance_on_off_lima</span><span class="p">)</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2018, The Gammapy developers.<br/>
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.6.7. &nbsp;
+    Last built 01 Mar 2018. <br/>
+  </p>
+</footer>
+  </body>
+</html>

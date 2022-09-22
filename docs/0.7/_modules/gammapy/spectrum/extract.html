@@ -1,0 +1,362 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>gammapy.spectrum.extract &#8212; gammapy v0.7</title>
+    <link rel="stylesheet" href="../../../_static/gammapy.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.7',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <link rel="shortcut icon" href="../../../_static/astropy_logo.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+<link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+<script type="text/javascript" src="../../../_static/copybutton.js"></script>
+
+
+  </head>
+  <body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">gamma</span><span id="logotext2">py</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="Astropy Homepage" href="http://www.astropy.org"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">gammapy v0.7</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for gammapy.spectrum.extract</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">OrderedDict</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">regions</span> <span class="k">import</span> <span class="n">CircleSkyRegion</span>
+<span class="kn">import</span> <span class="nn">astropy.units</span> <span class="k">as</span> <span class="nn">u</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="k">import</span> <span class="n">PHACountsSpectrum</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="k">import</span> <span class="n">SpectrumObservation</span><span class="p">,</span> <span class="n">SpectrumObservationList</span>
+<span class="kn">from</span> <span class="nn">..utils.scripts</span> <span class="k">import</span> <span class="n">make_path</span>
+<span class="kn">from</span> <span class="nn">..irf</span> <span class="k">import</span> <span class="n">PSF3D</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;SpectrumExtraction&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="SpectrumExtraction"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumExtraction.html#gammapy.spectrum.SpectrumExtraction">[docs]</a><span class="k">class</span> <span class="nc">SpectrumExtraction</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Creating input data to 1D spectrum fitting.</span>
+
+<span class="sd">    This class is responsible for extracting a</span>
+<span class="sd">    `~gammapy.spectrum.SpectrumObservation` from a</span>
+<span class="sd">    `~gammapy.data.DataStoreObservation`. The background estimation is done</span>
+<span class="sd">    beforehand, using e.g. the</span>
+<span class="sd">    `~gammapy.background.ReflectedRegionsBackgroundEstimator`. For point</span>
+<span class="sd">    sources analyzed with &#39;full containment&#39; IRFs, a correction for PSF</span>
+<span class="sd">    leakage out of the circular ON region can be applied.</span>
+
+<span class="sd">    For more info see :ref:`spectral_fitting`.</span>
+
+<span class="sd">    For a usage example see :gp-extra-notebook:`spectrum_analysis`</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    obs_list : `~gammapy.data.ObservationList`</span>
+<span class="sd">        Observations to process</span>
+<span class="sd">    bkg_estimate : `~gammapy.background.BackgroundEstimate`</span>
+<span class="sd">        Background estimate, e.g. of</span>
+<span class="sd">        `~gammapy.background.ReflectedRegionsBackgroundEstimator`</span>
+<span class="sd">    e_reco : `~astropy.units.Quantity`, optional</span>
+<span class="sd">        Reconstructed energy binning</span>
+<span class="sd">    e_true : `~astropy.units.Quantity`, optional</span>
+<span class="sd">        True energy binning</span>
+<span class="sd">    containment_correction : bool</span>
+<span class="sd">        Apply containment correction for point sources and circular on regions.</span>
+<span class="sd">    max_alpha : float</span>
+<span class="sd">        Maximum alpha value to accept, if the background was estimated using</span>
+<span class="sd">        reflected regions this is 1 / minimum number of regions.</span>
+<span class="sd">    use_recommended_erange : bool</span>
+<span class="sd">        Extract spectrum only within the recommended valid energy range of the</span>
+<span class="sd">        effective area table (default is True).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">DEFAULT_TRUE_ENERGY</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">logspace</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">,</span> <span class="mi">109</span><span class="p">)</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">TeV</span>
+    <span class="sd">&quot;&quot;&quot;True energy axis to be used if not specified otherwise&quot;&quot;&quot;</span>
+    <span class="n">DEFAULT_RECO_ENERGY</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">logspace</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">73</span><span class="p">)</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">TeV</span>
+    <span class="sd">&quot;&quot;&quot;Reconstruced energy axis to be used if not specified otherwise&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs_list</span><span class="p">,</span> <span class="n">bkg_estimate</span><span class="p">,</span> <span class="n">e_reco</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">e_true</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">containment_correction</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">max_alpha</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">use_recommended_erange</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span> <span class="o">=</span> <span class="n">obs_list</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bkg_estimate</span> <span class="o">=</span> <span class="n">bkg_estimate</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">e_reco</span> <span class="o">=</span> <span class="n">e_reco</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">DEFAULT_RECO_ENERGY</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">e_true</span> <span class="o">=</span> <span class="n">e_true</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">DEFAULT_TRUE_ENERGY</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">containment_correction</span> <span class="o">=</span> <span class="n">containment_correction</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_alpha</span> <span class="o">=</span> <span class="n">max_alpha</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_recommended_erange</span> <span class="o">=</span> <span class="n">use_recommended_erange</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">observations</span> <span class="o">=</span> <span class="n">SpectrumObservationList</span><span class="p">()</span>
+
+<div class="viewcode-block" id="SpectrumExtraction.run"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumExtraction.html#gammapy.spectrum.SpectrumExtraction.run">[docs]</a>    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outdir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_sherpa</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Run all steps.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        outdir : Path, str</span>
+<span class="sd">            directory to write results files to (if given)</span>
+<span class="sd">        use_sherpa : bool, optional</span>
+<span class="sd">            Write Sherpa compliant files, default: False</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Running </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">obs</span><span class="p">,</span> <span class="n">bkg</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_list</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bkg_estimate</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_alpha_ok</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="n">bkg</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">observations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">process</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="n">bkg</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">outdir</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">outdir</span><span class="p">,</span> <span class="n">use_sherpa</span><span class="o">=</span><span class="n">use_sherpa</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_alpha_ok</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">bkg</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Check if observation fulfills alpha criterion&quot;&quot;&quot;</span>
+        <span class="n">condition</span> <span class="o">=</span> <span class="n">bkg</span><span class="o">.</span><span class="n">a_off</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">bkg</span><span class="o">.</span><span class="n">a_on</span> <span class="o">/</span> <span class="n">bkg</span><span class="o">.</span><span class="n">a_off</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_alpha</span>
+        <span class="k">if</span> <span class="n">condition</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s1">&#39;Skipping because </span><span class="si">{}</span><span class="s1"> / </span><span class="si">{}</span><span class="s1"> &gt; </span><span class="si">{}</span><span class="s1">&#39;</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">bkg</span><span class="o">.</span><span class="n">a_on</span><span class="p">,</span> <span class="n">bkg</span><span class="o">.</span><span class="n">a_off</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_alpha</span><span class="p">))</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="SpectrumExtraction.process"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumExtraction.html#gammapy.spectrum.SpectrumExtraction.process">[docs]</a>    <span class="k">def</span> <span class="nf">process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">bkg</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Process one observation.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        obs : `~gammapy.data.DataStoreObservation`</span>
+<span class="sd">            Observation</span>
+<span class="sd">        bkg : `~gammapy.background.BackgroundEstimate`</span>
+<span class="sd">            Background estimate</span>
+<span class="sd">        </span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        spectrum_observation : `~gammapy.spectrum.SpectrumObservation`</span>
+<span class="sd">            Spectrum observation</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Process observation</span><span class="se">\n</span><span class="s1"> </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">obs</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">make_empty_vectors</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="n">bkg</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">extract_counts</span><span class="p">(</span><span class="n">bkg</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">extract_irfs</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">containment_correction</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">apply_containment_correction</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="n">bkg</span><span class="p">)</span>
+
+        <span class="n">spectrum_observation</span> <span class="o">=</span> <span class="n">SpectrumObservation</span><span class="p">(</span>
+            <span class="n">on_vector</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_vector</span><span class="p">,</span>
+            <span class="n">aeff</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_aeff</span><span class="p">,</span>
+            <span class="n">off_vector</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_off_vector</span><span class="p">,</span>
+            <span class="n">edisp</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_edisp</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_recommended_erange</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">spectrum_observation</span><span class="o">.</span><span class="n">hi_threshold</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">high_threshold</span>
+                <span class="n">spectrum_observation</span><span class="o">.</span><span class="n">lo_threshold</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">low_threshold</span>
+            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                <span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;No thresholds defined for obs </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">obs</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">spectrum_observation</span></div>
+
+<div class="viewcode-block" id="SpectrumExtraction.make_empty_vectors"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumExtraction.html#gammapy.spectrum.SpectrumExtraction.make_empty_vectors">[docs]</a>    <span class="k">def</span> <span class="nf">make_empty_vectors</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">bkg</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Create empty vectors.</span>
+
+<span class="sd">        This method copies over all meta info and sets up the energy binning.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        obs : `~gammapy.data.DataStoreObservation`</span>
+<span class="sd">            Observation</span>
+<span class="sd">        bkg : `~gammapy.background.BackgroundEstimate`</span>
+<span class="sd">            Background estimate</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Update observation meta info&#39;</span><span class="p">)</span>
+        <span class="c1"># Copy over existing meta information</span>
+        <span class="n">meta</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span><span class="n">obs</span><span class="o">.</span><span class="n">obs_info</span><span class="p">)</span>
+        <span class="n">offset</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">pointing_radec</span><span class="o">.</span><span class="n">separation</span><span class="p">(</span><span class="n">bkg</span><span class="o">.</span><span class="n">on_region</span><span class="o">.</span><span class="n">center</span><span class="p">)</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Offset : </span><span class="si">{}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">offset</span><span class="p">))</span>
+        <span class="n">meta</span><span class="p">[</span><span class="s1">&#39;OFFSET&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">offset</span><span class="o">.</span><span class="n">deg</span>
+
+        <span class="c1"># LIVETIME is called EXPOSURE in the OGIP standard</span>
+        <span class="n">meta</span><span class="p">[</span><span class="s1">&#39;EXPOSURE&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">meta</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;LIVETIME&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_on_vector</span> <span class="o">=</span> <span class="n">PHACountsSpectrum</span><span class="p">(</span>
+            <span class="n">energy_lo</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">e_reco</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+            <span class="n">energy_hi</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">e_reco</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span>
+            <span class="n">backscal</span><span class="o">=</span><span class="n">bkg</span><span class="o">.</span><span class="n">a_on</span><span class="p">,</span>
+            <span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">,</span> <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_off_vector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_on_vector</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_off_vector</span><span class="o">.</span><span class="n">is_bkg</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_off_vector</span><span class="o">.</span><span class="n">backscal</span> <span class="o">=</span> <span class="n">bkg</span><span class="o">.</span><span class="n">a_off</span></div>
+
+<div class="viewcode-block" id="SpectrumExtraction.extract_counts"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumExtraction.html#gammapy.spectrum.SpectrumExtraction.extract_counts">[docs]</a>    <span class="k">def</span> <span class="nf">extract_counts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bkg</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Fill on and off vector for one observation.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        bkg : `~gammapy.background.BackgroundEstimate`</span>
+<span class="sd">            Background estimate</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Fill events&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_on_vector</span><span class="o">.</span><span class="n">fill</span><span class="p">(</span><span class="n">bkg</span><span class="o">.</span><span class="n">on_events</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_off_vector</span><span class="o">.</span><span class="n">fill</span><span class="p">(</span><span class="n">bkg</span><span class="o">.</span><span class="n">off_events</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumExtraction.extract_irfs"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumExtraction.html#gammapy.spectrum.SpectrumExtraction.extract_irfs">[docs]</a>    <span class="k">def</span> <span class="nf">extract_irfs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Extract IRFs.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        obs : `~gammapy.data.DataStoreObservation`</span>
+<span class="sd">            Observation</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Extract IRFs&#39;</span><span class="p">)</span>
+        <span class="n">offset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_on_vector</span><span class="o">.</span><span class="n">offset</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_aeff</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">to_effective_area_table</span><span class="p">(</span><span class="n">offset</span><span class="p">,</span> <span class="n">energy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">e_true</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_edisp</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">to_energy_dispersion</span><span class="p">(</span>
+            <span class="n">offset</span><span class="p">,</span> <span class="n">e_reco</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">e_reco</span><span class="p">,</span> <span class="n">e_true</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">e_true</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumExtraction.apply_containment_correction"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumExtraction.html#gammapy.spectrum.SpectrumExtraction.apply_containment_correction">[docs]</a>    <span class="k">def</span> <span class="nf">apply_containment_correction</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">bkg</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Apply PSF containment correction.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        obs : `~gammapy.data.DataStoreObservation`</span>
+<span class="sd">            observation</span>
+<span class="sd">        bkg : `~gammapy.background.BackgroundEstimate`</span>
+<span class="sd">            background esimate</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># TODO: This should be split out into a separate class</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">bkg</span><span class="o">.</span><span class="n">on_region</span><span class="p">,</span> <span class="n">CircleSkyRegion</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Incorrect region type for containment correction.&quot;</span>
+                            <span class="s2">&quot; Should be CircleSkyRegion.&quot;</span><span class="p">)</span>
+
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Apply containment correction&#39;</span><span class="p">)</span>
+        <span class="c1"># First need psf</span>
+        <span class="n">angles</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">,</span> <span class="mi">150</span><span class="p">)</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span>
+        <span class="n">offset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_on_vector</span><span class="o">.</span><span class="n">offset</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obs</span><span class="o">.</span><span class="n">psf</span><span class="p">,</span> <span class="n">PSF3D</span><span class="p">):</span>
+            <span class="n">psf</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">psf</span><span class="o">.</span><span class="n">to_energy_dependent_table_psf</span><span class="p">(</span><span class="n">theta</span><span class="o">=</span><span class="n">offset</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">psf</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">psf</span><span class="o">.</span><span class="n">to_energy_dependent_table_psf</span><span class="p">(</span><span class="n">offset</span><span class="p">,</span> <span class="n">angles</span><span class="p">)</span>
+
+        <span class="n">center_energies</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_on_vector</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">nodes</span>
+        <span class="n">areascal</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">energy</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">center_energies</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">correction</span> <span class="o">=</span> <span class="n">psf</span><span class="o">.</span><span class="n">integral</span><span class="p">(</span><span class="n">energy</span><span class="p">,</span>
+                                          <span class="mf">0.</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span><span class="p">,</span>
+                                          <span class="n">bkg</span><span class="o">.</span><span class="n">on_region</span><span class="o">.</span><span class="n">radius</span><span class="p">)</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="s1">&#39;Containment correction failed for bin </span><span class="si">{}</span><span class="s1">, energy </span><span class="si">{}</span><span class="s1">.&#39;</span>
+                <span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">energy</span><span class="p">))</span>
+                <span class="n">correction</span> <span class="o">=</span> <span class="mi">1</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="n">areascal</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">correction</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_on_vector</span><span class="o">.</span><span class="n">areascal</span> <span class="o">=</span> <span class="n">areascal</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_off_vector</span><span class="o">.</span><span class="n">areascal</span> <span class="o">=</span> <span class="n">areascal</span></div>
+
+<div class="viewcode-block" id="SpectrumExtraction.compute_energy_threshold"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumExtraction.html#gammapy.spectrum.SpectrumExtraction.compute_energy_threshold">[docs]</a>    <span class="k">def</span> <span class="nf">compute_energy_threshold</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute and set the safe energy threshold for all observations.</span>
+
+<span class="sd">        See `SpectrumObservation.compute_energy_threshold` for full</span>
+<span class="sd">        documentation about the options.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">observations</span><span class="p">:</span>
+            <span class="n">obs</span><span class="o">.</span><span class="n">compute_energy_threshold</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SpectrumExtraction.write"><a class="viewcode-back" href="../../../api/gammapy.spectrum.SpectrumExtraction.html#gammapy.spectrum.SpectrumExtraction.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outdir</span><span class="p">,</span> <span class="n">ogipdir</span><span class="o">=</span><span class="s1">&#39;ogip_data&#39;</span><span class="p">,</span> <span class="n">use_sherpa</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Write results to disk.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        outdir : `~gammapy.extern.pathlib.Path`</span>
+<span class="sd">            Output folder</span>
+<span class="sd">        ogipdir : str, optional</span>
+<span class="sd">            Folder name for OGIP data, default: &#39;ogip_data&#39;</span>
+<span class="sd">        use_sherpa : bool, optional</span>
+<span class="sd">            Write Sherpa compliant files, default: False</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">outdir</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">outdir</span><span class="p">)</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Writing OGIP files to </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">outdir</span> <span class="o">/</span> <span class="n">ogipdir</span><span class="p">))</span>
+        <span class="n">outdir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">observations</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">outdir</span> <span class="o">/</span> <span class="n">ogipdir</span><span class="p">,</span> <span class="n">use_sherpa</span><span class="o">=</span><span class="n">use_sherpa</span><span class="p">)</span></div></div>
+
+        <span class="c1"># TODO : add more debug plots etc. here</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2018, The Gammapy developers.<br/>
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.6.7. &nbsp;
+    Last built 01 Mar 2018. <br/>
+  </p>
+</footer>
+  </body>
+</html>

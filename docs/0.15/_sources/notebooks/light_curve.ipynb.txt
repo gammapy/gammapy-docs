@@ -1,0 +1,706 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "\n",
+    "<div class=\"alert alert-info\">\n",
+    "\n",
+    "**This is a fixed-text formatted version of a Jupyter notebook**\n",
+    "\n",
+    "- Try online [![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/gammapy/gammapy-webpage/v0.15?urlpath=lab/tree/light_curve.ipynb)\n",
+    "- You can contribute with your own notebooks in this\n",
+    "[GitHub repository](https://github.com/gammapy/gammapy/tree/master/tutorials).\n",
+    "- **Source files:**\n",
+    "[light_curve.ipynb](../_static/notebooks/light_curve.ipynb) |\n",
+    "[light_curve.py](../_static/notebooks/light_curve.py)\n",
+    "</div>\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Light curve estimation\n",
+    "\n",
+    "## Introduction\n",
+    "\n",
+    "This tutorial presents how light curve extraction is performed in gammapy. \n",
+    "\n",
+    "We will demonstrate how to compute a `~gammapy.time.LightCurve` from 3D reduced datasets (`~gammapy.cube.MapDataset`) as well as 1D ON-OFF spectral datasets (`~gammapy.spectrum.SpectrumDatasetOnOff`). \n",
+    "\n",
+    "The data reduction will be performed with the high level interface for the data reduction. Then we will use the `~gammapy.time.LightCurveEstimator` class, which  is able to extract a light curve independently of the dataset type. \n",
+    "\n",
+    "We will compute two LCs: one per observing run and one per night.\n",
+    "\n",
+    "We will use the four Crab nebula observations from the [H.E.S.S. first public test data release](https://www.mpi-hd.mpg.de/hfm/HESS/pages/dl3-dr1/) and compute per-observation fluxes. The Crab nebula is not known to be variable at TeV energies, so we expect constant brightness within statistical and systematic errors."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Setup\n",
+    "\n",
+    "As usual, we'll start with some general imports..."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%matplotlib inline\n",
+    "import matplotlib.pyplot as plt\n",
+    "\n",
+    "import astropy.units as u\n",
+    "from astropy.coordinates import SkyCoord\n",
+    "import logging\n",
+    "\n",
+    "from astropy.time import Time\n",
+    "\n",
+    "log = logging.getLogger(__name__)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Now let's import gammapy specific classes and functions"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from gammapy.modeling.models import PowerLawSpectralModel\n",
+    "from gammapy.modeling.models import PointSpatialModel\n",
+    "from gammapy.modeling.models import SkyModel, SkyModels\n",
+    "from gammapy.time import LightCurveEstimator\n",
+    "from gammapy.analysis import Analysis, AnalysisConfig"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Analysis configuration \n",
+    "For the 1D and 3D extraction, we will use the same CrabNebula configuration than in the notebook analysis_1.ipynb using the high level interface of Gammapy.\n",
+    "\n",
+    "From the high level interface, the data reduction for those observations is performed as followed"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Building the 3D analysis configuration\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "conf_3d = AnalysisConfig()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "#### Definition of the data selection\n",
+    "\n",
+    "Here we use the Crab runs from the HESS DL3 data release 1"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "conf_3d.observations.obs_ids = [23523, 23526, 23559, 23592]"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "#### Definition of the dataset geometry"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# We want a 3D analysis\n",
+    "conf_3d.datasets.type = \"3d\"\n",
+    "\n",
+    "# We want to extract the data by observation and therefore to not stack them\n",
+    "conf_3d.datasets.stack = False\n",
+    "\n",
+    "# Here is the WCS geometry of the Maps\n",
+    "conf_3d.datasets.geom.wcs.skydir = dict(\n",
+    "    frame=\"icrs\", lon=83.63308 * u.deg, lat=22.01450 * u.deg\n",
+    ")\n",
+    "conf_3d.datasets.geom.wcs.binsize = 0.02 * u.deg\n",
+    "conf_3d.datasets.geom.wcs.fov = dict(width=1 * u.deg, height=1 * u.deg)\n",
+    "\n",
+    "# We define a value for the IRF Maps binsize\n",
+    "conf_3d.datasets.geom.wcs.binsize_irf = 0.2 * u.deg\n",
+    "\n",
+    "# Define energy binning for the Maps\n",
+    "conf_3d.datasets.geom.axes.energy = dict(\n",
+    "    min=0.7 * u.TeV, max=10 * u.TeV, nbins=5\n",
+    ")\n",
+    "conf_3d.datasets.geom.axes.energy_true = dict(\n",
+    "    min=0.3 * u.TeV, max=20 * u.TeV, nbins=10\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Run the 3D data reduction"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "Setting logging config: {'level': 'INFO', 'filename': None, 'filemode': None, 'format': None, 'datefmt': None}\n",
+      "Fetching observations.\n",
+      "Number of selected observations: 4\n",
+      "Creating geometry.\n",
+      "Creating datasets.\n",
+      "Processing observation 23523\n",
+      "Processing observation 23526\n",
+      "Processing observation 23559\n",
+      "Processing observation 23592\n"
+     ]
+    }
+   ],
+   "source": [
+    "analysis_3d = Analysis(conf_3d)\n",
+    "analysis_3d.get_observations()\n",
+    "analysis_3d.get_datasets()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Define the model to be used\n",
+    "\n",
+    "Here we don't try to fit the model parameters to the whole dataset, but we use predefined values instead. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "target_position = SkyCoord(ra=83.63308, dec=22.01450, unit=\"deg\")\n",
+    "spatial_model = PointSpatialModel(\n",
+    "    lon_0=target_position.ra, lat_0=target_position.dec, frame=\"icrs\"\n",
+    ")\n",
+    "\n",
+    "spectral_model = PowerLawSpectralModel(\n",
+    "    index=2.702,\n",
+    "    amplitude=4.712e-11 * u.Unit(\"1 / (cm2 s TeV)\"),\n",
+    "    reference=1 * u.TeV,\n",
+    ")\n",
+    "\n",
+    "sky_model = SkyModel(\n",
+    "    spatial_model=spatial_model, spectral_model=spectral_model, name=\"crab\"\n",
+    ")\n",
+    "# Now we freeze these parameters that we don't want the light curve estimator to change\n",
+    "sky_model.parameters[\"index\"].frozen = True\n",
+    "sky_model.parameters[\"lon_0\"].frozen = True\n",
+    "sky_model.parameters[\"lat_0\"].frozen = True"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "We assign them the model to be fitted to each dataset"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "Reading model.\n",
+      "SkyModels\n",
+      "\n",
+      "Component 0: SkyModel\n",
+      "\n",
+      "   name     value   error      unit         min        max    frozen\n",
+      "--------- --------- ----- -------------- ---------- --------- ------\n",
+      "    lon_0 8.363e+01   nan            deg        nan       nan   True\n",
+      "    lat_0 2.201e+01   nan            deg -9.000e+01 9.000e+01   True\n",
+      "    index 2.702e+00   nan                       nan       nan   True\n",
+      "amplitude 4.712e-11   nan cm-2 s-1 TeV-1        nan       nan  False\n",
+      "reference 1.000e+00   nan            TeV        nan       nan   True\n",
+      "\n",
+      "\t\n",
+      "\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "models = SkyModels([sky_model])\n",
+    "analysis_3d.set_models(models)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Light Curve estimation: by observation\n",
+    "\n",
+    "We can now create the light curve estimator.\n",
+    "\n",
+    "We pass it the list of datasets and the name of the model component for which we want to build the light curve. \n",
+    "We can optionally ask for parameters reoptimization during fit, that is most of the time to fit background normalization in each time bin. \n",
+    "\n",
+    "If we don't set any time interval, the `~gammapy.time.LightCurveEstimator` is determines the flux of each dataset and places it at the corresponding time in the light curve. \n",
+    "Here one dataset equals to one observing run."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "lc_maker_3d = LightCurveEstimator(\n",
+    "    analysis_3d.datasets, source=\"crab\", reoptimize=False\n",
+    ")\n",
+    "lc_3d = lc_maker_3d.run(e_ref=1 * u.TeV, e_min=1.0 * u.TeV, e_max=10.0 * u.TeV)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "The LightCurve object contains a table which we can explore."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<i>Table length=4</i>\n",
+       "<table id=\"table4743411976\" class=\"table-striped table-bordered table-condensed\">\n",
+       "<thead><tr><th>time_min</th><th>time_max</th><th>e_min</th><th>e_max</th><th>flux</th><th>flux_err</th></tr></thead>\n",
+       "<thead><tr><th></th><th></th><th>TeV</th><th>TeV</th><th>1 / (cm2 s)</th><th>1 / (cm2 s)</th></tr></thead>\n",
+       "<thead><tr><th>float64</th><th>float64</th><th>float64</th><th>float64</th><th>float64</th><th>float64</th></tr></thead>\n",
+       "<tr><td>53343.92234009259</td><td>53343.94186555556</td><td>1.0</td><td>10.0</td><td>2.6538788850507653e-11</td><td>2.0923044822094324e-12</td></tr>\n",
+       "<tr><td>53343.95421509259</td><td>53343.97369425926</td><td>1.0</td><td>10.0</td><td>2.2999220249353757e-11</td><td>1.9916886558068632e-12</td></tr>\n",
+       "<tr><td>53345.96198129629</td><td>53345.98149518518</td><td>1.0</td><td>10.0</td><td>3.0354451809219976e-11</td><td>2.7380781806749725e-12</td></tr>\n",
+       "<tr><td>53347.913196574074</td><td>53347.93271046296</td><td>1.0</td><td>10.0</td><td>2.7716594082114026e-11</td><td>2.5951086629601995e-12</td></tr>\n",
+       "</table>"
+      ],
+      "text/plain": [
+       "<Table length=4>\n",
+       "     time_min           time_max     ...        flux_err       \n",
+       "                                     ...      1 / (cm2 s)      \n",
+       "     float64            float64      ...        float64        \n",
+       "------------------ ----------------- ... ----------------------\n",
+       " 53343.92234009259 53343.94186555556 ... 2.0923044822094324e-12\n",
+       " 53343.95421509259 53343.97369425926 ... 1.9916886558068632e-12\n",
+       " 53345.96198129629 53345.98149518518 ... 2.7380781806749725e-12\n",
+       "53347.913196574074 53347.93271046296 ... 2.5951086629601995e-12"
+      ]
+     },
+     "execution_count": 10,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "lc_3d.table[\"time_min\", \"time_max\", \"e_min\", \"e_max\", \"flux\", \"flux_err\"]"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Running the light curve extraction in 1D"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Building the 1D analysis configuration\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "conf_1d = AnalysisConfig()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "#### Definition of the data selection\n",
+    "\n",
+    "Here we use the Crab runs from the HESS DL3 data release 1"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "conf_1d.observations.obs_ids = [23523, 23526, 23559, 23592]"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "#### Definition of the dataset geometry"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# We want a 1D analysis\n",
+    "conf_1d.datasets.type = \"1d\"\n",
+    "\n",
+    "# We want to extract the data by observation and therefore to not stack them\n",
+    "conf_1d.datasets.stack = False\n",
+    "\n",
+    "# Here we define the ON region and make sure that PSF leakage is corrected\n",
+    "conf_1d.datasets.on_region = dict(\n",
+    "    frame=\"icrs\",\n",
+    "    lon=83.63308 * u.deg,\n",
+    "    lat=22.01450 * u.deg,\n",
+    "    radius=0.1 * u.deg,\n",
+    ")\n",
+    "conf_1d.datasets.containment_correction = True\n",
+    "\n",
+    "# Finally we define the energy binning for the spectra\n",
+    "conf_1d.datasets.geom.axes.energy = dict(\n",
+    "    min=0.7 * u.TeV, max=10 * u.TeV, nbins=20\n",
+    ")\n",
+    "conf_1d.datasets.geom.axes.energy_true = dict(\n",
+    "    min=0.3 * u.TeV, max=20 * u.TeV, nbins=40\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Run the 1D data reduction"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "Setting logging config: {'level': 'INFO', 'filename': None, 'filemode': None, 'format': None, 'datefmt': None}\n",
+      "Fetching observations.\n",
+      "Number of selected observations: 4\n",
+      "Reducing spectrum datasets.\n",
+      "Processing observation 23523\n",
+      "Processing observation 23526\n",
+      "Processing observation 23559\n",
+      "Processing observation 23592\n"
+     ]
+    }
+   ],
+   "source": [
+    "analysis_1d = Analysis(conf_1d)\n",
+    "analysis_1d.get_observations()\n",
+    "analysis_1d.get_datasets()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Define the model to be used\n",
+    "\n",
+    "Here we don't try to fit the model parameters to the whole dataset, but we use predefined values instead. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 15,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "target_position = SkyCoord(ra=83.63308, dec=22.01450, unit=\"deg\")\n",
+    "spatial_model = PointSpatialModel(\n",
+    "    lon_0=target_position.ra, lat_0=target_position.dec, frame=\"icrs\"\n",
+    ")\n",
+    "\n",
+    "spectral_model = PowerLawSpectralModel(\n",
+    "    index=2.702,\n",
+    "    amplitude=4.712e-11 * u.Unit(\"1 / (cm2 s TeV)\"),\n",
+    "    reference=1 * u.TeV,\n",
+    ")\n",
+    "\n",
+    "sky_model = SkyModel(\n",
+    "    spatial_model=spatial_model, spectral_model=spectral_model, name=\"crab\"\n",
+    ")\n",
+    "# Now we freeze these parameters that we don't want the light curve estimator to change\n",
+    "sky_model.parameters[\"index\"].frozen = True\n",
+    "sky_model.parameters[\"lon_0\"].frozen = True\n",
+    "sky_model.parameters[\"lat_0\"].frozen = True"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "We assign the model to be fitted to each dataset. We can use the same `~gammapy.modeling.models.SkyModel` as before."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 16,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "Reading model.\n",
+      "SkyModels\n",
+      "\n",
+      "Component 0: SkyModel\n",
+      "\n",
+      "   name     value   error      unit         min        max    frozen\n",
+      "--------- --------- ----- -------------- ---------- --------- ------\n",
+      "    lon_0 8.363e+01   nan            deg        nan       nan   True\n",
+      "    lat_0 2.201e+01   nan            deg -9.000e+01 9.000e+01   True\n",
+      "    index 2.702e+00   nan                       nan       nan   True\n",
+      "amplitude 4.712e-11   nan cm-2 s-1 TeV-1        nan       nan  False\n",
+      "reference 1.000e+00   nan            TeV        nan       nan   True\n",
+      "\n",
+      "\t\n",
+      "\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "models = SkyModels([sky_model])\n",
+    "analysis_1d.set_models(models)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Extracting the light curve"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 17,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "lc_maker_1d = LightCurveEstimator(\n",
+    "    analysis_1d.datasets, source=\"crab\", reoptimize=False\n",
+    ")\n",
+    "lc_1d = lc_maker_1d.run(e_ref=1 * u.TeV, e_min=1.0 * u.TeV, e_max=10.0 * u.TeV)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Compare results\n",
+    "\n",
+    "Finally we compare the result for the 1D and 3D lightcurve in a single figure:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 18,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "<matplotlib.legend.Legend at 0x11e0ad2b0>"
+      ]
+     },
+     "execution_count": 18,
+     "metadata": {},
+     "output_type": "execute_result"
+    },
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 432x288 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "ax = lc_1d.plot(marker=\"o\", label=\"1D\")\n",
+    "lc_3d.plot(ax=ax, marker=\"o\", label=\"3D\")\n",
+    "plt.legend()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Night-wise LC estimation\n",
+    "\n",
+    "Here we want to extract a night curve per night. We define the time intervals that cover the three nights."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 19,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "time_intervals = [\n",
+    "    Time([53343.5, 53344.5], format=\"mjd\", scale=\"utc\"),\n",
+    "    Time([53345.5, 53346.5], format=\"mjd\", scale=\"utc\"),\n",
+    "    Time([53347.5, 53348.5], format=\"mjd\", scale=\"utc\"),\n",
+    "]"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "To compute the LC on the time intervals defined above, we pass the `LightCurveEstimator` the list of time intervals. \n",
+    "\n",
+    "Internally, datasets are grouped per time interval and a flux extraction is performed for each group."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 20,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "<matplotlib.axes._subplots.AxesSubplot at 0x11bdc0828>"
+      ]
+     },
+     "execution_count": 20,
+     "metadata": {},
+     "output_type": "execute_result"
+    },
+    {
+     "data": {
+      "image/png": "iVBORw0KGgoAAAANSUhEUgAAAYIAAAERCAYAAAB2CKBkAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEgAACxIB0t1+/AAAADh0RVh0U29mdHdhcmUAbWF0cGxvdGxpYiB2ZXJzaW9uMy4xLjIsIGh0dHA6Ly9tYXRwbG90bGliLm9yZy8li6FKAAAXrUlEQVR4nO3de7QlZX3m8e8D3REQEJSOIpegeBtH5TIH0TBm5BJBNKKjGZI4JCgJsJZRvMwMiTPLkZiZeIuaaBA6GDFLvKAgcVARJoEoERq7sWkubQjaig043QoIBCQCv/mj6sTNYfc5u5tTe/c59f2sdVbvXfXu2r+9Tp/91PtW1VupKiRJ/bXNpAuQJE2WQSBJPWcQSFLPGQSS1HMGgST1nEEgST23IIMgyV8l2ZDkunna3kVJ7kxy4Yzlv5/kpiSVZLf5eC9J2tosyCAAzgaOmsftvQ84bsjyfwCOAL4/j+8lSVuVBRkEVfU14PbBZUn2bffsVyX5epJnbcb2/ha4e8jyb1XV9x51wZK0FVsy6QLm0XLg5Kr6pyQHA6cDh024Jkna6i2KIEiyI/DLwOeSTC9+TLvuPwJ/NORlt1TVkeOpUJK2XosiCGiGuO6sqv1nrqiq84Hzx1+SJC0MC/IYwUxVdRewLsmvA6Sx34TLkqQFYUEGQZJPA1cAz0yyPskJwGuBE5JcA1wPHLMZ2/s68Dng8HZ7R7bL35RkPbAnsCbJWfP9WSRp0uI01JLUbwuyRyBJmj8L7mDxbrvtVvvss8+ky5CkBWXVqlU/qqplw9YtuCDYZ599WLly5aTLkKQFJckmZ0hwaEiSes4gkKSeMwgkqecMAknquc6CIMl2Sa5Kck2S65OcNkvbg5I8mOQ1XdUjSRquy7OG7gcOq6p7kiwFLk/ylaq6crBRkm2B9wBf7bAWSdImdNYjqMY97dOl7c+wy5jfCJwHbOiqFknSpnV6jCDJtklW03zJX1JVK2as3wN4FXDGHNs5McnKJCs3btzYXcGS1EOdBkFVPdhODb0n8Pwkz5nR5EPAqVX14BzbWV5VU1U1tWzZ0AvjJKlzx555BceeecWky5h3Y7myuKruTHIZzX2GB284PwV8pr2ZzG7A0UkeqKoLxlGXJKnDIEiyDPhZGwLb09wE/j2DbarqKQPtzwYuNAQkaby67BHsDnyiPStoG+DcqrowyckAVTXrcQFJ0nh0FgRVtQY4YMjyoQFQVcd3VYskadO8sliSes4gkKSeMwgkqecMAknqOYNAknrOIJCknjMIJKnnDAJJ6jmDQJJ6ziCQpJ4zCCSp5wwCaZ4s1rnqtfgZBJLUcwaBJPWcQSBJPWcQSFLPGQSS1HMGgST1nEEgST1nEEhSzxkEktRzBoEk9ZxBIEk9ZxBIUs8ZBJLUcwaBJPWcQSBJPddZECTZLslVSa5Jcn2S04a0eW2SNe3PN5Ls11U9kqThlnS47fuBw6rqniRLgcuTfKWqrhxosw74D1V1R5KXAsuBgzusSZI0Q2dBUFUF3NM+Xdr+1Iw23xh4eiWwZ1f1SJKG6/QYQZJtk6wGNgCXVNWKWZqfAHxlE9s5McnKJCs3btzYRamS1FudBkFVPVhV+9Ps6T8/yXOGtUtyKE0QnLqJ7Syvqqmqmlq2bFl3BUtSD43lrKGquhO4DDhq5rokzwPOAo6pqh+Pox5J0s91edbQsiS7tI+3B44Avj2jzd7A+cBxVXVjV7VIkjaty7OGdgc+kWRbmsA5t6ouTHIyQFWdAbwDeAJwehKAB6pqqsOaJEkzdHnW0BrggCHLzxh4/LvA73ZVgyRpbl5ZLEk9ZxBIUs8ZBJLUcwaBJPWcQSBJPWcQSFLPGQSS1HMGgST1nEEgST1nEEhSzxkEktRzBoEk9ZxBIEk9ZxBIUs8ZBJLUcwaBJPWcQSBJPWcQSFLPGQSS1HMGgST1nEEgST1nEEhSzxkEktRzS0ZplOQXgUOAJwP3AdcBK6vqoQ5rkySNwaxBkORQ4A+AxwPfAjYA2wGvBPZN8nngT6vqrq4LlaStwfo77p10CfNurh7B0cDvVdXNM1ckWQK8HPhV4LwOapOkrc4td/500iXMu1mDoKr+6yzrHgAumPeKJGkEx555xdjf84bb7prYewN89qQXdrLdLT5YnOR1c6zfLslVSa5Jcn2S04a0SZI/T3JTkjVJDtzSeiSpK+vvuJcV627n7p8+AMCKdbezYt3ti2aYaKSDxZtwGvDxWdbfDxxWVfckWQpcnuQrVXXlQJuXAk9vfw4GPtr+Ky1Ii+WLYSHoau94NseeeQUr1t3O9979srG/d5fmOli8ZlOrgCfO9tqqKuCe9unS9qdmNDsG+Ou27ZVJdkmye1XdNmfl0lZoMY4fa/Gbq0fwROBI4I4ZywN8Y66NJ9kWWAU8DfiLqloxo8kewA8Gnq9vlz0sCJKcCJwIsPfee8/1tuq5SY3fTnL8eBJ7x321xy7bTbqEeTdXEFwI7FhVq2euSHLZXBuvqgeB/ZPsAnwhyXOq6rrBzQx72ZDtLAeWA0xNTT1ivTRJ6++492E9gRXrbgeaL4w9d91hUmWpI4vxdzrXWUMnzLLut0Z9k6q6sw2Oo2guRpu2Hthr4PmewK2jblcaZlJ7x4t1/FiL32afNdQO04zSblnbEyDJ9sARwLdnNPsi8Nvt2UMvAH7i8QFJGq8tOWvoZNphmjnsDnyiPU6wDXBuVV2Y5GSAqjoD+DLNRWs3AfcCs56SKm3tFuP4sRa/LQmCYeP6j1BVa4ADhiw/Y+BxAW/YghqkrdJiHD/W4rclF5T92rxXIUmamJGCIMkpSXZOEuC0JFcneUnHtUmSxmDUHsHr2xlGXwIsoxnLf3dnVUmSxmbUIJg+LnA08PGquoYRjxVIkrZuowbBqiQX0wTBV5PsBHhTGklaBEY9a+gEYH/gu1V1b5In4KmekrQojBQE7S0prx54/mPgx10VJUkaH29eL0k9ZxBIUs8ZBJLUc7MGQZLnJrkyyQ+SLE+y68C6q7ovT5LUtbl6BB8F3gk8F7iR5naT+7brlnZYlyRpTOY6a2jHqrqoffz+JKuAi5Icx5AbyEiSFp65giBJHldVPwGoqkuTvBo4D3h859VJkjo319DQe4B/M7ignV76cOD8roqSJI3PXLeq/NTMZUmeVFU3A7/XWVWSpLHZktNHvzzvVUiSJmZLgsBZRyVpEdmSIPjLea9CkjQxI9+zuL2YbC/gyiQHAlTV1bO/SpK0tRspCJK8Czge+A4/v36ggMO6KUuSNC6j9gj+E7BvVf1Ll8VIksZv1GME1wG7dFmIJGkyRu0R/AnwrSTXAfdPL6yqV3RSlSRpbEYNgk/QXGV8Ld6rWJIWlVGD4EdV9eedViJJmohRg2BVkj8BvsjDh4Y8fVSSFrhRg+CA9t8XDCyb9fTRJHsBfw08iWY4aXlV/dmMNo8DPgns3dby/qr6+Ig1SZLmwUhBUFWHbsG2HwDeVlVXJ9mJpldxSVXdMNDmDcANVfVrSZYB/5jkHE9TlaTxGen00ST/O8kuA893TfLHs72mqm6bHjqqqruBtcAeM5sBOyUJsCNwO02ASJLGZNTrCF5aVXdOP6mqO4CjR32TJPvQDC+tmLHqIzT3O7iV5oykU6rKs5IkaYxGDYJtkzxm+kmS7YHHzNL+XyXZkeaOZm+uqrtmrD4SWA08Gdgf+EiSnYds48QkK5Os3Lhx44glS5JGMWoQfBL42yQnJHk9cAnNtQWzSrKUJgTOqaphdzR7HXB+NW4C1gHPmtmoqpZX1VRVTS1btmzEkiVJoxj1YPF7k6wBjqC5H8G7quqrs72mHff/GLC2qj6wiWY309z28utJngg8E/juqMVLkh69WYMgSaqqAKrqIuCi2drMcAhwHHBtktXtsrfTnCpKVZ0BvAs4O8m1NAFzalX9aEs/jCRp883VI7g0yXnA37T3KQYgyS8A/x74HeBS4OyZL6yqy5njbmZVdSvwks2sWZI0j+YKgqOA1wOfTvIU4E5ge5pjCxcDH6yq1bO8XpK0lZs1CKrqp8DpwOntgd/dgPsGTyWVJC1sI9+qsqp+BtzWYS2SpAnYkpvXS5IWEYNAknpu1LmGnj1k2YvnvRpJ0tiN2iM4N8mpaWyf5MM0t6+UJC1wowbBwcBewDeAb9JMEndIV0VJksZn1CD4GXAfzTUE2wHrnCVUkhaHUYPgmzRBcBDNFcW/meTznVUlSRqbUa8jOKGqVraPfwgck+S4jmqSJI3RqEGwIcneM5b9/XwXI0kav1GD4Es0t5UMzTGCpwD/CPzbjuqSFpzPnvTCSZcgbZFR70fw3MHnSQ4ETuqkIknSWG3RlcXtTekPmudaJEkTMFKPIMlbB55uAxwIePNgSVoERj1GsNPA4wdojhmcN//lSJLGbdRjBKd1XYgkaTLmumfx/6E5W2ioqnrFvFckSVupxXpm2Fw9gvePpYpF7tgzrwAW738iSQvbXEGwbvCm9ZKkxWeu00cvmH6QxIPDkrQIzRUEGXj81C4LkSRNxlxBUJt4LElaJOY6RrBfkrtoegbbt49pn1dV7dxpdZKkzs0aBFW17bgKkSRNxhbNNSRJWjw6C4IkeyW5NMnaJNcnOWUT7V6cZHXbxnscSNKYjTrX0JZ4AHhbVV2dZCdgVZJLquqG6QZJdgFOB46qqpuT/GKH9UiShuisR1BVt7XTVVNVdwNrgT1mNPst4Pzpi9aqakNX9UiShhvLMYIk+wAHACtmrHoGsGuSy5KsSvLb46hHkvRzXQ4NAZBkR5opq99cVXfNWL0E+HfA4cD2wBVJrqyqG2ds40TgRIC9955562RJ0qPRaY8gyVKaEDinqs4f0mQ9cFFV/XNV/Qj4GrDfzEZVtbyqpqpqatmyZV2WLEm90+VZQwE+Bqytqg9sotnfAC9KsiTJDsDBNMcSJElj0uXQ0CHAccC1SVa3y94O7A1QVWdU1dokFwFrgIeAs6rqug5rkiTN0FkQVNXlPHzSuk21ex/wvq7qkCTNziuLJannDAJJ6jmDQJJ6ziCQpJ4zCCSp5wwCSeo5g0CSes4gkKSeMwgkqecMAknqOYNAknrOIJCknjMIJKnnDAJJ6jmDYEzW33HvpEuQpKEMgjG55c6fTroESRqq85vXb02OPfOKibzvDbfdNbH3/+xJLxz7e0paWHoVBOO2/o57H9YTWLHudgD22GU79tx1h0mVJUkP06sgmNTe8bFnXsGKdbfzvXe/bCLvL0mz8RiBJPWcQTAme+yy3aRLkKShDIIx8ZiApK2VQSBJPWcQSFLPGQSS1HMGgST1nEEgST3XWRAk2SvJpUnWJrk+ySmztD0oyYNJXtNVPZKk4bq8svgB4G1VdXWSnYBVSS6pqhsGGyXZFngP8NUOa5EkbUJnPYKquq2qrm4f3w2sBfYY0vSNwHnAhq5qkSRt2liOESTZBzgAWDFj+R7Aq4AzxlGHJOmROg+CJDvS7PG/uarumrH6Q8CpVfXgHNs4McnKJCs3btzYVamS1Eudzj6aZClNCJxTVecPaTIFfCYJwG7A0UkeqKoLBhtV1XJgOcDU1FR1WbMk9U1nQZDm2/1jwNqq+sCwNlX1lIH2ZwMXzgwBSVK3uuwRHAIcB1ybZHW77O3A3gBV5XEBSdoKdBYEVXU5kM1of3xXtUiSNs0riyWp5wwCSeo5g0CSes4gkKSeMwgkqecMAknqOYNAknrOIJCknjMIJKnnDAJJ6jmDQJJ6ziCQpJ4zCCSp5zq9MY0anz3phZMuQZI2yR6BJPWcQSBJPWcQSFLPGQSS1HMGgST1nEEgST1nEEhSzxkEktRzBoEk9VyqatI1bJYkG4HvT7qOLbAb8KNJFzFmfubFr2+fFxbuZ/6lqlo2bMWCC4KFKsnKqpqadB3j5Gde/Pr2eWFxfmaHhiSp5wwCSeo5g2B8lk+6gAnwMy9+ffu8sAg/s8cIJKnn7BFIUs8ZBJLUcwbBGCTZNsm3klw46VrGIcn3klybZHWSlZOuZxyS7JLk80m+nWRtkkV9W7okz2x/v9M/dyV586Tr6lqStyS5Psl1ST6dZLtJ1zQfPEYwBkneCkwBO1fVyyddT9eSfA+YqqqFeNHNFknyCeDrVXVWkl8AdqiqOydd1zgk2Ra4BTi4qhbixZ4jSbIHcDnw7Kq6L8m5wJer6uzJVvbo2SPoWJI9gZcBZ026FnUjyc7ArwAfA6iqf+lLCLQOB76zmENgwBJg+yRLgB2AWydcz7wwCLr3IeC/AQ9NupAxKuDiJKuSnDjpYsbgqcBG4OPtEOBZSR476aLG6DeAT0+6iK5V1S3A+4GbgduAn1TVxZOtan4YBB1K8nJgQ1WtmnQtY3ZIVR0IvBR4Q5JfmXRBHVsCHAh8tKoOAP4Z+IPJljQe7TDYK4DPTbqWriXZFTgGeArwZOCxSf7zZKuaHwZBtw4BXtGOmX8GOCzJJydbUveq6tb23w3AF4DnT7aizq0H1lfVivb552mCoQ9eClxdVf9v0oWMwRHAuqraWFU/A84HfnnCNc0Lg6BDVfWHVbVnVe1D033+u6paFHsQm5LksUl2mn4MvAS4brJVdauqfgj8IMkz20WHAzdMsKRx+k16MCzUuhl4QZIdkoTm97x2wjXNiyWTLkCLzhOBLzR/JywBPlVVF022pLF4I3BOO1TyXeB1E66nc0l2AH4VOGnStYxDVa1I8nngauAB4FsskukmPH1UknrOoSFJ6jmDQJJ6ziCQpJ4zCCSp5wwCSXoUkrwzyS0DE/AdPaTNdkmuSnJNO2ndaQPr3pVkTfvai5M8ecZr905yT5L/shk1fTjJPaO2Nwi0qCV5wsAf6A9n/MF+o6P3PCDJWe3j45NUksMH1r+qXfaa9vllSabax9Mzt16b5IYkf5zkMe26ZUn6cCruVivJi5OcPWTVB6tq//bny0PW3w8cVlX7AfsDRyV5QbvufVX1vKraH7gQeMfMbQNf2Ywap4BdRm0PBoEWuar68fQfKHAGD/+D7eqq0LcDHx54fi3NhVfTfgO4ZpbXH1pVz6W5IvuptOeqV9VG4LYkh8xvuepaNab30Je2P9Wuu2ug6WOnlwMkeSXNdSnXD24vyUuSXJHk6iSfS7Jju3xb4H0085uNzCBQb013ndu9vL9Pcm6SG5O8O8lr2678tUn2bdstS3Jekm+2P4/4Qm6vqn5eVQ1+0X8deH6Spe0f7NOA1XPV135xnAy8Msnj28UXAK99VB9cXfj9dnjnr9o5iR4hzX1JVgMbgEsGpiQhyf9K8gOa3+072mWPBU4FTpuxnd2A/wEc0c7ptRJ463QdwBer6rbNKd4gkBr7AacAzwWOA55RVc+nmT78jW2bP6PpURwEvJrhU4tP8cgpNQr4v8CRNJOWfXHUotq9xXXA09tFK4EXjfp6zY8kK9ov8bNo5g+bHl48EvgosC/NkM9twJ8O20ZVPdj2TPek2TF4zsC6/15VewHn0HyZQxMAHxzoSUx7AfBs4B/amn4H+KX22MKv8/De6EicYkJqfHN6LyrJd4Dp6YWvBQ5tHx8BPLudPgNg5yQ7VdXdA9vZnWZK6pk+A7wJeBzwNprho1Fl4PEGmpkvNUZVdTA0vUfg+Ko6fli7JH9JM84/27buTHIZcBSP3Gn4FPAl4H8CBwOvSfJemjH/h5L8FPg+TY9icLiRJC+j6W3e1P4f3SHJTVX1tLk+n0EgNe4fePzQwPOH+PnfyTbAC6vqvlm2cx/wiNsXVtVV7R7gfVV140CYzKodatoHuLFdtF37HtpKJNl9YCjmVQyZZDHJMuBnbQhsT7NT8Z523dOr6p/apq8Avg1QVS8aeP07gXuq6iPttv4iydOq6qZ2zqc9q+pLwJMGXnPPKCEADg1Jm+Nift5tJ8n+Q9qspdkrG+YP2YyeQHs84XTggqq6o138DBb5bK4L0HvbY0lraHqPbwFI8uQk02cQ7Q5c2rb5Js0e/XTP4d1p7oG8hma23lNme7P2pIHjgU+3r7kSeNaj+QD2CKTRvYlmT2wNzd/O12gO5v6rqvp2kscNGTKiqjZ1CuASHt4juTRNl2Ebmvs5vGtg3aE0QweagKq6DLhsxrLjNtH2VuDo9vEa4IBNtHv1CO/7zhnP/w44aI7X7DjXdqc5+6g0z5K8Bbi7qua8T3V7jcBNwHOq6icjtP8acMxAD0F61BwakubfR3n4Hv5Q7YU/q4HTRwyBZcAHDAHNN3sEktRz9ggkqecMAknqOYNAknrOIJCknjMIJKnn/j9i3uF4Q/SVgQAAAABJRU5ErkJggg==\n",
+      "text/plain": [
+       "<Figure size 432x288 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "lc_maker_1d = LightCurveEstimator(\n",
+    "    analysis_1d.datasets,\n",
+    "    time_intervals=time_intervals,\n",
+    "    source=\"crab\",\n",
+    "    reoptimize=False,\n",
+    ")\n",
+    "\n",
+    "nightwise_lc = lc_maker_1d.run(\n",
+    "    e_ref=1 * u.TeV, e_min=1.0 * u.TeV, e_max=10.0 * u.TeV\n",
+    ")\n",
+    "\n",
+    "nightwise_lc.plot()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.7.0"
+  },
+  "nbsphinx": {
+   "orphan": true
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}

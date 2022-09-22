@@ -1,0 +1,740 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "\n",
+    "<div class=\"alert alert-info\">\n",
+    "\n",
+    "**This is a fixed-text formatted version of a Jupyter notebook**\n",
+    "\n",
+    "- Try online[![Binder](https://static.mybinder.org/badge.svg)](https://mybinder.org/v2/gh/gammapy/gammapy-webpage/v0.19?urlpath=lab/tree/tutorials/api/makers.ipynb)\n",
+    "- You may download all the notebooks in the documentation as a\n",
+    "[tar file](../../_downloads/notebooks-0.19.tar).\n",
+    "- **Source files:**\n",
+    "[makers.ipynb](../../_static/notebooks/makers.ipynb) |\n",
+    "[makers.py](../../_static/notebooks/makers.py)\n",
+    "</div>\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "\n",
+    "# Makers - Data reduction\n",
+    "\n",
+    "## Introduction\n",
+    "\n",
+    "\n",
+    "The `gammapy.makers` sub-package contains classes to perform data reduction tasks\n",
+    "from DL3 data to binned datasets.\n",
+    "In the data reduction step the DL3 data is prepared for modeling and fitting,\n",
+    "by binning events into a counts map and interpolating the exposure, background,\n",
+    "psf and energy dispersion on the chosen analysis geometry.\n",
+    "\n",
+    "## Setup"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:08:39.163121Z",
+     "iopub.status.busy": "2021-11-22T21:08:39.162295Z",
+     "iopub.status.idle": "2021-11-22T21:08:39.838951Z",
+     "shell.execute_reply": "2021-11-22T21:08:39.839143Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "from gammapy.makers import (\n",
+    "    MapDatasetMaker,\n",
+    "    FoVBackgroundMaker,\n",
+    "    SafeMaskMaker,\n",
+    "    SpectrumDatasetMaker,\n",
+    "    ReflectedRegionsBackgroundMaker,\n",
+    ")\n",
+    "from gammapy.datasets import MapDataset, SpectrumDataset, Datasets\n",
+    "from gammapy.data import DataStore\n",
+    "from gammapy.maps import MapAxis, WcsGeom, RegionGeom\n",
+    "from regions import CircleSkyRegion\n",
+    "from astropy import units as u\n",
+    "import numpy as np"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Dataset\n",
+    "\n",
+    "The counts, exposure,\n",
+    "background and IRF maps are bundled together in a data structure named `MapDataset`.\n",
+    "To handle on-off observations Gammapy also features a `MapDatasetOnOff` class, which\n",
+    "stores in addition the `counts_off`, `acceptance` and `acceptance_off` data.\n",
+    "\n",
+    "The first step of the data reduction is to create an empty dataset. A `MapDataset` can be created from any `WcsGeom` object. This is illustrated in the following example:\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:08:39.843891Z",
+     "iopub.status.busy": "2021-11-22T21:08:39.843598Z",
+     "iopub.status.idle": "2021-11-22T21:08:39.853068Z",
+     "shell.execute_reply": "2021-11-22T21:08:39.853251Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "MapDataset\n",
+      "----------\n",
+      "\n",
+      "  Name                            : FrY21vkA \n",
+      "\n",
+      "  Total counts                    : 0 \n",
+      "  Total background counts         : 0.00\n",
+      "  Total excess counts             : 0.00\n",
+      "\n",
+      "  Predicted counts                : 0.00\n",
+      "  Predicted background counts     : 0.00\n",
+      "  Predicted excess counts         : nan\n",
+      "\n",
+      "  Exposure min                    : 0.00e+00 m2 s\n",
+      "  Exposure max                    : 0.00e+00 m2 s\n",
+      "\n",
+      "  Number of total bins            : 110000 \n",
+      "  Number of fit bins              : 0 \n",
+      "\n",
+      "  Fit statistic type              : cash\n",
+      "  Fit statistic value (-2 log(L)) : nan\n",
+      "\n",
+      "  Number of models                : 0 \n",
+      "  Number of parameters            : 0\n",
+      "  Number of free parameters       : 0\n",
+      "\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "energy_axis = MapAxis.from_bounds(\n",
+    "    1, 10, nbin=11, name=\"energy\", unit=\"TeV\", interp=\"log\"\n",
+    ")\n",
+    "geom = WcsGeom.create(\n",
+    "    skydir=(83.63, 22.01),\n",
+    "    axes=[energy_axis],\n",
+    "    width=5 * u.deg,\n",
+    "    binsz=0.05 * u.deg,\n",
+    "    frame=\"icrs\",\n",
+    ")\n",
+    "dataset_empty = MapDataset.create(geom=geom)\n",
+    "print(dataset_empty)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "It is possible to compute the instrument response functions with different spatial and energy binnings as compared to the counts and background maps. For example, one can specify a true energy axis which defines the energy binning of the IRFs:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:08:39.856696Z",
+     "iopub.status.busy": "2021-11-22T21:08:39.856405Z",
+     "iopub.status.idle": "2021-11-22T21:08:39.860349Z",
+     "shell.execute_reply": "2021-11-22T21:08:39.860503Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "energy_axis_true = MapAxis.from_bounds(\n",
+    "    0.3, 10, nbin=31, name=\"energy_true\", unit=\"TeV\", interp=\"log\"\n",
+    ")\n",
+    "dataset_empty = MapDataset.create(geom=geom, energy_axis_true=energy_axis_true)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "For the detail of the other options availables, you can always call the help:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:08:39.862550Z",
+     "iopub.status.busy": "2021-11-22T21:08:39.862247Z",
+     "iopub.status.idle": "2021-11-22T21:08:39.863600Z",
+     "shell.execute_reply": "2021-11-22T21:08:39.863751Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Help on method create in module gammapy.datasets.map:\n",
+      "\n",
+      "create(geom, energy_axis_true=None, migra_axis=None, rad_axis=None, binsz_irf=None, reference_time='2000-01-01', name=None, meta_table=None, **kwargs) method of abc.ABCMeta instance\n",
+      "    Create a MapDataset object with zero filled maps.\n",
+      "    \n",
+      "    Parameters\n",
+      "    ----------\n",
+      "    geom : `~gammapy.maps.WcsGeom`\n",
+      "        Reference target geometry in reco energy, used for counts and background maps\n",
+      "    energy_axis_true : `~gammapy.maps.MapAxis`\n",
+      "        True energy axis used for IRF maps\n",
+      "    migra_axis : `~gammapy.maps.MapAxis`\n",
+      "        If set, this provides the migration axis for the energy dispersion map.\n",
+      "        If not set, an EDispKernelMap is produced instead. Default is None\n",
+      "    rad_axis : `~gammapy.maps.MapAxis`\n",
+      "        Rad axis for the psf map\n",
+      "    binsz_irf : float\n",
+      "        IRF Map pixel size in degrees.\n",
+      "    reference_time : `~astropy.time.Time`\n",
+      "        the reference time to use in GTI definition\n",
+      "    name : str\n",
+      "        Name of the returned dataset.\n",
+      "    meta_table : `~astropy.table.Table`\n",
+      "        Table listing information on observations used to create the dataset.\n",
+      "        One line per observation for stacked datasets.\n",
+      "    \n",
+      "    Returns\n",
+      "    -------\n",
+      "    empty_maps : `MapDataset`\n",
+      "        A MapDataset containing zero filled maps\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "help(MapDataset.create)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Once this empty \"reference\" dataset is defined, it can be filled with observational\n",
+    "data using the `MapDatasetMaker`:\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:08:39.865923Z",
+     "iopub.status.busy": "2021-11-22T21:08:39.865621Z",
+     "iopub.status.idle": "2021-11-22T21:08:41.858173Z",
+     "shell.execute_reply": "2021-11-22T21:08:41.858380Z"
+    },
+    "nbsphinx-thumbnail": {
+     "tooltip": "Data reduction : from observations to binned datasets"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "No HDU found matching: OBS_ID = 23592, HDU_TYPE = rad_max, HDU_CLASS = None\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "MapDataset\n",
+      "----------\n",
+      "\n",
+      "  Name                            : YQkm5bSN \n",
+      "\n",
+      "  Total counts                    : 2016 \n",
+      "  Total background counts         : 1866.72\n",
+      "  Total excess counts             : 149.28\n",
+      "\n",
+      "  Predicted counts                : 1866.72\n",
+      "  Predicted background counts     : 1866.72\n",
+      "  Predicted excess counts         : nan\n",
+      "\n",
+      "  Exposure min                    : 1.19e+02 m2 s\n",
+      "  Exposure max                    : 1.09e+09 m2 s\n",
+      "\n",
+      "  Number of total bins            : 110000 \n",
+      "  Number of fit bins              : 110000 \n",
+      "\n",
+      "  Fit statistic type              : cash\n",
+      "  Fit statistic value (-2 log(L)) : nan\n",
+      "\n",
+      "  Number of models                : 0 \n",
+      "  Number of parameters            : 0\n",
+      "  Number of free parameters       : 0\n",
+      "\n",
+      "\n"
+     ]
+    },
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 432x288 with 2 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "# get observation\n",
+    "data_store = DataStore.from_dir(\"$GAMMAPY_DATA/hess-dl3-dr1\")\n",
+    "obs = data_store.get_observations([23592])[0]\n",
+    "\n",
+    "# fill dataset\n",
+    "maker = MapDatasetMaker()\n",
+    "dataset = maker.run(dataset_empty, obs)\n",
+    "print(dataset)\n",
+    "dataset.counts.sum_over_axes().plot(stretch=\"sqrt\", add_cbar=True);"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "The `MapDatasetMaker` fills the corresponding `counts`, `exposure`, `background`,\n",
+    "`psf` and `edisp` map per observation. The `MapDatasetMaker` has a\n",
+    "`selection` parameter, in case some of the maps should not be computed. There is also a `background_oversampling` parameter that defines the oversampling factor in energy used to compute the bakcground (default is None).\n",
+    "\n",
+    "## Safe data range handling\n",
+    "\n",
+    "\n",
+    "To exclude the data range from a `MapDataset`, that is associated with\n",
+    "high systematics on instrument response functions, a `mask_safe`\n",
+    "can be defined. The `mask_safe` is a `Map` object with `bool` data\n",
+    "type, which indicates for each pixel, whether it should be included\n",
+    "in the analysis. The convention is that a value of `True` or `1`\n",
+    "includes the pixel, while a value of `False` or `0` excludes a pixels\n",
+    "from the analysis. To compute safe data range masks according to certain\n",
+    "criteria, Gammapy provides a `SafeMaskMaker` class. The different criteria are given by the `methods`argument, available options are :\n",
+    "\n",
+    "- aeff-default, uses the energy ranged specified in the DL3 data files, if available.\n",
+    "- aeff-max, the lower energy threshold is determined such as the effective area is above a given percentage of its maximum\n",
+    "- edisp-bias, the lower energy threshold is determined such as the energy bias is below a given percentage\n",
+    "- offset-max, the data beyond a given offset radius from the observation center are excluded\n",
+    "- bkg-peak, the energy threshold is defined as the upper edge of the energy bin with the highest predicted background rate. This method was introduced in the HESS DL3 validation paper: https://arxiv.org/pdf/1910.08088.pdf\n",
+    "\n",
+    "\n",
+    "\n",
+    "Multiple methods can be combined. Here is an example :\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:08:41.861019Z",
+     "iopub.status.busy": "2021-11-22T21:08:41.860718Z",
+     "iopub.status.idle": "2021-11-22T21:08:43.609151Z",
+     "shell.execute_reply": "2021-11-22T21:08:43.609394Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "WcsNDMap\n",
+      "\n",
+      "\tgeom  : WcsGeom \n",
+      " \taxes  : ['lon', 'lat', 'energy']\n",
+      "\tshape : (100, 100, 11)\n",
+      "\tndim  : 3\n",
+      "\tunit  : \n",
+      "\tdtype : bool\n",
+      "\n"
+     ]
+    },
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 432x288 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "safe_mask_maker = SafeMaskMaker(\n",
+    "    methods=[\"aeff-default\", \"offset-max\"], offset_max=\"3 deg\"\n",
+    ")\n",
+    "\n",
+    "dataset = maker.run(dataset_empty, obs)\n",
+    "dataset = safe_mask_maker.run(dataset, obs)\n",
+    "print(dataset.mask_safe)\n",
+    "dataset.mask_safe.sum_over_axes().plot();"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "\n",
+    "The `SafeMaskMaker` does not modify any data, but only defines the\n",
+    "`MapDataset.mask_safe` attribute. This means that the safe data\n",
+    "range can be defined and modified in between the data reduction\n",
+    "and stacking and fitting. For a joint-likelihood analysis of multiple\n",
+    "observations the safe mask is applied to the counts and predicted\n",
+    "number of counts map during fitting. This correctly accounts for\n",
+    "contributions (spill-over) by the PSF from outside the field of view.\n",
+    "\n",
+    "## Background estimation\n",
+    "\n",
+    "\n",
+    "The background computed by the `MapDatasetMaker` gives the number of counts predicted\n",
+    "by the background IRF of the observation. Because its actual normalization, or even its\n",
+    "spectral shape, might be poorly constrained, it is necessary to correct it with the data\n",
+    "themselves. This is the role of background estimation Makers. \n",
+    "\n",
+    "\n",
+    "### FoV background\n",
+    "\n",
+    "\n",
+    "If the background energy dependent morphology is well reproduced by the background model\n",
+    "stored in the IRF, it might be that its normalization is incorrect and that some spectral\n",
+    "corrections are necessary. This is made possible thanks to the `~gammapy.makers.FoVBackgroundMaker`.\n",
+    "This technique is recommended in most 3D data reductions. For more details and usage, see [fov_background](https://docs.gammapy.org/dev/makers/fov.html).\n",
+    "\n",
+    "Here we are going to use a `~gammapy.makers.FoVBackgroundMaker` that will rescale the background model to the data excluding the region where a known source is present. For more details on the way to create exclusion masks see the [mask maps](mask_maps.ipynb) notebook.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:08:43.612046Z",
+     "iopub.status.busy": "2021-11-22T21:08:43.610485Z",
+     "iopub.status.idle": "2021-11-22T21:08:43.651974Z",
+     "shell.execute_reply": "2021-11-22T21:08:43.652191Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "circle = CircleSkyRegion(center=geom.center_skydir, radius=0.2 * u.deg)\n",
+    "exclusion_mask = geom.region_mask([circle], inside=False)\n",
+    "\n",
+    "fov_bkg_maker = FoVBackgroundMaker(\n",
+    "    method=\"scale\", exclusion_mask=exclusion_mask\n",
+    ")\n",
+    "dataset = fov_bkg_maker.run(dataset)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Other backgrounds production methods are available as listed below.\n",
+    "\n",
+    "### Ring background\n",
+    "\n",
+    "If the background model does not reproduce well the morphology, a classical approach consists\n",
+    "in applying local corrections by smoothing the data with a ring kernel. This allows to build a set\n",
+    "of OFF counts taking into account the inperfect knowledge of the background. This is implemented\n",
+    "in the `~gammapy.makers.RingBackgroundMaker` which transforms the Dataset in a `MapDatasetOnOff`.\n",
+    "This technique is mostly used for imaging, and should not be applied for 3D modeling and fitting.\n",
+    "\n",
+    "For more details and usage, see [ring_background](https://docs.gammapy.org/dev/makers/ring.html).\n",
+    "\n",
+    "\n",
+    "### Reflected regions background\n",
+    "\n",
+    "In the absence of a solid background model, a classical technique in Cherenkov astronomy for 1D\n",
+    "spectral analysis is to estimate the background in a number of OFF regions. When the background\n",
+    "can be safely estimated as radially symmetric w.r.t. the pointing direction, one can apply the\n",
+    "reflected regions background technique.\n",
+    "This is implemented in the `~gammapy.makers.ReflectedRegionsBackgroundMaker` which transforms a\n",
+    "`SpectrumDataset` in a `SpectrumDatasetOnOff`. This technique is only used for 1D spectral\n",
+    "analysis.\n",
+    "\n",
+    "For more details and usage, see [reflected_background](https://docs.gammapy.org/dev/makers/reflected.html).\n",
+    "\n",
+    "\n",
+    "## Data reduction loop\n",
+    "\n",
+    "The data reduction steps can be combined in a single loop to run\n",
+    "a full data reduction chain. For this the `MapDatasetMaker` is run\n",
+    "first and the output dataset is the passed on to the next maker step.\n",
+    "Finally the dataset per observation is stacked into a larger map."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:08:43.655422Z",
+     "iopub.status.busy": "2021-11-22T21:08:43.655129Z",
+     "iopub.status.idle": "2021-11-22T21:08:48.163675Z",
+     "shell.execute_reply": "2021-11-22T21:08:48.163910Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "No HDU found matching: OBS_ID = 23523, HDU_TYPE = rad_max, HDU_CLASS = None\n",
+      "No HDU found matching: OBS_ID = 23592, HDU_TYPE = rad_max, HDU_CLASS = None\n",
+      "No HDU found matching: OBS_ID = 23526, HDU_TYPE = rad_max, HDU_CLASS = None\n",
+      "No HDU found matching: OBS_ID = 23559, HDU_TYPE = rad_max, HDU_CLASS = None\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "MapDataset\n",
+      "----------\n",
+      "\n",
+      "  Name                            : jEMb_Ng9 \n",
+      "\n",
+      "  Total counts                    : 7972 \n",
+      "  Total background counts         : 7555.42\n",
+      "  Total excess counts             : 416.58\n",
+      "\n",
+      "  Predicted counts                : 7555.42\n",
+      "  Predicted background counts     : 7555.42\n",
+      "  Predicted excess counts         : nan\n",
+      "\n",
+      "  Exposure min                    : 1.04e+06 m2 s\n",
+      "  Exposure max                    : 3.22e+09 m2 s\n",
+      "\n",
+      "  Number of total bins            : 687500 \n",
+      "  Number of fit bins              : 687214 \n",
+      "\n",
+      "  Fit statistic type              : cash\n",
+      "  Fit statistic value (-2 log(L)) : nan\n",
+      "\n",
+      "  Number of models                : 0 \n",
+      "  Number of parameters            : 0\n",
+      "  Number of free parameters       : 0\n",
+      "\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "data_store = DataStore.from_dir(\"$GAMMAPY_DATA/hess-dl3-dr1\")\n",
+    "observations = data_store.get_observations([23523, 23592, 23526, 23559])\n",
+    "\n",
+    "energy_axis = MapAxis.from_bounds(\n",
+    "    1, 10, nbin=11, name=\"energy\", unit=\"TeV\", interp=\"log\"\n",
+    ")\n",
+    "geom = WcsGeom.create(\n",
+    "    skydir=(83.63, 22.01), axes=[energy_axis], width=5, binsz=0.02\n",
+    ")\n",
+    "\n",
+    "maker = MapDatasetMaker()\n",
+    "safe_mask_maker = SafeMaskMaker(\n",
+    "    methods=[\"aeff-default\", \"offset-max\"], offset_max=\"3 deg\"\n",
+    ")\n",
+    "\n",
+    "stacked = MapDataset.create(geom)\n",
+    "\n",
+    "for obs in observations:\n",
+    "    cutout = stacked.cutout(obs.pointing_radec, width=\"6 deg\")\n",
+    "    dataset = maker.run(cutout, obs)\n",
+    "    dataset = safe_mask_maker.run(dataset, obs)\n",
+    "    dataset = fov_bkg_maker.run(dataset)\n",
+    "    stacked.stack(dataset)\n",
+    "\n",
+    "print(stacked)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "To maintain good performance it is always recommended to do a cutout\n",
+    "of the `MapDataset` as shown above. In case you want to increase the\n",
+    "offset-cut later, you can also choose a larger width of the cutout\n",
+    "than `2 * offset_max`.\n",
+    "\n",
+    "Note that we stack the individual `MapDataset`, which are computed\n",
+    "per observation into a larger dataset. During the stacking the safe data\n",
+    "range mask (`MapDataset.mask_safe`) is applied by setting data outside to\n",
+    "zero, then data is added to the larger map dataset. To stack multiple\n",
+    "observations, the larger dataset must be created first."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Spectrum dataset\n",
+    "\n",
+    "The spectrum datasets represent 1D spectra along an energy axis whitin a given on region. The `SpectrumDataset` contains a counts spectrum, and a background model. The `SpectrumDatasetOnOff` contains ON and OFF count spectra, background is implicitly modeled via the OFF counts spectrum. \n",
+    "\n",
+    "The `SpectrumDatasetMaker` make spectrum dataset for a single observation.\n",
+    "In that case the irfs and background are computed at a single fixed offset, which is recommend only for point-sources.\n",
+    "\n",
+    "Here is an example of data reduction loop to create `SpectrumDatasetOnOff` datasets:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:08:48.168257Z",
+     "iopub.status.busy": "2021-11-22T21:08:48.167950Z",
+     "iopub.status.idle": "2021-11-22T21:08:49.268757Z",
+     "shell.execute_reply": "2021-11-22T21:08:49.268991Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Datasets\n",
+      "--------\n",
+      "\n",
+      "Dataset 0: \n",
+      "\n",
+      "  Type       : SpectrumDatasetOnOff\n",
+      "  Name       : obs-23523\n",
+      "  Instrument : HESS\n",
+      "  Models     : \n",
+      "\n",
+      "Dataset 1: \n",
+      "\n",
+      "  Type       : SpectrumDatasetOnOff\n",
+      "  Name       : obs-23592\n",
+      "  Instrument : HESS\n",
+      "  Models     : \n",
+      "\n",
+      "Dataset 2: \n",
+      "\n",
+      "  Type       : SpectrumDatasetOnOff\n",
+      "  Name       : obs-23526\n",
+      "  Instrument : HESS\n",
+      "  Models     : \n",
+      "\n",
+      "Dataset 3: \n",
+      "\n",
+      "  Type       : SpectrumDatasetOnOff\n",
+      "  Name       : obs-23559\n",
+      "  Instrument : HESS\n",
+      "  Models     : \n",
+      "\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "# on region is given by the CircleSkyRegion previously defined\n",
+    "geom = RegionGeom.create(region=circle, axes=[energy_axis])\n",
+    "exclusion_mask_2d = exclusion_mask.reduce_over_axes(\n",
+    "    np.logical_or, keepdims=False\n",
+    ")\n",
+    "\n",
+    "spectrum_dataset_empty = SpectrumDataset.create(\n",
+    "    geom=geom, energy_axis_true=energy_axis_true\n",
+    ")\n",
+    "\n",
+    "spectrum_dataset_maker = SpectrumDatasetMaker(\n",
+    "    containment_correction=False, selection=[\"counts\", \"exposure\", \"edisp\"]\n",
+    ")\n",
+    "reflected_bkg_maker = ReflectedRegionsBackgroundMaker(\n",
+    "    exclusion_mask=exclusion_mask_2d\n",
+    ")\n",
+    "safe_mask_masker = SafeMaskMaker(methods=[\"aeff-max\"], aeff_percent=10)\n",
+    "\n",
+    "datasets = Datasets()\n",
+    "\n",
+    "for observation in observations:\n",
+    "    dataset = spectrum_dataset_maker.run(\n",
+    "        spectrum_dataset_empty.copy(name=f\"obs-{observation.obs_id}\"),\n",
+    "        observation,\n",
+    "    )\n",
+    "    dataset_on_off = reflected_bkg_maker.run(dataset, observation)\n",
+    "    dataset_on_off = safe_mask_masker.run(dataset_on_off, observation)\n",
+    "    datasets.append(dataset_on_off)\n",
+    "print(datasets)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.9.0"
+  },
+  "latex_envs": {
+   "LaTeX_envs_menu_present": true,
+   "autoclose": false,
+   "autocomplete": true,
+   "bibliofile": "biblio.bib",
+   "cite_by": "apalike",
+   "current_citInitial": 1.0,
+   "eqLabelWithNumbers": true,
+   "eqNumInitial": 1.0,
+   "hotkeys": {
+    "equation": "Ctrl-E",
+    "itemize": "Ctrl-I"
+   },
+   "labels_anchors": false,
+   "latex_user_defs": false,
+   "report_style_numbering": false,
+   "user_envs_cfg": false
+  },
+  "nbsphinx": {
+   "orphan": true
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}

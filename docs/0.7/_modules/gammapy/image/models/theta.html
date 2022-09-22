@@ -1,0 +1,276 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>gammapy.image.models.theta &#8212; gammapy v0.7</title>
+    <link rel="stylesheet" href="../../../../_static/gammapy.css" type="text/css" />
+    <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../../',
+        VERSION:     '0.7',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <link rel="shortcut icon" href="../../../../_static/astropy_logo.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+<link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+<script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+
+
+  </head>
+  <body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">gamma</span><span id="logotext2">py</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="Astropy Homepage" href="http://www.astropy.org"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">gammapy v0.7</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for gammapy.image.models.theta</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
+<span class="sd">&quot;&quot;&quot;Classes for working with radial distributions,</span>
+<span class="sd">e.g. the PSF or a source or a PSF-convolved source.</span>
+
+<span class="sd">TODO: ThetaCalculator2D and ModelThetaCalculator are not</span>
+<span class="sd">finished and need tests!</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;ModelThetaCalculator&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;ThetaCalculator&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;ThetaCalculator2D&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;ThetaCalculatorScipy&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<div class="viewcode-block" id="ThetaCalculator"><a class="viewcode-back" href="../../../../api/gammapy.image.models.ThetaCalculator.html#gammapy.image.models.ThetaCalculator">[docs]</a><span class="k">class</span> <span class="nc">ThetaCalculator</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Provides methods ``containment_fraction(theta)`` and ``containment_radius(containment_fraction)``</span>
+<span class="sd">    given some 1D distribution (not necessarily normalized).</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    If you have to compute theta or containment many times for</span>
+<span class="sd">    the same dist, this is much faster than ThetaCalculatorScipy.</span>
+<span class="sd">    If you want only one value it could actually be slower,</span>
+<span class="sd">    especially the containment calculation.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dist : callable</span>
+<span class="sd">        Distribution function dp / dtheta2 (theta2)</span>
+<span class="sd">    theta_max : float</span>
+<span class="sd">        Integration range will be 0 .. theta_max ^ 2</span>
+<span class="sd">    nbins : int</span>
+<span class="sd">        Integration step size</span>
+<span class="sd">    normalize : bool</span>
+<span class="sd">        Normalize discretized distribution to 1?</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dist</span><span class="p">,</span> <span class="n">theta_max</span><span class="p">,</span> <span class="n">n_bins</span><span class="p">,</span> <span class="n">normalize</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="n">theta2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">theta_max</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="n">n_bins</span><span class="p">)</span>
+        <span class="n">dtheta2</span> <span class="o">=</span> <span class="n">theta2</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">theta2</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="p">(</span><span class="n">dist</span><span class="p">(</span><span class="n">theta2</span><span class="p">)</span> <span class="o">*</span> <span class="n">dtheta2</span><span class="p">)</span><span class="o">.</span><span class="n">cumsum</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">normalize</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">/=</span> <span class="n">p</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">theta2</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">p</span> <span class="o">=</span> <span class="n">theta2</span><span class="p">,</span> <span class="n">p</span>
+
+<div class="viewcode-block" id="ThetaCalculator.containment_fraction"><a class="viewcode-back" href="../../../../api/gammapy.image.models.ThetaCalculator.html#gammapy.image.models.ThetaCalculator.containment_fraction">[docs]</a>    <span class="k">def</span> <span class="nf">containment_fraction</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">theta</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute containment fraction for a given theta.&quot;&quot;&quot;</span>
+        <span class="n">theta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">theta</span><span class="p">)</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theta2</span> <span class="o">&gt;</span> <span class="n">theta</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">p</span><span class="p">[</span><span class="n">index</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="ThetaCalculator.containment_radius"><a class="viewcode-back" href="../../../../api/gammapy.image.models.ThetaCalculator.html#gammapy.image.models.ThetaCalculator.containment_radius">[docs]</a>    <span class="k">def</span> <span class="nf">containment_radius</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">containment_fraction</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute theta for a given containment fraction.&quot;&quot;&quot;</span>
+        <span class="n">containment_fraction</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">containment_fraction</span><span class="p">)</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">p</span> <span class="o">&gt;</span> <span class="n">containment_fraction</span><span class="p">)[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theta2</span><span class="p">[</span><span class="n">index</span><span class="p">])</span></div></div>
+
+
+<div class="viewcode-block" id="ThetaCalculatorScipy"><a class="viewcode-back" href="../../../../api/gammapy.image.models.ThetaCalculatorScipy.html#gammapy.image.models.ThetaCalculatorScipy">[docs]</a><span class="k">class</span> <span class="nc">ThetaCalculatorScipy</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Same functionality as NumericalThetaCalculator, but uses</span>
+<span class="sd">    ``scipy.integrate.quad`` and ``scipy.optimize.fsolve`` instead.</span>
+
+<span class="sd">    Notes:</span>
+<span class="sd">    It is more precise than ThetaCalculator and doesn&#39;t</span>
+<span class="sd">    require you to think about which theta binning and range</span>
+<span class="sd">    gives your desired precision.</span>
+<span class="sd">    If you have to compute many thetas this can be quite slow</span>
+<span class="sd">    because it is a root finding with nested integration.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dist : callable</span>
+<span class="sd">        Probability distribution (probability per theta ^ 2)</span>
+<span class="sd">    theta_max : float</span>
+<span class="sd">        Integration range will be 0 .. theta_max ^ 2</span>
+<span class="sd">    normalize : bool</span>
+<span class="sd">        Normalize discretized distribution to 1?</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dist</span><span class="p">,</span> <span class="n">theta_max</span><span class="p">,</span> <span class="n">normalize</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dist</span> <span class="o">=</span> <span class="n">dist</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">theta_max</span> <span class="o">=</span> <span class="n">theta_max</span>
+        <span class="k">if</span> <span class="n">normalize</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">p_total</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">containment_fraction</span><span class="p">(</span><span class="n">theta_max</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">p_total</span> <span class="o">=</span> <span class="mi">1</span>
+
+<div class="viewcode-block" id="ThetaCalculatorScipy.containment_fraction"><a class="viewcode-back" href="../../../../api/gammapy.image.models.ThetaCalculatorScipy.html#gammapy.image.models.ThetaCalculatorScipy.containment_fraction">[docs]</a>    <span class="k">def</span> <span class="nf">containment_fraction</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">theta</span><span class="p">):</span>
+        <span class="kn">from</span> <span class="nn">scipy.integrate</span> <span class="k">import</span> <span class="n">quad</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="n">quad</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dist</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">theta</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">p</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">p_total</span></div>
+
+<div class="viewcode-block" id="ThetaCalculatorScipy.containment_radius"><a class="viewcode-back" href="../../../../api/gammapy.image.models.ThetaCalculatorScipy.html#gammapy.image.models.ThetaCalculatorScipy.containment_radius">[docs]</a>    <span class="k">def</span> <span class="nf">containment_radius</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">containment_fraction</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute containment angle using the containment_fraction</span>
+<span class="sd">        method plus numerical root finding.&quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">scipy.optimize</span> <span class="k">import</span> <span class="n">brentq</span>
+
+        <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">theta</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">containment_fraction</span><span class="p">(</span><span class="n">theta</span><span class="p">)</span> <span class="o">-</span> <span class="n">containment_fraction</span>
+
+        <span class="k">return</span> <span class="n">brentq</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">theta_max</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="ThetaCalculator2D"><a class="viewcode-back" href="../../../../api/gammapy.image.models.ThetaCalculator2D.html#gammapy.image.models.ThetaCalculator2D">[docs]</a><span class="k">class</span> <span class="nc">ThetaCalculator2D</span><span class="p">(</span><span class="n">ThetaCalculatorScipy</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Methods to compute theta and containment</span>
+<span class="sd">    for a given 2D probability distribution image.</span>
+
+<span class="sd">    Typically this method is used for PSF-convolved</span>
+<span class="sd">    model images, where analytical distributions or</span>
+<span class="sd">    1D distributions are not available.</span>
+
+<span class="sd">    Note: The theta and containment is calculated relative</span>
+<span class="sd">    to the origin (x, y) = (0, 0).</span>
+
+<span class="sd">    Note: We do simple bin summing. In principle we could</span>
+<span class="sd">    do integration over bins by using scipy.integrate.dblquad</span>
+<span class="sd">    in combination with e.g. scipy.interpolate.interp2d,</span>
+<span class="sd">    but for the speed / precision we need this is overkill.</span>
+
+<span class="sd">    TODO: I just realized that probably the best thing to</span>
+<span class="sd">    do is to bin (x,y) -&gt; theta2, make a spline interpolation</span>
+<span class="sd">    and then call ThetaCalculatorScipy!</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dist : 2-dimensional array</span>
+<span class="sd">        Probability distribution (per dx * dy)</span>
+<span class="sd">    x : 2-dimensional array</span>
+<span class="sd">        Pixel ``x`` coordinate array. Must match shape of ``dist``.</span>
+<span class="sd">    x : 2-dimensional array</span>
+<span class="sd">        Pixel ``x`` coordinate array. Must match share of ``dist``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dist</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dist</span> <span class="o">=</span> <span class="n">dist</span> <span class="o">/</span> <span class="n">dist</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">theta2</span> <span class="o">=</span> <span class="n">x</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">y</span> <span class="o">**</span> <span class="mi">2</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">theta_max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theta2</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
+
+<div class="viewcode-block" id="ThetaCalculator2D.containment_fraction"><a class="viewcode-back" href="../../../../api/gammapy.image.models.ThetaCalculator2D.html#gammapy.image.models.ThetaCalculator2D.containment_fraction">[docs]</a>    <span class="k">def</span> <span class="nf">containment_fraction</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">theta</span><span class="p">):</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theta2</span> <span class="o">&lt;</span> <span class="n">theta</span> <span class="o">**</span> <span class="mi">2</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">dist</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span></div></div>
+
+
+<div class="viewcode-block" id="ModelThetaCalculator"><a class="viewcode-back" href="../../../../api/gammapy.image.models.ModelThetaCalculator.html#gammapy.image.models.ModelThetaCalculator">[docs]</a><span class="k">class</span> <span class="nc">ModelThetaCalculator</span><span class="p">(</span><span class="n">ThetaCalculator</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Compute containment radius for given radially symmetric</span>
+<span class="sd">    source and psf as well as desired containment fraction.</span>
+
+<span class="sd">    Uses 2D images for the computation.</span>
+<span class="sd">    Slow but simple, so useful to check more complicated methods.</span>
+
+<span class="sd">    Source and PSF must be callable and return</span>
+<span class="sd">    dP/dtheta (TODO: or dP/dtheta^2?)</span>
+
+<span class="sd">    fov = field of view (deg)</span>
+<span class="sd">    binsz = bin size (deg)</span>
+
+<span class="sd">    The source is supposed to be contained in the FOV</span>
+<span class="sd">    even after PSF convolution.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">source</span><span class="p">,</span> <span class="n">psf</span><span class="p">,</span> <span class="n">fov</span><span class="p">,</span> <span class="n">binsz</span><span class="p">,</span> <span class="n">call2d</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="kn">from</span> <span class="nn">scipy.ndimage</span> <span class="k">import</span> <span class="n">convolve</span>
+        <span class="c1"># Compute source and psf 2D images</span>
+        <span class="n">y</span><span class="p">,</span> <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mgrid</span><span class="p">[</span><span class="o">-</span><span class="n">fov</span><span class="p">:</span><span class="n">fov</span><span class="p">:</span><span class="n">binsz</span><span class="p">,</span> <span class="o">-</span><span class="n">fov</span><span class="p">:</span><span class="n">fov</span><span class="p">:</span><span class="n">binsz</span><span class="p">]</span>
+        <span class="n">theta2</span> <span class="o">=</span> <span class="n">x</span> <span class="o">*</span> <span class="n">x</span> <span class="o">+</span> <span class="n">y</span> <span class="o">*</span> <span class="n">y</span>
+        <span class="k">if</span> <span class="n">call2d</span><span class="p">:</span>
+            <span class="n">source_image</span> <span class="o">=</span> <span class="n">source</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+            <span class="n">psf_image</span> <span class="o">=</span> <span class="n">psf</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">source_image</span> <span class="o">=</span> <span class="n">source</span><span class="o">.</span><span class="n">dpdtheta2</span><span class="p">(</span><span class="n">theta2</span><span class="p">)</span>
+            <span class="n">psf_image</span> <span class="o">=</span> <span class="n">psf</span><span class="o">.</span><span class="n">dpdtheta2</span><span class="p">(</span><span class="n">theta2</span><span class="p">)</span>
+        <span class="c1"># Compute convolved image and normalize it</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="n">convolve</span><span class="p">(</span><span class="n">source_image</span><span class="p">,</span> <span class="n">psf_image</span><span class="p">)</span>
+        <span class="n">p</span> <span class="o">/=</span> <span class="n">p</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="c1"># Store the theta2 and p arrays</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">p</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">theta2</span> <span class="o">=</span> <span class="n">p</span><span class="p">,</span> <span class="n">theta2</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2018, The Gammapy developers.<br/>
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.6.7. &nbsp;
+    Last built 01 Mar 2018. <br/>
+  </p>
+</footer>
+  </body>
+</html>

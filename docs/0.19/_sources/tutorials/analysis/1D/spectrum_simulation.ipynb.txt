@@ -1,0 +1,760 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "\n",
+    "<div class=\"alert alert-info\">\n",
+    "\n",
+    "**This is a fixed-text formatted version of a Jupyter notebook**\n",
+    "\n",
+    "- Try online[![Binder](https://static.mybinder.org/badge.svg)](https://mybinder.org/v2/gh/gammapy/gammapy-webpage/v0.19?urlpath=lab/tree/tutorials/analysis/1D/spectrum_simulation.ipynb)\n",
+    "- You may download all the notebooks in the documentation as a\n",
+    "[tar file](../../../_downloads/notebooks-0.19.tar).\n",
+    "- **Source files:**\n",
+    "[spectrum_simulation.ipynb](../../../_static/notebooks/spectrum_simulation.ipynb) |\n",
+    "[spectrum_simulation.py](../../../_static/notebooks/spectrum_simulation.py)\n",
+    "</div>\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 1D spectrum simulation\n",
+    "\n",
+    "## Prerequisites\n",
+    "\n",
+    "- Knowledge of spectral extraction and datasets used in gammapy, see for instance the [spectral analysis tutorial](spectral_analysis.ipynb)\n",
+    "\n",
+    "## Context\n",
+    "\n",
+    "To simulate a specific observation, it is not always necessary to simulate the full photon list. For many uses cases, simulating directly a reduced binned dataset is enough: the IRFs reduced in the correct geometry are combined with a source model to predict an actual number of counts per bin. The latter is then used to simulate a reduced dataset using Poisson probability distribution.\n",
+    "\n",
+    "This can be done to check the feasibility of a measurement, to test whether fitted parameters really provide a good fit to the data etc.\n",
+    "\n",
+    "Here we will see how to perform a 1D spectral simulation of a CTA observation, in particular, we will generate OFF observations following the template background stored in the CTA IRFs.\n",
+    "\n",
+    "**Objective: simulate a number of spectral ON-OFF observations of a source with a power-law spectral model with CTA using the CTA 1DC response, fit them with the assumed spectral model and check that the distribution of fitted parameters is consistent with the input values.**\n",
+    "\n",
+    "## Proposed approach:\n",
+    "\n",
+    "We will use the following classes:\n",
+    "\n",
+    "* `~gammapy.datasets.SpectrumDatasetOnOff`\n",
+    "* `~gammapy.datasets.SpectrumDataset`\n",
+    "* `~gammapy.irf.load_cta_irfs`\n",
+    "* `~gammapy.modeling.models.PowerLawSpectralModel`"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Setup\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:07:13.403788Z",
+     "iopub.status.busy": "2021-11-22T21:07:13.402643Z",
+     "iopub.status.idle": "2021-11-22T21:07:13.571542Z",
+     "shell.execute_reply": "2021-11-22T21:07:13.571858Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "%matplotlib inline\n",
+    "import matplotlib.pyplot as plt"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:07:13.574481Z",
+     "iopub.status.busy": "2021-11-22T21:07:13.574114Z",
+     "iopub.status.idle": "2021-11-22T21:07:14.145092Z",
+     "shell.execute_reply": "2021-11-22T21:07:14.145293Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "import numpy as np\n",
+    "import astropy.units as u\n",
+    "from astropy.coordinates import SkyCoord, Angle\n",
+    "from regions import CircleSkyRegion\n",
+    "from gammapy.datasets import SpectrumDatasetOnOff, SpectrumDataset, Datasets\n",
+    "from gammapy.makers import SpectrumDatasetMaker\n",
+    "from gammapy.modeling import Fit\n",
+    "from gammapy.modeling.models import (\n",
+    "    PowerLawSpectralModel,\n",
+    "    SkyModel,\n",
+    ")\n",
+    "from gammapy.irf import load_cta_irfs\n",
+    "from gammapy.data import Observation\n",
+    "from gammapy.maps import MapAxis, RegionGeom"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Simulation of a single spectrum\n",
+    "\n",
+    "To do a simulation, we need to define the observational parameters like the livetime, the offset, the assumed integration radius, the energy range to perform the simulation for and the choice of spectral model. We then use an in-memory observation which is convolved with the IRFs to get the predicted number of counts. This is Poission fluctuated using the `fake()` to get the simulated counts for each observation.  "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:07:14.150221Z",
+     "iopub.status.busy": "2021-11-22T21:07:14.149839Z",
+     "iopub.status.idle": "2021-11-22T21:07:14.151069Z",
+     "shell.execute_reply": "2021-11-22T21:07:14.151376Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "# Define simulation parameters parameters\n",
+    "livetime = 1 * u.h\n",
+    "\n",
+    "pointing = SkyCoord(0, 0, unit=\"deg\", frame=\"galactic\")\n",
+    "offset = 0.5 * u.deg\n",
+    "\n",
+    "# Reconstructed and true energy axis\n",
+    "energy_axis = MapAxis.from_edges(\n",
+    "    np.logspace(-0.5, 1.0, 10), unit=\"TeV\", name=\"energy\", interp=\"log\"\n",
+    ")\n",
+    "energy_axis_true = MapAxis.from_edges(\n",
+    "    np.logspace(-1.2, 2.0, 31), unit=\"TeV\", name=\"energy_true\", interp=\"log\"\n",
+    ")\n",
+    "\n",
+    "on_region_radius = Angle(\"0.11 deg\")\n",
+    "\n",
+    "center = pointing.directional_offset_by(\n",
+    "    position_angle=0 * u.deg, separation=offset\n",
+    ")\n",
+    "on_region = CircleSkyRegion(center=center, radius=on_region_radius)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:07:14.156956Z",
+     "iopub.status.busy": "2021-11-22T21:07:14.156626Z",
+     "iopub.status.idle": "2021-11-22T21:07:14.161623Z",
+     "shell.execute_reply": "2021-11-22T21:07:14.161855Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "PowerLawSpectralModel\n",
+      "\n",
+      "  type      name     value         unit        error   min max frozen link\n",
+      "-------- --------- ---------- -------------- --------- --- --- ------ ----\n",
+      "spectral     index 3.0000e+00                0.000e+00 nan nan  False     \n",
+      "spectral amplitude 2.5000e-12 cm-2 s-1 TeV-1 0.000e+00 nan nan  False     \n",
+      "spectral reference 1.0000e+00            TeV 0.000e+00 nan nan   True     \n"
+     ]
+    }
+   ],
+   "source": [
+    "# Define spectral model - a simple Power Law in this case\n",
+    "model_simu = PowerLawSpectralModel(\n",
+    "    index=3.0,\n",
+    "    amplitude=2.5e-12 * u.Unit(\"cm-2 s-1 TeV-1\"),\n",
+    "    reference=1 * u.TeV,\n",
+    ")\n",
+    "print(model_simu)\n",
+    "# we set the sky model used in the dataset\n",
+    "model = SkyModel(spectral_model=model_simu, name=\"source\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:07:14.163777Z",
+     "iopub.status.busy": "2021-11-22T21:07:14.163468Z",
+     "iopub.status.idle": "2021-11-22T21:07:14.212561Z",
+     "shell.execute_reply": "2021-11-22T21:07:14.212760Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "Invalid unit found in background table! Assuming (s-1 MeV-1 sr-1)\n"
+     ]
+    }
+   ],
+   "source": [
+    "# Load the IRFs\n",
+    "# In this simulation, we use the CTA-1DC irfs shipped with gammapy.\n",
+    "irfs = load_cta_irfs(\n",
+    "    \"$GAMMAPY_DATA/cta-1dc/caldb/data/cta/1dc/bcf/South_z20_50h/irf_file.fits\"\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:07:14.218832Z",
+     "iopub.status.busy": "2021-11-22T21:07:14.218523Z",
+     "iopub.status.idle": "2021-11-22T21:07:14.219901Z",
+     "shell.execute_reply": "2021-11-22T21:07:14.220225Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Observation\n",
+      "\n",
+      "\tobs id            : 0 \n",
+      " \ttstart            : 51544.00\n",
+      "\ttstop             : 51544.04\n",
+      "\tduration          : 3600.00 s\n",
+      "\tpointing (icrs)   : 266.4 deg, -28.9 deg\n",
+      "\n",
+      "\tdeadtime fraction : 0.0%\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "obs = Observation.create(pointing=pointing, livetime=livetime, irfs=irfs)\n",
+    "print(obs)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:07:14.235579Z",
+     "iopub.status.busy": "2021-11-22T21:07:14.235099Z",
+     "iopub.status.idle": "2021-11-22T21:07:14.319091Z",
+     "shell.execute_reply": "2021-11-22T21:07:14.319291Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "# Make the SpectrumDataset\n",
+    "geom = RegionGeom.create(region=on_region, axes=[energy_axis])\n",
+    "\n",
+    "dataset_empty = SpectrumDataset.create(\n",
+    "    geom=geom, energy_axis_true=energy_axis_true, name=\"obs-0\"\n",
+    ")\n",
+    "maker = SpectrumDatasetMaker(selection=[\"exposure\", \"edisp\", \"background\"])\n",
+    "\n",
+    "dataset = maker.run(dataset_empty, obs)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:07:14.327848Z",
+     "iopub.status.busy": "2021-11-22T21:07:14.327543Z",
+     "iopub.status.idle": "2021-11-22T21:07:14.328751Z",
+     "shell.execute_reply": "2021-11-22T21:07:14.328939Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "SpectrumDataset\n",
+      "---------------\n",
+      "\n",
+      "  Name                            : obs-0 \n",
+      "\n",
+      "  Total counts                    : 298 \n",
+      "  Total background counts         : 22.29\n",
+      "  Total excess counts             : 275.71\n",
+      "\n",
+      "  Predicted counts                : 303.66\n",
+      "  Predicted background counts     : 22.29\n",
+      "  Predicted excess counts         : 281.37\n",
+      "\n",
+      "  Exposure min                    : 2.53e+08 m2 s\n",
+      "  Exposure max                    : 1.77e+10 m2 s\n",
+      "\n",
+      "  Number of total bins            : 9 \n",
+      "  Number of fit bins              : 9 \n",
+      "\n",
+      "  Fit statistic type              : cash\n",
+      "  Fit statistic value (-2 log(L)) : -1811.58\n",
+      "\n",
+      "  Number of models                : 1 \n",
+      "  Number of parameters            : 3\n",
+      "  Number of free parameters       : 2\n",
+      "\n",
+      "  Component 0: SkyModel\n",
+      "  \n",
+      "    Name                      : source\n",
+      "    Datasets names            : None\n",
+      "    Spectral model type       : PowerLawSpectralModel\n",
+      "    Spatial  model type       : \n",
+      "    Temporal model type       : \n",
+      "    Parameters:\n",
+      "      index                   :      3.000   +/-    0.00             \n",
+      "      amplitude               :   2.50e-12   +/- 0.0e+00 1 / (cm2 s TeV)\n",
+      "      reference    (frozen)   :      1.000       TeV         \n",
+      "  \n",
+      "  \n"
+     ]
+    }
+   ],
+   "source": [
+    "# Set the model on the dataset, and fake\n",
+    "dataset.models = model\n",
+    "dataset.fake(random_state=42)\n",
+    "print(dataset)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "You can see that background counts are now simulated"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### On-Off analysis\n",
+    "\n",
+    "To do an on off spectral analysis, which is the usual science case, the standard would be to use `SpectrumDatasetOnOff`, which uses the acceptance to fake off-counts "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:07:14.331318Z",
+     "iopub.status.busy": "2021-11-22T21:07:14.331017Z",
+     "iopub.status.idle": "2021-11-22T21:07:14.344659Z",
+     "shell.execute_reply": "2021-11-22T21:07:14.344856Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "SpectrumDatasetOnOff\n",
+      "--------------------\n",
+      "\n",
+      "  Name                            : zDADetr1 \n",
+      "\n",
+      "  Total counts                    : 298 \n",
+      "  Total background counts         : 19.00\n",
+      "  Total excess counts             : 279.00\n",
+      "\n",
+      "  Predicted counts                : 300.39\n",
+      "  Predicted background counts     : 19.02\n",
+      "  Predicted excess counts         : 281.37\n",
+      "\n",
+      "  Exposure min                    : 2.53e+08 m2 s\n",
+      "  Exposure max                    : 1.77e+10 m2 s\n",
+      "\n",
+      "  Number of total bins            : 9 \n",
+      "  Number of fit bins              : 9 \n",
+      "\n",
+      "  Fit statistic type              : wstat\n",
+      "  Fit statistic value (-2 log(L)) : 8.03\n",
+      "\n",
+      "  Number of models                : 1 \n",
+      "  Number of parameters            : 3\n",
+      "  Number of free parameters       : 2\n",
+      "\n",
+      "  Component 0: SkyModel\n",
+      "  \n",
+      "    Name                      : source\n",
+      "    Datasets names            : None\n",
+      "    Spectral model type       : PowerLawSpectralModel\n",
+      "    Spatial  model type       : \n",
+      "    Temporal model type       : \n",
+      "    Parameters:\n",
+      "      index                   :      3.000   +/-    0.00             \n",
+      "      amplitude               :   2.50e-12   +/- 0.0e+00 1 / (cm2 s TeV)\n",
+      "      reference    (frozen)   :      1.000       TeV         \n",
+      "  \n",
+      "    Total counts_off                : 95 \n",
+      "  Acceptance                      : 9 \n",
+      "  Acceptance off                  : 45 \n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "dataset_on_off = SpectrumDatasetOnOff.from_spectrum_dataset(\n",
+    "    dataset=dataset, acceptance=1, acceptance_off=5\n",
+    ")\n",
+    "dataset_on_off.fake(npred_background=dataset.npred_background())\n",
+    "print(dataset_on_off)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "You can see that off counts are now simulated as well. We now simulate several spectra using the same set of observation conditions."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:07:14.713531Z",
+     "iopub.status.busy": "2021-11-22T21:07:14.633830Z",
+     "iopub.status.idle": "2021-11-22T21:07:14.714818Z",
+     "shell.execute_reply": "2021-11-22T21:07:14.715054Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "CPU times: user 362 ms, sys: 11.4 ms, total: 374 ms\n",
+      "Wall time: 367 ms\n"
+     ]
+    }
+   ],
+   "source": [
+    "%%time\n",
+    "\n",
+    "n_obs = 100\n",
+    "datasets = Datasets()\n",
+    "\n",
+    "for idx in range(n_obs):\n",
+    "    dataset_on_off.fake(\n",
+    "        random_state=idx, npred_background=dataset.npred_background()\n",
+    "    )\n",
+    "    dataset_fake = dataset_on_off.copy(name=f\"obs-{idx}\")\n",
+    "    dataset_fake.meta_table[\"OBS_ID\"] = [idx]\n",
+    "    datasets.append(dataset_fake)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:07:15.314641Z",
+     "iopub.status.busy": "2021-11-22T21:07:15.314300Z",
+     "iopub.status.idle": "2021-11-22T21:07:15.316228Z",
+     "shell.execute_reply": "2021-11-22T21:07:15.316411Z"
+    }
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<div><i>Table length=100</i>\n",
+       "<table id=\"table5564643024\" class=\"table-striped table-bordered table-condensed\">\n",
+       "<thead><tr><th>name</th><th>counts</th><th>background</th><th>excess</th><th>sqrt_ts</th><th>npred</th><th>npred_background</th><th>npred_signal</th><th>exposure_min</th><th>exposure_max</th><th>livetime</th><th>ontime</th><th>counts_rate</th><th>background_rate</th><th>excess_rate</th><th>n_bins</th><th>n_fit_bins</th><th>stat_type</th><th>stat_sum</th><th>counts_off</th><th>acceptance</th><th>acceptance_off</th><th>alpha</th></tr></thead>\n",
+       "<thead><tr><th></th><th></th><th></th><th></th><th></th><th></th><th></th><th></th><th>m2 s</th><th>m2 s</th><th>s</th><th>s</th><th>1 / s</th><th>1 / s</th><th>1 / s</th><th></th><th></th><th></th><th></th><th></th><th></th><th></th><th></th></tr></thead>\n",
+       "<thead><tr><th>str7</th><th>int64</th><th>float64</th><th>float64</th><th>float64</th><th>float64</th><th>float64</th><th>float64</th><th>float64</th><th>float64</th><th>float64</th><th>float64</th><th>float64</th><th>float64</th><th>float64</th><th>int64</th><th>int64</th><th>str5</th><th>float64</th><th>int64</th><th>float64</th><th>float64</th><th>float64</th></tr></thead>\n",
+       "<tr><td>stacked</td><td>317</td><td>18.399999618530273</td><td>298.6000061035156</td><td>27.082402135529488</td><td>68.16666751313541</td><td>68.16666751313541</td><td>nan</td><td>252718176.0</td><td>17719697408.0</td><td>3600.0</td><td>3600.000000000002</td><td>0.08805555555555555</td><td>0.005111111005147298</td><td>0.08294444613986546</td><td>9</td><td>9</td><td>wstat</td><td>738.7245834271496</td><td>92</td><td>9.0</td><td>45.000000932942285</td><td>0.20000000298023224</td></tr>\n",
+       "<tr><td>obs-1</td><td>275</td><td>22.0</td><td>253.0</td><td>23.76785365487285</td><td>64.16666666666669</td><td>64.16666666666669</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.0763888888888889</td><td>0.006111111111111111</td><td>0.07027777777777777</td><td>9</td><td>9</td><td>wstat</td><td>575.779512784738</td><td>110</td><td>9.0</td><td>45.0</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-2</td><td>293</td><td>20.6</td><td>272.4</td><td>25.17110555404655</td><td>66.0</td><td>66.0</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08138888888888889</td><td>0.005722222222222222</td><td>0.07566666666666666</td><td>9</td><td>9</td><td>wstat</td><td>645.4993824075303</td><td>103</td><td>9.0</td><td>45.0</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-3</td><td>280</td><td>22.4</td><td>257.6</td><td>23.982951737405376</td><td>65.33333333333334</td><td>65.33333333333334</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.07777777777777778</td><td>0.006222222222222222</td><td>0.07155555555555557</td><td>9</td><td>9</td><td>wstat</td><td>585.9241546985872</td><td>112</td><td>9.0</td><td>45.0</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-4</td><td>337</td><td>20.6</td><td>316.4</td><td>27.682709945184747</td><td>73.33333333333334</td><td>73.33333333333334</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.09361111111111112</td><td>0.005722222222222222</td><td>0.08788888888888888</td><td>9</td><td>9</td><td>wstat</td><td>787.314723949448</td><td>103</td><td>9.0</td><td>45.0</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-5</td><td>283</td><td>24.400000000000002</td><td>258.6</td><td>23.727154782347895</td><td>67.50000000000001</td><td>67.50000000000001</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.07861111111111112</td><td>0.006777777777777778</td><td>0.07183333333333335</td><td>9</td><td>9</td><td>wstat</td><td>574.8525737727499</td><td>122</td><td>9.0</td><td>44.99999999999999</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-6</td><td>330</td><td>22.400000000000006</td><td>307.6</td><td>26.889184475727866</td><td>73.66666666666667</td><td>73.66666666666667</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.09166666666666666</td><td>0.006222222222222224</td><td>0.08544444444444445</td><td>9</td><td>9</td><td>wstat</td><td>734.2414755285937</td><td>112</td><td>9.0</td><td>44.999999999999986</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-7</td><td>283</td><td>25.8</td><td>257.2</td><td>23.43087974795853</td><td>68.66666666666667</td><td>68.66666666666667</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.07861111111111112</td><td>0.007166666666666667</td><td>0.07144444444444444</td><td>9</td><td>9</td><td>wstat</td><td>552.3698779448044</td><td>129</td><td>9.0</td><td>45.0</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-8</td><td>308</td><td>23.400000000000002</td><td>284.6</td><td>25.42049273328333</td><td>70.83333333333334</td><td>70.83333333333334</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08555555555555555</td><td>0.006500000000000001</td><td>0.07905555555555556</td><td>9</td><td>9</td><td>wstat</td><td>652.2621572567633</td><td>117</td><td>9.0</td><td>44.99999999999999</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-9</td><td>299</td><td>20.4</td><td>278.6</td><td>25.57085071486863</td><td>66.83333333333334</td><td>66.83333333333334</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08305555555555555</td><td>0.005666666666666666</td><td>0.0773888888888889</td><td>9</td><td>9</td><td>wstat</td><td>666.9062670260786</td><td>102</td><td>9.0</td><td>45.0</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-10</td><td>310</td><td>15.2</td><td>294.8</td><td>27.488972161356774</td><td>64.33333333333334</td><td>64.33333333333334</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08611111111111111</td><td>0.004222222222222222</td><td>0.08188888888888889</td><td>9</td><td>9</td><td>wstat</td><td>768.5404492529331</td><td>76</td><td>9.0</td><td>45.0</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-11</td><td>285</td><td>24.000000000000004</td><td>261.0</td><td>23.933833745454685</td><td>67.50000000000001</td><td>67.50000000000001</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.07916666666666666</td><td>0.006666666666666668</td><td>0.0725</td><td>9</td><td>9</td><td>wstat</td><td>583.448753292733</td><td>120</td><td>9.0</td><td>44.99999999999999</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-12</td><td>299</td><td>21.000000000000004</td><td>278.0</td><td>25.4325263895117</td><td>67.33333333333336</td><td>67.33333333333336</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08305555555555555</td><td>0.0058333333333333345</td><td>0.07722222222222222</td><td>9</td><td>9</td><td>wstat</td><td>655.2768246480357</td><td>105</td><td>9.0</td><td>44.99999999999999</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-13</td><td>309</td><td>21.6</td><td>287.4</td><td>25.877406235012618</td><td>69.50000000000001</td><td>69.50000000000001</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08583333333333333</td><td>0.006</td><td>0.07983333333333333</td><td>9</td><td>9</td><td>wstat</td><td>672.355748274336</td><td>108</td><td>9.0</td><td>45.0</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-14</td><td>320</td><td>22.599999999999998</td><td>297.4</td><td>26.282826028192567</td><td>72.16666666666667</td><td>72.16666666666667</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08888888888888889</td><td>0.006277777777777777</td><td>0.08261111111111111</td><td>9</td><td>9</td><td>wstat</td><td>697.5949745415169</td><td>113</td><td>9.0</td><td>45.00000000000001</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-15</td><td>283</td><td>22.0</td><td>261.0</td><td>24.25408979304137</td><td>65.50000000000001</td><td>65.50000000000001</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.07861111111111112</td><td>0.006111111111111111</td><td>0.0725</td><td>9</td><td>9</td><td>wstat</td><td>592.8754563739889</td><td>110</td><td>9.0</td><td>45.0</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-16</td><td>298</td><td>24.200000000000003</td><td>273.8</td><td>24.664218201697352</td><td>69.83333333333336</td><td>69.83333333333336</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08277777777777778</td><td>0.006722222222222223</td><td>0.07605555555555556</td><td>9</td><td>9</td><td>wstat</td><td>619.2584188386805</td><td>121</td><td>9.0</td><td>44.99999999999999</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-17</td><td>301</td><td>28.200000000000003</td><td>272.8</td><td>24.01180151925227</td><td>73.66666666666667</td><td>73.66666666666667</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08361111111111111</td><td>0.007833333333333335</td><td>0.07577777777777778</td><td>9</td><td>9</td><td>wstat</td><td>588.4976379504056</td><td>141</td><td>9.0</td><td>44.99999999999999</td><td>0.2</td></tr>\n",
+       "<tr><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td><td>...</td></tr>\n",
+       "<tr><td>obs-81</td><td>301</td><td>19.400000000000002</td><td>281.6</td><td>25.922347414834622</td><td>66.33333333333334</td><td>66.33333333333334</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08361111111111111</td><td>0.005388888888888889</td><td>0.07822222222222223</td><td>9</td><td>9</td><td>wstat</td><td>678.9813616402096</td><td>97</td><td>9.0</td><td>44.99999999999999</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-82</td><td>280</td><td>22.000000000000004</td><td>258.0</td><td>24.072587044084237</td><td>65.0</td><td>65.0</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.07777777777777778</td><td>0.006111111111111112</td><td>0.07166666666666667</td><td>9</td><td>9</td><td>wstat</td><td>581.8610083160877</td><td>110</td><td>9.0</td><td>44.99999999999999</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-83</td><td>303</td><td>22.200000000000003</td><td>280.8</td><td>25.394928282299105</td><td>69.00000000000001</td><td>69.00000000000001</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08416666666666667</td><td>0.0061666666666666675</td><td>0.078</td><td>9</td><td>9</td><td>wstat</td><td>654.4650896470343</td><td>111</td><td>9.0</td><td>44.99999999999999</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-84</td><td>269</td><td>21.200000000000003</td><td>247.8</td><td>23.580247140026987</td><td>62.500000000000014</td><td>62.500000000000014</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.07472222222222222</td><td>0.00588888888888889</td><td>0.06883333333333333</td><td>9</td><td>9</td><td>wstat</td><td>577.2362891766269</td><td>106</td><td>9.0</td><td>44.99999999999999</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-85</td><td>297</td><td>22.4</td><td>274.6</td><td>24.998935845735573</td><td>68.16666666666667</td><td>68.16666666666667</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.0825</td><td>0.006222222222222222</td><td>0.07627777777777778</td><td>9</td><td>9</td><td>wstat</td><td>631.6298361198053</td><td>112</td><td>9.0</td><td>45.0</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-86</td><td>286</td><td>17.800000000000004</td><td>268.2</td><td>25.423408969515453</td><td>62.50000000000001</td><td>62.50000000000001</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.07944444444444444</td><td>0.004944444444444446</td><td>0.0745</td><td>9</td><td>9</td><td>wstat</td><td>655.2082535886425</td><td>89</td><td>9.0</td><td>44.999999999999986</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-87</td><td>333</td><td>19.8</td><td>313.2</td><td>27.646851451147217</td><td>72.00000000000001</td><td>72.00000000000001</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.0925</td><td>0.0055000000000000005</td><td>0.087</td><td>9</td><td>9</td><td>wstat</td><td>770.1313412321031</td><td>99</td><td>9.0</td><td>45.0</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-88</td><td>315</td><td>18.200000000000003</td><td>296.8</td><td>27.0172059251097</td><td>67.66666666666669</td><td>67.66666666666669</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.0875</td><td>0.005055555555555556</td><td>0.08244444444444445</td><td>9</td><td>9</td><td>wstat</td><td>734.6476098262428</td><td>91</td><td>9.0</td><td>44.99999999999999</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-89</td><td>287</td><td>22.000000000000004</td><td>265.0</td><td>24.49456558680515</td><td>66.16666666666667</td><td>66.16666666666667</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.07972222222222222</td><td>0.006111111111111112</td><td>0.07361111111111111</td><td>9</td><td>9</td><td>wstat</td><td>611.2334063685089</td><td>110</td><td>9.0</td><td>44.99999999999999</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-90</td><td>286</td><td>19.000000000000004</td><td>267.0</td><td>25.131221887043438</td><td>63.50000000000001</td><td>63.50000000000001</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.07944444444444444</td><td>0.005277777777777779</td><td>0.07416666666666667</td><td>9</td><td>9</td><td>wstat</td><td>635.8304116110406</td><td>95</td><td>9.0</td><td>44.99999999999999</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-91</td><td>285</td><td>25.200000000000003</td><td>259.8</td><td>23.67754591931069</td><td>68.50000000000001</td><td>68.50000000000001</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.07916666666666666</td><td>0.007000000000000001</td><td>0.07216666666666667</td><td>9</td><td>9</td><td>wstat</td><td>573.3564742963381</td><td>126</td><td>9.0</td><td>44.99999999999999</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-92</td><td>313</td><td>23.6</td><td>289.4</td><td>25.664935420194176</td><td>71.83333333333336</td><td>71.83333333333336</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08694444444444445</td><td>0.006555555555555556</td><td>0.08038888888888888</td><td>9</td><td>9</td><td>wstat</td><td>669.4496142825196</td><td>118</td><td>9.0</td><td>45.0</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-93</td><td>302</td><td>18.8</td><td>283.2</td><td>26.123867522605497</td><td>66.00000000000001</td><td>66.00000000000001</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08388888888888889</td><td>0.005222222222222223</td><td>0.07866666666666666</td><td>9</td><td>9</td><td>wstat</td><td>700.5066738339824</td><td>94</td><td>9.0</td><td>45.0</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-94</td><td>322</td><td>21.8</td><td>300.2</td><td>26.574029757473202</td><td>71.83333333333334</td><td>71.83333333333334</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08944444444444444</td><td>0.006055555555555555</td><td>0.08338888888888889</td><td>9</td><td>9</td><td>wstat</td><td>715.2570498037147</td><td>109</td><td>9.0</td><td>45.0</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-95</td><td>305</td><td>24.400000000000006</td><td>280.6</td><td>25.030731260493152</td><td>71.16666666666667</td><td>71.16666666666667</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08472222222222223</td><td>0.006777777777777779</td><td>0.07794444444444446</td><td>9</td><td>9</td><td>wstat</td><td>643.2846879404793</td><td>122</td><td>9.0</td><td>44.99999999999999</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-96</td><td>301</td><td>23.6</td><td>277.4</td><td>24.969845969421428</td><td>69.83333333333334</td><td>69.83333333333334</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08361111111111111</td><td>0.006555555555555556</td><td>0.07705555555555554</td><td>9</td><td>9</td><td>wstat</td><td>626.7396842428624</td><td>118</td><td>9.0</td><td>45.0</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-97</td><td>290</td><td>18.8</td><td>271.2</td><td>25.417982194454826</td><td>64.00000000000001</td><td>64.00000000000001</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08055555555555556</td><td>0.005222222222222223</td><td>0.07533333333333334</td><td>9</td><td>9</td><td>wstat</td><td>650.9762484493856</td><td>94</td><td>9.0</td><td>45.0</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-98</td><td>301</td><td>20.400000000000002</td><td>280.6</td><td>25.687832964675007</td><td>67.16666666666667</td><td>67.16666666666667</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08361111111111111</td><td>0.005666666666666667</td><td>0.07794444444444446</td><td>9</td><td>9</td><td>wstat</td><td>664.5620099404952</td><td>102</td><td>9.0</td><td>44.99999999999999</td><td>0.2</td></tr>\n",
+       "<tr><td>obs-99</td><td>323</td><td>20.8</td><td>302.2</td><td>26.85707842376871</td><td>71.16666666666669</td><td>71.16666666666669</td><td>nan</td><td>252718170.97287682</td><td>17719697919.599277</td><td>3600.0</td><td>3600.0</td><td>0.08972222222222222</td><td>0.005777777777777778</td><td>0.08394444444444445</td><td>9</td><td>9</td><td>wstat</td><td>733.1576598768017</td><td>104</td><td>9.0</td><td>45.0</td><td>0.2</td></tr>\n",
+       "</table></div>"
+      ],
+      "text/plain": [
+       "<Table length=100>\n",
+       "  name  counts     background           excess           sqrt_ts       ... counts_off acceptance   acceptance_off          alpha       \n",
+       "                                                                       ...                                                             \n",
+       "  str7  int64       float64            float64           float64       ...   int64     float64        float64             float64      \n",
+       "------- ------ ------------------ ----------------- ------------------ ... ---------- ---------- ------------------ -------------------\n",
+       "stacked    317 18.399999618530273 298.6000061035156 27.082402135529488 ...         92        9.0 45.000000932942285 0.20000000298023224\n",
+       "  obs-1    275               22.0             253.0  23.76785365487285 ...        110        9.0               45.0                 0.2\n",
+       "  obs-2    293               20.6             272.4  25.17110555404655 ...        103        9.0               45.0                 0.2\n",
+       "  obs-3    280               22.4             257.6 23.982951737405376 ...        112        9.0               45.0                 0.2\n",
+       "  obs-4    337               20.6             316.4 27.682709945184747 ...        103        9.0               45.0                 0.2\n",
+       "  obs-5    283 24.400000000000002             258.6 23.727154782347895 ...        122        9.0  44.99999999999999                 0.2\n",
+       "  obs-6    330 22.400000000000006             307.6 26.889184475727866 ...        112        9.0 44.999999999999986                 0.2\n",
+       "  obs-7    283               25.8             257.2  23.43087974795853 ...        129        9.0               45.0                 0.2\n",
+       "  obs-8    308 23.400000000000002             284.6  25.42049273328333 ...        117        9.0  44.99999999999999                 0.2\n",
+       "  obs-9    299               20.4             278.6  25.57085071486863 ...        102        9.0               45.0                 0.2\n",
+       " obs-10    310               15.2             294.8 27.488972161356774 ...         76        9.0               45.0                 0.2\n",
+       " obs-11    285 24.000000000000004             261.0 23.933833745454685 ...        120        9.0  44.99999999999999                 0.2\n",
+       " obs-12    299 21.000000000000004             278.0   25.4325263895117 ...        105        9.0  44.99999999999999                 0.2\n",
+       " obs-13    309               21.6             287.4 25.877406235012618 ...        108        9.0               45.0                 0.2\n",
+       " obs-14    320 22.599999999999998             297.4 26.282826028192567 ...        113        9.0  45.00000000000001                 0.2\n",
+       " obs-15    283               22.0             261.0  24.25408979304137 ...        110        9.0               45.0                 0.2\n",
+       " obs-16    298 24.200000000000003             273.8 24.664218201697352 ...        121        9.0  44.99999999999999                 0.2\n",
+       " obs-17    301 28.200000000000003             272.8  24.01180151925227 ...        141        9.0  44.99999999999999                 0.2\n",
+       "    ...    ...                ...               ...                ... ...        ...        ...                ...                 ...\n",
+       " obs-81    301 19.400000000000002             281.6 25.922347414834622 ...         97        9.0  44.99999999999999                 0.2\n",
+       " obs-82    280 22.000000000000004             258.0 24.072587044084237 ...        110        9.0  44.99999999999999                 0.2\n",
+       " obs-83    303 22.200000000000003             280.8 25.394928282299105 ...        111        9.0  44.99999999999999                 0.2\n",
+       " obs-84    269 21.200000000000003             247.8 23.580247140026987 ...        106        9.0  44.99999999999999                 0.2\n",
+       " obs-85    297               22.4             274.6 24.998935845735573 ...        112        9.0               45.0                 0.2\n",
+       " obs-86    286 17.800000000000004             268.2 25.423408969515453 ...         89        9.0 44.999999999999986                 0.2\n",
+       " obs-87    333               19.8             313.2 27.646851451147217 ...         99        9.0               45.0                 0.2\n",
+       " obs-88    315 18.200000000000003             296.8   27.0172059251097 ...         91        9.0  44.99999999999999                 0.2\n",
+       " obs-89    287 22.000000000000004             265.0  24.49456558680515 ...        110        9.0  44.99999999999999                 0.2\n",
+       " obs-90    286 19.000000000000004             267.0 25.131221887043438 ...         95        9.0  44.99999999999999                 0.2\n",
+       " obs-91    285 25.200000000000003             259.8  23.67754591931069 ...        126        9.0  44.99999999999999                 0.2\n",
+       " obs-92    313               23.6             289.4 25.664935420194176 ...        118        9.0               45.0                 0.2\n",
+       " obs-93    302               18.8             283.2 26.123867522605497 ...         94        9.0               45.0                 0.2\n",
+       " obs-94    322               21.8             300.2 26.574029757473202 ...        109        9.0               45.0                 0.2\n",
+       " obs-95    305 24.400000000000006             280.6 25.030731260493152 ...        122        9.0  44.99999999999999                 0.2\n",
+       " obs-96    301               23.6             277.4 24.969845969421428 ...        118        9.0               45.0                 0.2\n",
+       " obs-97    290               18.8             271.2 25.417982194454826 ...         94        9.0               45.0                 0.2\n",
+       " obs-98    301 20.400000000000002             280.6 25.687832964675007 ...        102        9.0  44.99999999999999                 0.2\n",
+       " obs-99    323               20.8             302.2  26.85707842376871 ...        104        9.0               45.0                 0.2"
+      ]
+     },
+     "execution_count": 11,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "table = datasets.info_table()\n",
+    "table"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Before moving on to the fit let's have a look at the simulated observations."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:07:15.351297Z",
+     "iopub.status.busy": "2021-11-22T21:07:15.350923Z",
+     "iopub.status.idle": "2021-11-22T21:07:15.485791Z",
+     "shell.execute_reply": "2021-11-22T21:07:15.485991Z"
+    }
+   },
+   "outputs": [
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 864x288 with 3 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "fix, axes = plt.subplots(1, 3, figsize=(12, 4))\n",
+    "axes[0].hist(table[\"counts\"])\n",
+    "axes[0].set_xlabel(\"Counts\")\n",
+    "axes[1].hist(table[\"counts_off\"])\n",
+    "axes[1].set_xlabel(\"Counts Off\")\n",
+    "axes[2].hist(table[\"excess\"])\n",
+    "axes[2].set_xlabel(\"excess\");"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Now, we fit each simulated spectrum individually "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:07:15.490400Z",
+     "iopub.status.busy": "2021-11-22T21:07:15.490083Z",
+     "iopub.status.idle": "2021-11-22T21:07:22.297683Z",
+     "shell.execute_reply": "2021-11-22T21:07:22.297896Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "CPU times: user 6.79 s, sys: 78.8 ms, total: 6.87 s\n",
+      "Wall time: 6.81 s\n"
+     ]
+    }
+   ],
+   "source": [
+    "%%time\n",
+    "results = []\n",
+    "\n",
+    "fit = Fit()\n",
+    "\n",
+    "for dataset in datasets:\n",
+    "    dataset.models = model.copy()\n",
+    "    result = fit.optimize(dataset)\n",
+    "    results.append(\n",
+    "        {\n",
+    "            \"index\": result.parameters[\"index\"].value,\n",
+    "            \"amplitude\": result.parameters[\"amplitude\"].value,\n",
+    "        }\n",
+    "    )"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "We take a look at the distribution of the fitted indices. This matches very well with the spectrum that we initially injected."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2021-11-22T21:07:22.312718Z",
+     "iopub.status.busy": "2021-11-22T21:07:22.312084Z",
+     "iopub.status.idle": "2021-11-22T21:07:22.350008Z",
+     "shell.execute_reply": "2021-11-22T21:07:22.350199Z"
+    },
+    "nbsphinx-thumbnail": {
+     "tooltip": "Simulate a number of spectral on-off observations of a source with a power-law spectral model using the CTA 1DC response and fit them with the assumed spectral model."
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "index: 3.0036925550380533 += 0.08081469527527077\n"
+     ]
+    },
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 432x288 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "index = np.array([_[\"index\"] for _ in results])\n",
+    "plt.hist(index, bins=10, alpha=0.5)\n",
+    "plt.axvline(x=model_simu.parameters[\"index\"].value, color=\"red\")\n",
+    "print(f\"index: {index.mean()} += {index.std()}\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Exercises\n",
+    "\n",
+    "* Change the observation time to something longer or shorter. Does the observation and spectrum results change as you expected?\n",
+    "* Change the spectral model, e.g. add a cutoff at 5 TeV, or put a steep-spectrum source with spectral index of 4.0\n",
+    "* Simulate spectra with the spectral model we just defined. How much observation duration do you need to get back the injected parameters?"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.9.0"
+  },
+  "nbsphinx": {
+   "orphan": true
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}

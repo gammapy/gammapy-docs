@@ -1,0 +1,954 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>gammapy.background.fov_cube &#8212; gammapy v0.7</title>
+    <link rel="stylesheet" href="../../../_static/gammapy.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.7',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <link rel="shortcut icon" href="../../../_static/astropy_logo.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+<link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+<script type="text/javascript" src="../../../_static/copybutton.js"></script>
+
+
+  </head>
+  <body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">gamma</span><span id="logotext2">py</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="Astropy Homepage" href="http://www.astropy.org"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">gammapy v0.7</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for gammapy.background.fov_cube</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
+<span class="sd">&quot;&quot;&quot;FOVCube container.&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">astropy.units</span> <span class="k">as</span> <span class="nn">u</span>
+<span class="kn">from</span> <span class="nn">astropy.units</span> <span class="k">import</span> <span class="n">Quantity</span>
+<span class="kn">from</span> <span class="nn">astropy.coordinates</span> <span class="k">import</span> <span class="n">Angle</span>
+<span class="kn">from</span> <span class="nn">astropy.table</span> <span class="k">import</span> <span class="n">Table</span>
+<span class="kn">from</span> <span class="nn">astropy.io</span> <span class="k">import</span> <span class="n">fits</span>
+<span class="kn">from</span> <span class="nn">astropy.wcs</span> <span class="k">import</span> <span class="n">WCS</span>
+<span class="kn">from</span> <span class="nn">..utils.scripts</span> <span class="k">import</span> <span class="n">make_path</span>
+<span class="kn">from</span> <span class="nn">..utils.wcs</span> <span class="k">import</span> <span class="n">linear_wcs_to_arrays</span><span class="p">,</span> <span class="n">linear_arrays_to_wcs</span>
+<span class="kn">from</span> <span class="nn">..utils.fits</span> <span class="k">import</span> <span class="n">table_to_fits_table</span>
+<span class="kn">from</span> <span class="nn">..utils.energy</span> <span class="k">import</span> <span class="n">Energy</span><span class="p">,</span> <span class="n">EnergyBounds</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;FOVCube&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">_make_bin_edges_array</span><span class="p">(</span><span class="n">lo</span><span class="p">,</span> <span class="n">hi</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Make bin edges array from a low values and a high values array.</span>
+
+<span class="sd">    TODO: move this function to somewhere else? (i.e. utils?)</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    lo : `~numpy.ndarray`</span>
+<span class="sd">        Lower boundaries.</span>
+<span class="sd">    hi : `~numpy.ndarray`</span>
+<span class="sd">        Higher boundaries.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    bin_edges : `~numpy.ndarray`</span>
+<span class="sd">        Array of bin edges as ``[[low], [high]]``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">lo</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span> <span class="n">hi</span><span class="o">.</span><span class="n">flatten</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">:])</span>
+
+
+<span class="k">def</span> <span class="nf">_parse_data_units</span><span class="p">(</span><span class="n">data_unit</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Utility function to parse the data units correctly.&quot;&quot;&quot;</span>
+    <span class="c1"># try 1st to parse them as astropy units</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="n">data_unit</span><span class="p">)</span>
+    <span class="c1"># if it fails, try to parse them as fits units</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="n">data_unit</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s1">&#39;FITS&#39;</span><span class="p">)</span>
+        <span class="c1"># if it fails, try to parse them as ogip units (old FITS standard)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="n">data_unit</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s1">&#39;ogip&#39;</span><span class="p">)</span>
+            <span class="c1"># if it still fails, raise an exception</span>
+            <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid unit format </span><span class="si">{}</span><span class="s2">.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">data_unit</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">data_unit</span>
+
+
+<div class="viewcode-block" id="FOVCube"><a class="viewcode-back" href="../../../api/gammapy.background.FOVCube.html#gammapy.background.FOVCube">[docs]</a><span class="k">class</span> <span class="nc">FOVCube</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Field of view cube.</span>
+
+<span class="sd">    Container class for cubes *(X, Y, energy)*.</span>
+
+<span class="sd">    The class has methods for reading a cube from a FITS file,</span>
+<span class="sd">    write a cube to a FITS file and plot the cubes among others.</span>
+
+<span class="sd">    The order of the axes in the cube is **(E, y, x)**,</span>
+<span class="sd">    so in order to access the data correctly, the call is</span>
+<span class="sd">    ``cube.data[energy_bin, coordy_bin, coordx_bin]``.</span>
+
+<span class="sd">    This class is very generic and can be used to contain cubes</span>
+<span class="sd">    of different kinds of data. However, for the FITS reading/writing</span>
+<span class="sd">    methods, special parameter names have to be defined, following</span>
+<span class="sd">    the corresponding specifications.</span>
+
+<span class="sd">    This is taken care of by the</span>
+<span class="sd">    `~gammapy.background.FOVCube.define_scheme` method.</span>
+<span class="sd">    The user only has to specify the correct **scheme** parameter.</span>
+
+<span class="sd">    Currently accepted schemes are:</span>
+
+<span class="sd">    * ``bg_cube``: scheme for background cubes; spatial coordinates</span>
+<span class="sd">      *(X, Y)* are in detector coordinates (a.k.a. nominal system</span>
+<span class="sd">      coordinates).</span>
+<span class="sd">    * ``bg_counts_cube``: scheme for count cubes specific for</span>
+<span class="sd">      background cube determination</span>
+<span class="sd">    * ``bg_livetime_cube``: scheme for livetime cubes specific for</span>
+<span class="sd">      background cube determination</span>
+
+<span class="sd">    If no scheme is specified, a generic one is applied.</span>
+<span class="sd">    New ones can be defined in</span>
+<span class="sd">    `~gammapy.background.FOVCube.define_scheme`.</span>
+<span class="sd">    The method also defines useful parameter names for the plots</span>
+<span class="sd">    axis/title labels specific to each scheme.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    coordx_edges : `~astropy.coordinates.Angle`, optional</span>
+<span class="sd">        Spatial bin edges vector (low and high). X coordinate.</span>
+<span class="sd">    coordy_edges : `~astropy.coordinates.Angle`, optional</span>
+<span class="sd">        Spatial bin edges vector (low and high). Y coordinate.</span>
+<span class="sd">    energy_edges : `~gammapy.utils.energy.EnergyBounds`, optional</span>
+<span class="sd">        Energy bin edges vector (low and high).</span>
+<span class="sd">    data : `~astropy.units.Quantity`, optional</span>
+<span class="sd">        Data cube matrix in (energy, X, Y) format.</span>
+<span class="sd">    scheme : str, optional</span>
+<span class="sd">        String identifying parameter naming scheme for FITS files and plots.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    Access cube data:</span>
+
+<span class="sd">    .. code:: python</span>
+
+<span class="sd">        energy_bin = cube.energy_edges.find_energy_bin(&#39;2 TeV&#39;)</span>
+<span class="sd">        coord_bin = cube.find_coord_bin(coord=Angle([0., 0.], &#39;deg&#39;))</span>
+<span class="sd">        cube.data[energy_bin, coord_bin[1], coord_bin[0]]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">scheme</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coordx_edges</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">coordy_edges</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">energy_edges</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">scheme</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coordx_edges</span> <span class="o">=</span> <span class="n">coordx_edges</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coordy_edges</span> <span class="o">=</span> <span class="n">coordy_edges</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_energy_edges</span> <span class="o">=</span> <span class="n">EnergyBounds</span><span class="p">(</span><span class="n">energy_edges</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">energy_edges</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span>
+                                  <span class="nb">len</span><span class="p">(</span><span class="n">coordy_edges</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span>
+                                  <span class="nb">len</span><span class="p">(</span><span class="n">coordx_edges</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">data</span>
+            <span class="c1"># TODO: make this consistent with have the 2d BCK class works</span>
+            <span class="c1"># self.data = &#39;TODO&#39;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">scheme</span> <span class="o">=</span> <span class="n">scheme</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">scheme_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Naming scheme, depending on the kind of cube (dict).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">define_scheme</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scheme</span><span class="p">)</span>
+
+<div class="viewcode-block" id="FOVCube.define_scheme"><a class="viewcode-back" href="../../../api/gammapy.background.FOVCube.html#gammapy.background.FOVCube.define_scheme">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">define_scheme</span><span class="p">(</span><span class="n">scheme</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Define naming scheme, depending on the kind of cube.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        scheme : str, optional</span>
+<span class="sd">            String identifying parameter naming scheme for FITS files and plots.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        scheme_dict : dict</span>
+<span class="sd">            Dictionary containing parameter naming scheme for FITS files and plots.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">scheme_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">scheme</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">scheme</span> <span class="o">==</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+            <span class="c1"># default values</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;hdu_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;DATA&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordx_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;X&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordy_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;Y&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;energy_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;E&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;data_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;DATA&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordx_plot_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;X&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordy_plot_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;Y&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;energy_plot_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;E&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;data_plot_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;DATA&#39;</span>
+        <span class="k">elif</span> <span class="n">scheme</span> <span class="o">==</span> <span class="s1">&#39;bg_cube&#39;</span><span class="p">:</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;hdu_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;BACKGROUND&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordx_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;DETX&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordy_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;DETY&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;energy_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;ENERG&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;data_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;BKG&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordx_plot_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;DET X&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordy_plot_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;DET Y&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;energy_plot_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;E&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;data_plot_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;Bg rate&#39;</span>
+        <span class="k">elif</span> <span class="n">scheme</span> <span class="o">==</span> <span class="s1">&#39;bg_counts_cube&#39;</span><span class="p">:</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;hdu_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;COUNTS&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordx_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;DETX&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordy_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;DETY&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;energy_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;ENERG&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;data_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;COUNTS&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordx_plot_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;DET X&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordy_plot_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;DET Y&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;energy_plot_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;E&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;data_plot_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;Counts&#39;</span>
+        <span class="k">elif</span> <span class="n">scheme</span> <span class="o">==</span> <span class="s1">&#39;bg_livetime_cube&#39;</span><span class="p">:</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;hdu_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;LIVETIME&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordx_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;DETX&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordy_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;DETY&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;energy_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;ENERG&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;data_fits_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;LIVETIME&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordx_plot_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;DET X&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordy_plot_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;DET Y&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;energy_plot_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;E&#39;</span>
+            <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;data_plot_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;Livetime&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid scheme </span><span class="si">{}</span><span class="s2">.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">scheme</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">scheme_dict</span></div>
+
+<div class="viewcode-block" id="FOVCube.from_fits_table"><a class="viewcode-back" href="../../../api/gammapy.background.FOVCube.html#gammapy.background.FOVCube.from_fits_table">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_fits_table</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">hdu</span><span class="p">,</span> <span class="n">scheme</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Read cube from a FITS binary table.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        hdu : `~astropy.io.fits.BinTableHDU`</span>
+<span class="sd">            HDU binary table for the cube.</span>
+<span class="sd">        scheme : str, optional</span>
+<span class="sd">            String identifying parameter naming scheme for FITS files and plots.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        cube : `~gammapy.background.FOVCube`</span>
+<span class="sd">            FOVCube object.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">header</span> <span class="o">=</span> <span class="n">hdu</span><span class="o">.</span><span class="n">header</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">hdu</span><span class="o">.</span><span class="n">data</span>
+
+        <span class="n">scheme_dict</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">define_scheme</span><span class="p">(</span><span class="n">scheme</span><span class="p">)</span>
+        <span class="n">x_name_lo</span> <span class="o">=</span> <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordx_fits_name&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_LO&#39;</span>
+        <span class="n">x_name_hi</span> <span class="o">=</span> <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordx_fits_name&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_HI&#39;</span>
+        <span class="n">y_name_lo</span> <span class="o">=</span> <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordy_fits_name&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_LO&#39;</span>
+        <span class="n">y_name_hi</span> <span class="o">=</span> <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordy_fits_name&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_HI&#39;</span>
+        <span class="n">e_name_lo</span> <span class="o">=</span> <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;energy_fits_name&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_LO&#39;</span>
+        <span class="n">e_name_hi</span> <span class="o">=</span> <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;energy_fits_name&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_HI&#39;</span>
+
+        <span class="c1"># check correct axis order: 1st X, 2nd Y, 3rd energy, 4th data</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;TTYPE1&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">x_name_lo</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;TTYPE2&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">x_name_hi</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Expecting X axis in first 2 places, not (</span><span class="si">{0}</span><span class="s2">, </span><span class="si">{1}</span><span class="s2">)&quot;</span>
+                             <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;TTYPE1&#39;</span><span class="p">],</span> <span class="n">header</span><span class="p">[</span><span class="s1">&#39;TTYPE2&#39;</span><span class="p">]))</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;TTYPE3&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">y_name_lo</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;TTYPE4&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">y_name_hi</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Expecting Y axis in second 2 places, not (</span><span class="si">{0}</span><span class="s2">, </span><span class="si">{1}</span><span class="s2">)&quot;</span>
+                             <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;TTYPE3&#39;</span><span class="p">],</span> <span class="n">header</span><span class="p">[</span><span class="s1">&#39;TTYPE4&#39;</span><span class="p">]))</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;TTYPE5&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">e_name_lo</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;TTYPE6&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">e_name_hi</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Expecting E axis in third 2 places, not (</span><span class="si">{0}</span><span class="s2">, </span><span class="si">{1}</span><span class="s2">)&quot;</span>
+                             <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;TTYPE5&#39;</span><span class="p">],</span> <span class="n">header</span><span class="p">[</span><span class="s1">&#39;TTYPE6&#39;</span><span class="p">]))</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;TTYPE7&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;data_fits_name&#39;</span><span class="p">]):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Expecting data axis (</span><span class="si">{0}</span><span class="s2">) in fourth place, not (</span><span class="si">{1}</span><span class="s2">)&quot;</span>
+                             <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;data_fits_name&#39;</span><span class="p">],</span> <span class="n">header</span><span class="p">[</span><span class="s1">&#39;TTYPE7&#39;</span><span class="p">]))</span>
+
+        <span class="c1"># get coord X, Y binning</span>
+        <span class="n">coordx_edges</span> <span class="o">=</span> <span class="n">_make_bin_edges_array</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="n">x_name_lo</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="n">x_name_hi</span><span class="p">])</span>
+        <span class="n">coordy_edges</span> <span class="o">=</span> <span class="n">_make_bin_edges_array</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="n">y_name_lo</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="n">y_name_hi</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">header</span><span class="p">[</span><span class="s1">&#39;TUNIT1&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">header</span><span class="p">[</span><span class="s1">&#39;TUNIT2&#39;</span><span class="p">]:</span>
+            <span class="n">coordx_unit</span> <span class="o">=</span> <span class="n">header</span><span class="p">[</span><span class="s1">&#39;TUNIT1&#39;</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Coordinate X units not matching (</span><span class="si">{0}</span><span class="s2">, </span><span class="si">{1}</span><span class="s2">)&quot;</span>
+                             <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;TUNIT1&#39;</span><span class="p">],</span> <span class="n">header</span><span class="p">[</span><span class="s1">&#39;TUNIT2&#39;</span><span class="p">]))</span>
+        <span class="k">if</span> <span class="n">header</span><span class="p">[</span><span class="s1">&#39;TUNIT3&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">header</span><span class="p">[</span><span class="s1">&#39;TUNIT4&#39;</span><span class="p">]:</span>
+            <span class="n">coordy_unit</span> <span class="o">=</span> <span class="n">header</span><span class="p">[</span><span class="s1">&#39;TUNIT3&#39;</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Coordinate Y units not matching (</span><span class="si">{0}</span><span class="s2">, </span><span class="si">{1}</span><span class="s2">)&quot;</span>
+                             <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;TUNIT3&#39;</span><span class="p">],</span> <span class="n">header</span><span class="p">[</span><span class="s1">&#39;TUNIT4&#39;</span><span class="p">]))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">coordx_unit</span> <span class="o">==</span> <span class="n">coordy_unit</span><span class="p">:</span>
+            <span class="n">ss_error</span> <span class="o">=</span> <span class="s2">&quot;This is odd: units of X and Y coordinates not matching&quot;</span>
+            <span class="n">ss_error</span> <span class="o">+=</span> <span class="s2">&quot;(</span><span class="si">{0}</span><span class="s2">, </span><span class="si">{1}</span><span class="s2">)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">coordx_unit</span><span class="p">,</span> <span class="n">coordy_unit</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">ss_error</span><span class="p">)</span>
+        <span class="n">coordx_edges</span> <span class="o">=</span> <span class="n">Angle</span><span class="p">(</span><span class="n">coordx_edges</span><span class="p">,</span> <span class="n">coordx_unit</span><span class="p">)</span>
+        <span class="n">coordy_edges</span> <span class="o">=</span> <span class="n">Angle</span><span class="p">(</span><span class="n">coordy_edges</span><span class="p">,</span> <span class="n">coordy_unit</span><span class="p">)</span>
+
+        <span class="c1"># get energy binning</span>
+        <span class="n">energy_edges</span> <span class="o">=</span> <span class="n">_make_bin_edges_array</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="n">e_name_lo</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="n">e_name_hi</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">header</span><span class="p">[</span><span class="s1">&#39;TUNIT5&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">header</span><span class="p">[</span><span class="s1">&#39;TUNIT6&#39;</span><span class="p">]:</span>
+            <span class="n">energy_unit</span> <span class="o">=</span> <span class="n">header</span><span class="p">[</span><span class="s1">&#39;TUNIT5&#39;</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Energy units not matching (</span><span class="si">{0}</span><span class="s2">, </span><span class="si">{1}</span><span class="s2">)&quot;</span>
+                             <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;TUNIT5&#39;</span><span class="p">],</span> <span class="n">header</span><span class="p">[</span><span class="s1">&#39;TUNIT6&#39;</span><span class="p">]))</span>
+        <span class="n">energy_edges</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">energy_edges</span><span class="p">,</span> <span class="n">energy_unit</span><span class="p">)</span>
+
+        <span class="c1"># get data</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;data_fits_name&#39;</span><span class="p">]][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">data_unit</span> <span class="o">=</span> <span class="n">_parse_data_units</span><span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;TUNIT7&#39;</span><span class="p">])</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">data_unit</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">coordx_edges</span><span class="o">=</span><span class="n">coordx_edges</span><span class="p">,</span>
+                   <span class="n">coordy_edges</span><span class="o">=</span><span class="n">coordy_edges</span><span class="p">,</span>
+                   <span class="n">energy_edges</span><span class="o">=</span><span class="n">energy_edges</span><span class="p">,</span>
+                   <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">scheme</span><span class="o">=</span><span class="n">scheme</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="FOVCube.from_fits_image"><a class="viewcode-back" href="../../../api/gammapy.background.FOVCube.html#gammapy.background.FOVCube.from_fits_image">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_fits_image</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">image_hdu</span><span class="p">,</span> <span class="n">energy_hdu</span><span class="p">,</span> <span class="n">scheme</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Read cube from a FITS image.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        image_hdu : `~astropy.io.fits.PrimaryHDU`</span>
+<span class="sd">            FOVCube image HDU.</span>
+<span class="sd">        energy_hdu : `~astropy.io.fits.BinTableHDU`</span>
+<span class="sd">            Energy binning table.</span>
+<span class="sd">        scheme : str, optional</span>
+<span class="sd">            String identifying parameter naming scheme for FITS files and plots.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        cube : `~gammapy.background.FOVCube`</span>
+<span class="sd">            FOVCube object.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">image_header</span> <span class="o">=</span> <span class="n">image_hdu</span><span class="o">.</span><span class="n">header</span>
+        <span class="n">energy_header</span> <span class="o">=</span> <span class="n">energy_hdu</span><span class="o">.</span><span class="n">header</span>
+
+        <span class="n">scheme_dict</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">define_scheme</span><span class="p">(</span><span class="n">scheme</span><span class="p">)</span>
+
+        <span class="c1"># check correct axis order: 1st X, 2nd Y, 3rd energy, 4th data</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">image_header</span><span class="p">[</span><span class="s1">&#39;CTYPE1&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordx_fits_name&#39;</span><span class="p">]):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Expecting X axis in first place, not (</span><span class="si">{}</span><span class="s2">)&quot;</span>
+                             <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">image_header</span><span class="p">[</span><span class="s1">&#39;CTYPE1&#39;</span><span class="p">]))</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">image_header</span><span class="p">[</span><span class="s1">&#39;CTYPE2&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordy_fits_name&#39;</span><span class="p">]):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Expecting Y axis in second place, not (</span><span class="si">{}</span><span class="s2">)&quot;</span>
+                             <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">image_header</span><span class="p">[</span><span class="s1">&#39;CTYPE2&#39;</span><span class="p">]))</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">image_header</span><span class="p">[</span><span class="s1">&#39;CTYPE3&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;energy_fits_name&#39;</span><span class="p">]):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Expecting E axis in third place, not (</span><span class="si">{}</span><span class="s2">)&quot;</span>
+                             <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">image_header</span><span class="p">[</span><span class="s1">&#39;CTYPE3&#39;</span><span class="p">]))</span>
+
+        <span class="c1"># check units</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">image_header</span><span class="p">[</span><span class="s1">&#39;CUNIT1&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">image_header</span><span class="p">[</span><span class="s1">&#39;CUNIT2&#39;</span><span class="p">]):</span>
+            <span class="n">ss_error</span> <span class="o">=</span> <span class="s2">&quot;This is odd: units of X and Y coordinates not matching&quot;</span>
+            <span class="n">ss_error</span> <span class="o">+=</span> <span class="s2">&quot;(</span><span class="si">{0}</span><span class="s2">, </span><span class="si">{1}</span><span class="s2">)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">image_header</span><span class="p">[</span><span class="s1">&#39;CUNIT1&#39;</span><span class="p">],</span> <span class="n">image_header</span><span class="p">[</span><span class="s1">&#39;CUNIT2&#39;</span><span class="p">])</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">ss_error</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">image_header</span><span class="p">[</span><span class="s1">&#39;CUNIT3&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">energy_header</span><span class="p">[</span><span class="s1">&#39;TUNIT1&#39;</span><span class="p">]):</span>
+            <span class="n">ss_error</span> <span class="o">=</span> <span class="s2">&quot;This is odd: energy units not matching&quot;</span>
+            <span class="n">ss_error</span> <span class="o">+=</span> <span class="s2">&quot;(</span><span class="si">{0}</span><span class="s2">, </span><span class="si">{1}</span><span class="s2">)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">image_header</span><span class="p">[</span><span class="s1">&#39;CUNIT3&#39;</span><span class="p">],</span> <span class="n">energy_header</span><span class="p">[</span><span class="s1">&#39;TUNIT1&#39;</span><span class="p">])</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">ss_error</span><span class="p">)</span>
+
+        <span class="c1"># get coord X, Y binning</span>
+        <span class="n">wcs</span> <span class="o">=</span> <span class="n">WCS</span><span class="p">(</span><span class="n">image_header</span><span class="p">,</span> <span class="n">naxis</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>  <span class="c1"># select only the (X, Y) axes</span>
+        <span class="n">coordx_edges</span><span class="p">,</span> <span class="n">coordy_edges</span> <span class="o">=</span> <span class="n">linear_wcs_to_arrays</span><span class="p">(</span><span class="n">wcs</span><span class="p">,</span>
+                                                          <span class="n">image_header</span><span class="p">[</span><span class="s1">&#39;NAXIS1&#39;</span><span class="p">],</span>
+                                                          <span class="n">image_header</span><span class="p">[</span><span class="s1">&#39;NAXIS2&#39;</span><span class="p">])</span>
+
+        <span class="c1"># get energy binning</span>
+        <span class="n">energy_edges</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">energy_hdu</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;ENERGY&#39;</span><span class="p">],</span>
+                                <span class="n">energy_header</span><span class="p">[</span><span class="s1">&#39;TUNIT1&#39;</span><span class="p">])</span>
+
+        <span class="c1"># get data</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">image_hdu</span><span class="o">.</span><span class="n">data</span>
+        <span class="n">data_unit</span> <span class="o">=</span> <span class="n">_parse_data_units</span><span class="p">(</span><span class="n">image_header</span><span class="p">[</span><span class="s1">&#39;DATAUNIT&#39;</span><span class="p">])</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">data_unit</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">coordx_edges</span><span class="o">=</span><span class="n">coordx_edges</span><span class="p">,</span>
+                   <span class="n">coordy_edges</span><span class="o">=</span><span class="n">coordy_edges</span><span class="p">,</span>
+                   <span class="n">energy_edges</span><span class="o">=</span><span class="n">energy_edges</span><span class="p">,</span>
+                   <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">scheme</span><span class="o">=</span><span class="n">scheme</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="FOVCube.read"><a class="viewcode-back" href="../../../api/gammapy.background.FOVCube.html#gammapy.background.FOVCube.read">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s1">&#39;table&#39;</span><span class="p">,</span> <span class="n">scheme</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">hdu</span><span class="o">=</span><span class="s1">&#39;bkg_3d&#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Read cube from FITS file.</span>
+
+<span class="sd">        Several input formats are accepted, depending on the value</span>
+<span class="sd">        of the **format** parameter:</span>
+
+<span class="sd">        * table (default and preferred format): `~astropy.io.fits.BinTableHDU`</span>
+
+<span class="sd">        * image (alternative format): `~astropy.io.fits.PrimaryHDU`,</span>
+<span class="sd">          with the energy binning stored as `~astropy.io.fits.BinTableHDU`</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        filename : str</span>
+<span class="sd">            Name of file with the cube.</span>
+<span class="sd">        format : str, optional</span>
+<span class="sd">            Format of the cube to read.</span>
+<span class="sd">        scheme : str, optional</span>
+<span class="sd">            String identifying parameter naming scheme for FITS files and plots.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        cube : `~gammapy.background.FOVCube`</span>
+<span class="sd">            FOVCube object.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">filename</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+        <span class="n">scheme_dict</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">define_scheme</span><span class="p">(</span><span class="n">scheme</span><span class="p">)</span>
+        <span class="n">hdu_list</span> <span class="o">=</span> <span class="n">fits</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">filename</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="nb">format</span> <span class="o">==</span> <span class="s1">&#39;table&#39;</span><span class="p">:</span>
+            <span class="n">hdu</span> <span class="o">=</span> <span class="n">hdu_list</span><span class="p">[</span><span class="n">hdu</span><span class="p">]</span>
+            <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_fits_table</span><span class="p">(</span><span class="n">hdu</span><span class="p">,</span> <span class="n">scheme</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">format</span> <span class="o">==</span> <span class="s1">&#39;image&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_fits_image</span><span class="p">(</span><span class="n">hdu_list</span><span class="p">[</span><span class="s1">&#39;PRIMARY&#39;</span><span class="p">],</span> <span class="n">hdu_list</span><span class="p">[</span><span class="s1">&#39;EBOUNDS&#39;</span><span class="p">],</span> <span class="n">scheme</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid format </span><span class="si">{}</span><span class="s2">.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">format</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="FOVCube.to_table"><a class="viewcode-back" href="../../../api/gammapy.background.FOVCube.html#gammapy.background.FOVCube.to_table">[docs]</a>    <span class="k">def</span> <span class="nf">to_table</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Convert cube to astropy table format.</span>
+
+<span class="sd">        The name of the table is stored in the table meta information</span>
+<span class="sd">        under the keyword &#39;name&#39;.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        table : `~astropy.table.Table`</span>
+<span class="sd">            Table containing the cube.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># data arrays</span>
+        <span class="n">a_coordx_lo</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">coordx_edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]])</span>
+        <span class="n">a_coordx_hi</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">coordx_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:]])</span>
+        <span class="n">a_coordy_lo</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">coordy_edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]])</span>
+        <span class="n">a_coordy_hi</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">coordy_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:]])</span>
+        <span class="n">a_energy_lo</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">energy_edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]])</span>
+        <span class="n">a_energy_hi</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">energy_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:]])</span>
+        <span class="n">a_data</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">])</span>
+
+        <span class="c1"># table</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">()</span>
+        <span class="n">table</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordx_fits_name&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_LO&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">a_coordx_lo</span>
+        <span class="n">table</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordx_fits_name&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_HI&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">a_coordx_hi</span>
+        <span class="n">table</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordy_fits_name&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_LO&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">a_coordy_lo</span>
+        <span class="n">table</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordy_fits_name&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_HI&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">a_coordy_hi</span>
+        <span class="n">table</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;energy_fits_name&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_LO&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">a_energy_lo</span>
+        <span class="n">table</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;energy_fits_name&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_HI&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">a_energy_hi</span>
+        <span class="n">table</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;data_fits_name&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">a_data</span>
+
+        <span class="n">table</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;hdu_fits_name&#39;</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">table</span></div>
+
+<div class="viewcode-block" id="FOVCube.to_fits_table"><a class="viewcode-back" href="../../../api/gammapy.background.FOVCube.html#gammapy.background.FOVCube.to_fits_table">[docs]</a>    <span class="k">def</span> <span class="nf">to_fits_table</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Convert cube to binary table FITS format.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tbhdu : `~astropy.io.fits.BinTableHDU`</span>
+<span class="sd">            Table containing the cube.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">table_to_fits_table</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">to_table</span><span class="p">())</span></div>
+
+<div class="viewcode-block" id="FOVCube.to_fits_image"><a class="viewcode-back" href="../../../api/gammapy.background.FOVCube.html#gammapy.background.FOVCube.to_fits_image">[docs]</a>    <span class="k">def</span> <span class="nf">to_fits_image</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Convert cube to image FITS format.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        hdu_list : `~astropy.io.fits.HDUList`</span>
+<span class="sd">            HDU list with:</span>
+
+<span class="sd">            * one `~astropy.io.fits.PrimaryHDU` image for the cube.</span>
+
+<span class="sd">            * one `~astropy.io.fits.BinTableHDU` table for the energy binning.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># data</span>
+        <span class="n">imhdu</span> <span class="o">=</span> <span class="n">fits</span><span class="o">.</span><span class="n">PrimaryHDU</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                                <span class="n">header</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">coord_wcs</span><span class="o">.</span><span class="n">to_header</span><span class="p">())</span>
+        <span class="c1"># add some important header information</span>
+        <span class="n">imhdu</span><span class="o">.</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;DATAUNIT&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;{0.unit:FITS}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">imhdu</span><span class="o">.</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;CTYPE3&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;energy_fits_name&#39;</span><span class="p">]</span>
+        <span class="n">imhdu</span><span class="o">.</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;CUNIT3&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;{0.unit:FITS}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">energy_edges</span><span class="p">)</span>
+
+        <span class="c1"># get WCS object and write it out as a FITS header</span>
+        <span class="n">wcs_header</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coord_wcs</span><span class="o">.</span><span class="n">to_header</span><span class="p">()</span>
+
+        <span class="c1"># get energy values as a table HDU, via an astropy table</span>
+        <span class="n">energy_table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">()</span>
+        <span class="n">energy_table</span><span class="p">[</span><span class="s1">&#39;ENERGY&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_edges</span>
+        <span class="n">energy_table</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;EBOUNDS&#39;</span>
+        <span class="c1"># TODO: this function should be reviewed/re-written, when</span>
+        <span class="c1"># the following PR is completed:</span>
+        <span class="c1"># https://github.com/gammapy/gammapy/pull/290</span>
+        <span class="c1"># as suggested in:</span>
+        <span class="c1"># https://github.com/gammapy/gammapy/pull/299#discussion_r35044977</span>
+
+        <span class="n">enhdu</span> <span class="o">=</span> <span class="n">table_to_fits_table</span><span class="p">(</span><span class="n">energy_table</span><span class="p">)</span>
+
+        <span class="n">hdu_list</span> <span class="o">=</span> <span class="n">fits</span><span class="o">.</span><span class="n">HDUList</span><span class="p">([</span><span class="n">imhdu</span><span class="p">,</span> <span class="n">enhdu</span><span class="p">])</span>
+
+        <span class="k">return</span> <span class="n">hdu_list</span></div>
+
+<div class="viewcode-block" id="FOVCube.write"><a class="viewcode-back" href="../../../api/gammapy.background.FOVCube.html#gammapy.background.FOVCube.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outfile</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s1">&#39;table&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Write cube to fits file.</span>
+
+<span class="sd">        Several output formats are accepted, depending on the value</span>
+<span class="sd">        of the **format** parameter:</span>
+
+<span class="sd">        * table (default and preferred format): `~astropy.io.fits.BinTableHDU`</span>
+<span class="sd">        * image (alternative format): `~astropy.io.fits.PrimaryHDU`,</span>
+<span class="sd">          with the energy binning stored as `~astropy.io.fits.BinTableHDU`</span>
+
+<span class="sd">        Depending on the value of the **format** parameter, this</span>
+<span class="sd">        method calls either `~astropy.io.fits.BinTableHDU.writeto` or</span>
+<span class="sd">        `~astropy.io.fits.HDUList.writeto`, forwarding the</span>
+<span class="sd">        **kwargs** arguments.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        outfile : str</span>
+<span class="sd">            Name of file to write.</span>
+<span class="sd">        format : str, optional</span>
+<span class="sd">            Format of the cube to write.</span>
+<span class="sd">        kwargs</span>
+<span class="sd">            Extra arguments for the corresponding `astropy.io.fits` ``writeto`` method.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">format</span> <span class="o">==</span> <span class="s1">&#39;table&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">to_fits_table</span><span class="p">()</span><span class="o">.</span><span class="n">writeto</span><span class="p">(</span><span class="n">outfile</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">format</span> <span class="o">==</span> <span class="s1">&#39;image&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">to_fits_image</span><span class="p">()</span><span class="o">.</span><span class="n">writeto</span><span class="p">(</span><span class="n">outfile</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid format </span><span class="si">{}</span><span class="s2">.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">format</span><span class="p">))</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">image_extent</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Image extent (`~astropy.coordinates.Angle`).</span>
+
+<span class="sd">        The output array format is ``(x_lo, x_hi, y_lo, y_hi)``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">bx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordx_edges</span>
+        <span class="n">by</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordy_edges</span>
+        <span class="k">return</span> <span class="n">Angle</span><span class="p">([</span><span class="n">bx</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">bx</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">by</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">by</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]])</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">spectrum_extent</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Spectrum extent (`~astropy.units.Quantity`).</span>
+
+<span class="sd">        The output array format is  ``(e_lo, e_hi)``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">b</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_edges</span>
+        <span class="k">return</span> <span class="n">Quantity</span><span class="p">([</span><span class="n">b</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">b</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]])</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">image_bin_centers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Image bin centers **(x, y)** (2x `~astropy.coordinates.Angle`).</span>
+
+<span class="sd">        Returning two separate elements for the X and Y bin centers.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">coordx_bin_centers</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coordx_edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordx_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+        <span class="n">coordy_bin_centers</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coordy_edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordy_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+        <span class="k">return</span> <span class="n">coordx_bin_centers</span><span class="p">,</span> <span class="n">coordy_bin_centers</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">energy_edges</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Energy binning (`~gammapy.utils.energy.EnergyBounds`).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_energy_edges</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">coord_wcs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;WCS object describing the coordinates of the coord (X, Y) bins (`~astropy.wcs.WCS`).</span>
+
+<span class="sd">        This method gives the correct answer only for linear X, Y binning.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">wcs</span> <span class="o">=</span> <span class="n">linear_arrays_to_wcs</span><span class="p">(</span><span class="n">name_x</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordx_fits_name&#39;</span><span class="p">],</span>
+                                   <span class="n">name_y</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordy_fits_name&#39;</span><span class="p">],</span>
+                                   <span class="n">bin_edges_x</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">coordx_edges</span><span class="p">,</span>
+                                   <span class="n">bin_edges_y</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">coordx_edges</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">wcs</span>
+
+<div class="viewcode-block" id="FOVCube.find_coord_bin"><a class="viewcode-back" href="../../../api/gammapy.background.FOVCube.html#gammapy.background.FOVCube.find_coord_bin">[docs]</a>    <span class="k">def</span> <span class="nf">find_coord_bin</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coord</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Find the bins that contain the specified coord (X, Y) pairs.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        coord : `~astropy.coordinates.Angle`</span>
+<span class="sd">            Array of coord (X, Y) pairs to search for.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bin_index : `~numpy.ndarray`</span>
+<span class="sd">            Array of integers with the indices (x, y) of the coord</span>
+<span class="sd">            bin containing the specified coord (X, Y) pair.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># check that the specified coord is within the boundaries of the cube</span>
+        <span class="n">coord_extent</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_extent</span>
+        <span class="n">check_x_lo</span> <span class="o">=</span> <span class="p">(</span><span class="n">coord_extent</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">coord</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+        <span class="n">check_x_hi</span> <span class="o">=</span> <span class="p">(</span><span class="n">coord</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">coord_extent</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+        <span class="n">check_y_lo</span> <span class="o">=</span> <span class="p">(</span><span class="n">coord_extent</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">coord</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+        <span class="n">check_y_hi</span> <span class="o">=</span> <span class="p">(</span><span class="n">coord</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">coord_extent</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">check_x_lo</span> <span class="ow">and</span> <span class="n">check_x_hi</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="p">(</span><span class="n">check_y_lo</span> <span class="ow">and</span> <span class="n">check_y_hi</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Specified coord </span><span class="si">{0}</span><span class="s2"> is outside the boundaries </span><span class="si">{1}</span><span class="s2">.&quot;</span>
+                             <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">coord</span><span class="p">,</span> <span class="n">coord_extent</span><span class="p">))</span>
+
+        <span class="n">bin_index_x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coordx_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">coord</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">bin_index_y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coordy_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">coord</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">bin_index_x</span><span class="p">,</span> <span class="n">bin_index_y</span><span class="p">])</span></div>
+
+<div class="viewcode-block" id="FOVCube.find_coord_bin_edges"><a class="viewcode-back" href="../../../api/gammapy.background.FOVCube.html#gammapy.background.FOVCube.find_coord_bin_edges">[docs]</a>    <span class="k">def</span> <span class="nf">find_coord_bin_edges</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coord</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Find the bin edges of the specified coord (X, Y) pairs.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        coord : `~astropy.coordinates.Angle`</span>
+<span class="sd">            Array of coord (X, Y) pairs to search for.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bin_edges : `~astropy.coordinates.Angle`</span>
+<span class="sd">            Coord bin edges (x_lo, x_hi, y_lo, y_hi).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">bin_index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find_coord_bin</span><span class="p">(</span><span class="n">coord</span><span class="p">)</span>
+        <span class="n">bin_edges</span> <span class="o">=</span> <span class="n">Angle</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">coordx_edges</span><span class="p">[</span><span class="n">bin_index</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span>
+                           <span class="bp">self</span><span class="o">.</span><span class="n">coordx_edges</span><span class="p">[</span><span class="n">bin_index</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">],</span>
+                           <span class="bp">self</span><span class="o">.</span><span class="n">coordy_edges</span><span class="p">[</span><span class="n">bin_index</span><span class="p">[</span><span class="mi">1</span><span class="p">]],</span>
+                           <span class="bp">self</span><span class="o">.</span><span class="n">coordy_edges</span><span class="p">[</span><span class="n">bin_index</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]])</span>
+
+        <span class="k">return</span> <span class="n">bin_edges</span></div>
+
+<div class="viewcode-block" id="FOVCube.plot_image"><a class="viewcode-back" href="../../../api/gammapy.background.FOVCube.html#gammapy.background.FOVCube.plot_image">[docs]</a>    <span class="k">def</span> <span class="nf">plot_image</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">style_kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Plot image for the energy bin containing the specified energy.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        energy : `~gammapy.utils.energy.Energy`</span>
+<span class="sd">            Energy of cube bin to plot.</span>
+<span class="sd">        ax : `~matplotlib.axes.Axes`, optional</span>
+<span class="sd">            Axes of the figure for the plot.</span>
+<span class="sd">        style_kwargs : dict, optional</span>
+<span class="sd">            Style options for the plot.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ax : `~matplotlib.axes.Axes`</span>
+<span class="sd">            Axes of the figure containing the plot.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+        <span class="kn">from</span> <span class="nn">mpl_toolkits.axes_grid1</span> <span class="k">import</span> <span class="n">make_axes_locatable</span>
+
+        <span class="n">energy</span> <span class="o">=</span> <span class="n">Energy</span><span class="p">(</span><span class="n">energy</span><span class="p">)</span>
+
+        <span class="c1"># check shape of energy: only 1 value is accepted</span>
+        <span class="k">if</span> <span class="n">energy</span><span class="o">.</span><span class="n">size</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span><span class="s2">&quot;Expected exactly 1 value for energy&quot;</span>
+                             <span class="s2">&quot;, got </span><span class="si">{}</span><span class="s2">.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">energy</span><span class="o">.</span><span class="n">size</span><span class="p">))</span>
+
+        <span class="n">extent</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_extent</span>
+
+        <span class="c1"># find energy bin containing the specified energy</span>
+        <span class="n">energy_bin</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_edges</span><span class="o">.</span><span class="n">find_energy_bin</span><span class="p">(</span><span class="n">energy</span><span class="p">)</span>
+        <span class="n">energy_bin_edges</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_edges</span><span class="p">[[</span><span class="n">energy_bin</span><span class="p">,</span> <span class="n">energy_bin</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]]</span>
+
+        <span class="c1"># get data for the plot</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">energy_bin</span><span class="p">]</span>
+
+        <span class="c1"># create plot</span>
+        <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
+        <span class="n">do_not_close_fig</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">ax</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ax</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">111</span><span class="p">)</span>
+            <span class="c1"># if no axis object is passed by ref, the figure should remain open</span>
+            <span class="n">do_not_close_fig</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="n">style_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">style_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+
+        <span class="n">fig</span><span class="o">.</span><span class="n">set_size_inches</span><span class="p">(</span><span class="mf">8.</span><span class="p">,</span> <span class="mf">8.</span><span class="p">,</span> <span class="n">forward</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="s1">&#39;cmap&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">style_kwargs</span><span class="p">:</span>
+            <span class="n">style_kwargs</span><span class="p">[</span><span class="s1">&#39;cmap&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;afmhot&#39;</span>
+
+        <span class="n">image</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                          <span class="n">extent</span><span class="o">=</span><span class="n">extent</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                          <span class="n">origin</span><span class="o">=</span><span class="s1">&#39;lower&#39;</span><span class="p">,</span>  <span class="c1"># do not invert image</span>
+                          <span class="n">interpolation</span><span class="o">=</span><span class="s1">&#39;nearest&#39;</span><span class="p">,</span>
+                          <span class="o">**</span><span class="n">style_kwargs</span><span class="p">)</span>
+
+        <span class="c1"># set title and axis names</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Energy = [</span><span class="si">{0:.1f}</span><span class="s1">, </span><span class="si">{1:.1f}</span><span class="s1">) </span><span class="si">{2}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="n">energy_bin_edges</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">energy_bin_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+            <span class="n">energy_bin_edges</span><span class="o">.</span><span class="n">unit</span><span class="p">))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{0}</span><span class="s1"> / </span><span class="si">{1}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordx_plot_name&#39;</span><span class="p">],</span>
+                                         <span class="n">extent</span><span class="o">.</span><span class="n">unit</span><span class="p">))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{0}</span><span class="s1"> / </span><span class="si">{1}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;coordy_plot_name&#39;</span><span class="p">],</span>
+                                         <span class="n">extent</span><span class="o">.</span><span class="n">unit</span><span class="p">))</span>
+
+        <span class="c1"># draw color bar</span>
+        <span class="n">divider</span> <span class="o">=</span> <span class="n">make_axes_locatable</span><span class="p">(</span><span class="n">ax</span><span class="p">)</span>
+        <span class="n">cax</span> <span class="o">=</span> <span class="n">divider</span><span class="o">.</span><span class="n">append_axes</span><span class="p">(</span><span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="s2">&quot;5%&quot;</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">cax</span><span class="o">=</span><span class="n">cax</span><span class="p">,</span>
+                     <span class="n">label</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">{0}</span><span class="s1"> / </span><span class="si">{1}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;data_plot_name&#39;</span><span class="p">],</span>
+                                              <span class="n">data</span><span class="o">.</span><span class="n">unit</span><span class="p">))</span>
+
+        <span class="c1"># eventually close figure to avoid white canvases</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">do_not_close_fig</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ax</span></div>
+
+<div class="viewcode-block" id="FOVCube.make_spectrum"><a class="viewcode-back" href="../../../api/gammapy.background.FOVCube.html#gammapy.background.FOVCube.make_spectrum">[docs]</a>    <span class="k">def</span> <span class="nf">make_spectrum</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coord</span><span class="p">,</span> <span class="n">ebounds</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Generate energy spectrum at a certain position in the FOV.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        coord : `~astropy.units.Quantity`</span>
+<span class="sd">            Coord (X,Y) pair of cube bin to plot.</span>
+<span class="sd">        ebounds : `~gammapy.utils.energy.EnergyBounds`, optional</span>
+<span class="sd">            Energy binning for the spectrum</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        spectrum : `~astropy.units.Quantity`</span>
+<span class="sd">            Energy spectrum</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">ebounds</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_edges</span> <span class="k">if</span> <span class="n">ebounds</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">ebounds</span>
+        <span class="n">ebins</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_edges</span><span class="o">.</span><span class="n">find_energy_bin</span><span class="p">(</span><span class="n">ebounds</span><span class="o">.</span><span class="n">log_centers</span><span class="p">)</span>
+
+        <span class="n">coord</span> <span class="o">=</span> <span class="n">coord</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+        <span class="c1"># check shape of coord: only 1 pair is accepted</span>
+        <span class="n">nvalues</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">coord</span><span class="o">.</span><span class="n">flatten</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">nvalues</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">ss_error</span> <span class="o">=</span> <span class="s2">&quot;Expected exactly 2 values for coord (X, Y),&quot;</span>
+            <span class="n">ss_error</span> <span class="o">+=</span> <span class="s2">&quot;got </span><span class="si">{}</span><span class="s2">.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nvalues</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span><span class="n">ss_error</span><span class="p">)</span>
+
+        <span class="c1"># find coord bin containing the specified coord coordinates</span>
+        <span class="n">coord_bin</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find_coord_bin</span><span class="p">(</span><span class="n">coord</span><span class="p">)</span>
+        <span class="c1"># get data for the plot</span>
+        <span class="n">spectrum</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">ebins</span><span class="p">,</span> <span class="n">coord_bin</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">coord_bin</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+
+        <span class="k">return</span> <span class="n">spectrum</span></div>
+
+<div class="viewcode-block" id="FOVCube.plot_spectrum"><a class="viewcode-back" href="../../../api/gammapy.background.FOVCube.html#gammapy.background.FOVCube.plot_spectrum">[docs]</a>    <span class="k">def</span> <span class="nf">plot_spectrum</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coord</span><span class="p">,</span> <span class="n">ebounds</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">style_kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Plot spectra for the coord bin containing the specified coord (X, Y) pair.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        coord : `~astropy.units.Quantity`</span>
+<span class="sd">            Coord (X,Y) pair of cube bin to plot.</span>
+<span class="sd">        ax : `~matplotlib.axes.Axes`, optional</span>
+<span class="sd">            Axes of the figure for the plot.</span>
+<span class="sd">        ebounds : `~gammapy.utils.energy.EnergyBounds`, optional</span>
+<span class="sd">            Energy binning for the spectrum</span>
+<span class="sd">        style_kwargs : dict, optional</span>
+<span class="sd">            Style options for the plot.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ax : `~matplotlib.axes.Axes`</span>
+<span class="sd">            Axes of the figure containing the plot.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+
+        <span class="n">ebounds</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_edges</span> <span class="k">if</span> <span class="n">ebounds</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">ebounds</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_spectrum</span><span class="p">(</span><span class="n">coord</span><span class="p">,</span> <span class="n">ebounds</span><span class="o">=</span><span class="n">ebounds</span><span class="p">)</span>
+        <span class="n">coord_bin_edges</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find_coord_bin_edges</span><span class="p">(</span><span class="n">coord</span><span class="p">)</span>
+
+        <span class="c1"># create plot</span>
+        <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
+        <span class="n">do_not_close_fig</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">ax</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ax</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">111</span><span class="p">)</span>
+            <span class="c1"># if no axis object is passed by ref, the figure should remain open</span>
+            <span class="n">do_not_close_fig</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="n">style_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">style_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+
+        <span class="n">fig</span><span class="o">.</span><span class="n">set_size_inches</span><span class="p">(</span><span class="mf">8.</span><span class="p">,</span> <span class="mf">8.</span><span class="p">,</span> <span class="n">forward</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ebounds</span><span class="o">.</span><span class="n">log_centers</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;TeV&#39;</span><span class="p">),</span> <span class="n">data</span><span class="p">,</span> <span class="n">drawstyle</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">style_kwargs</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">loglog</span><span class="p">()</span>  <span class="c1"># double log scale # slow!</span>
+
+        <span class="c1"># set title and axis names</span>
+        <span class="n">ss_coordx_bin_edges</span> <span class="o">=</span> <span class="s2">&quot;[</span><span class="si">{0:.1f}</span><span class="s2">, </span><span class="si">{1:.1f}</span><span class="s2">) </span><span class="si">{2}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="n">coord_bin_edges</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">coord_bin_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+            <span class="n">coord_bin_edges</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span>
+        <span class="n">ss_coordy_bin_edges</span> <span class="o">=</span> <span class="s2">&quot;[</span><span class="si">{0:.1f}</span><span class="s2">, </span><span class="si">{1:.1f}</span><span class="s2">) </span><span class="si">{2}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="n">coord_bin_edges</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">coord_bin_edges</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+            <span class="n">coord_bin_edges</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Coord = </span><span class="si">{0}</span><span class="s1"> </span><span class="si">{1}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="n">ss_coordx_bin_edges</span><span class="p">,</span> <span class="n">ss_coordy_bin_edges</span><span class="p">))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{0}</span><span class="s1"> / </span><span class="si">{1}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;energy_plot_name&#39;</span><span class="p">],</span>
+                                         <span class="n">ebounds</span><span class="o">.</span><span class="n">unit</span><span class="p">))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{0}</span><span class="s1"> / </span><span class="si">{1}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scheme_dict</span><span class="p">[</span><span class="s1">&#39;data_plot_name&#39;</span><span class="p">],</span>
+                                         <span class="n">data</span><span class="o">.</span><span class="n">unit</span><span class="p">))</span>
+        <span class="c1"># eventually close figure to avoid white canvases</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">do_not_close_fig</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ax</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">integral</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Integral of the cube (`~astropy.units.Quantity`).</span>
+
+<span class="sd">        The returned quantity has dimension of the data in the cube</span>
+<span class="sd">        times solid angle times energy.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">delta_energy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">delta_y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordy_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordy_edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">delta_x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordx_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordx_edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="c1"># define grid of deltas (i.e. bin widths for each 3D bin)</span>
+        <span class="n">delta_energy</span><span class="p">,</span> <span class="n">delta_y</span><span class="p">,</span> <span class="n">delta_x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">delta_energy</span><span class="p">,</span> <span class="n">delta_y</span><span class="p">,</span>
+                                                     <span class="n">delta_x</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s1">&#39;ij&#39;</span><span class="p">)</span>
+        <span class="n">bin_volume</span> <span class="o">=</span> <span class="n">delta_energy</span> <span class="o">*</span> <span class="p">(</span><span class="n">delta_y</span> <span class="o">*</span> <span class="n">delta_x</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;sr&#39;</span><span class="p">)</span>
+        <span class="n">integral</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">*</span> <span class="n">bin_volume</span>
+
+        <span class="k">return</span> <span class="n">integral</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">integral_images</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Integral of the cube images (`~astropy.units.Quantity`).</span>
+
+<span class="sd">        Calculate the integral of each energy bin (slice) in the</span>
+<span class="sd">        cube. Returns an array of integrals.</span>
+
+<span class="sd">        The returned quantities have dimensions of the data in the cube</span>
+<span class="sd">        times solid angle.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">dummy_delta_energy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">energy_edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">delta_y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordy_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordy_edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">delta_x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordx_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordx_edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="c1"># define grid of deltas (i.e. bin widths for each 3D bin)</span>
+        <span class="n">dummy_delta_energy</span><span class="p">,</span> <span class="n">delta_y</span><span class="p">,</span> <span class="n">delta_x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">dummy_delta_energy</span><span class="p">,</span> <span class="n">delta_y</span><span class="p">,</span>
+                                                           <span class="n">delta_x</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s1">&#39;ij&#39;</span><span class="p">)</span>
+        <span class="n">bin_area</span> <span class="o">=</span> <span class="p">(</span><span class="n">delta_y</span> <span class="o">*</span> <span class="n">delta_x</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;sr&#39;</span><span class="p">)</span>
+        <span class="n">integral_images</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">*</span> <span class="n">bin_area</span>
+
+        <span class="k">return</span> <span class="n">integral_images</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">bin_volume</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Per-pixel bin volume.</span>
+
+<span class="sd">        TODO: explain with formula and units</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">delta_energy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">delta_y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordy_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordy_edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">delta_x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordx_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordx_edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="c1"># define grid of deltas (i.e. bin widths for each 3D bin)</span>
+        <span class="n">delta_energy</span><span class="p">,</span> <span class="n">delta_y</span><span class="p">,</span> <span class="n">delta_x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">delta_energy</span><span class="p">,</span> <span class="n">delta_y</span><span class="p">,</span>
+                                                     <span class="n">delta_x</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s1">&#39;ij&#39;</span><span class="p">)</span>
+        <span class="n">bin_volume</span> <span class="o">=</span> <span class="n">delta_energy</span> <span class="o">*</span> <span class="p">(</span><span class="n">delta_y</span> <span class="o">*</span> <span class="n">delta_x</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;sr&#39;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">bin_volume</span>
+
+<div class="viewcode-block" id="FOVCube.fill_events"><a class="viewcode-back" href="../../../api/gammapy.background.FOVCube.html#gammapy.background.FOVCube.fill_events">[docs]</a>    <span class="k">def</span> <span class="nf">fill_events</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event_lists</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Fill events histogram.</span>
+
+<span class="sd">        This add the counts to the existing value array.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        event_lists : list of `~gammapy.data.EventList`</span>
+<span class="sd">           Python list of event list objects.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">event_list</span> <span class="ow">in</span> <span class="n">event_lists</span><span class="p">:</span>
+            <span class="n">counts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fill_one_event_list</span><span class="p">(</span><span class="n">event_list</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">+=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">counts</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_fill_one_event_list</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">events</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Fill one event list into a counts array.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        events :`~gammapy.data.EventList`</span>
+<span class="sd">           Event list objects.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">energy</span> <span class="o">=</span> <span class="n">events</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;TeV&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span>
+        <span class="n">detx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">events</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;DETX&#39;</span><span class="p">])</span>
+        <span class="n">dety</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">events</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;DETY&#39;</span><span class="p">])</span>
+        <span class="n">sample</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span><span class="n">energy</span><span class="p">,</span> <span class="n">detx</span><span class="p">,</span> <span class="n">dety</span><span class="p">])</span><span class="o">.</span><span class="n">T</span>
+
+        <span class="n">bins</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">energy_edges</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordy_edges</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordx_edges</span><span class="o">.</span><span class="n">value</span><span class="p">]</span>
+
+        <span class="n">hist</span><span class="p">,</span> <span class="n">edges</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">histogramdd</span><span class="p">(</span><span class="n">sample</span><span class="p">,</span> <span class="n">bins</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">hist</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2018, The Gammapy developers.<br/>
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.6.7. &nbsp;
+    Last built 01 Mar 2018. <br/>
+  </p>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,548 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>gammapy.astro.population.simulate &#8212; gammapy v0.7</title>
+    <link rel="stylesheet" href="../../../../_static/gammapy.css" type="text/css" />
+    <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../../',
+        VERSION:     '0.7',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../../../../_static/sidebar.js"></script>
+    <link rel="shortcut icon" href="../../../../_static/astropy_logo.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+<link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+<script type="text/javascript" src="../../../../_static/copybutton.js"></script>
+
+
+  </head>
+  <body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../../index.html"><span id="logotext1">gamma</span><span id="logotext2">py</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="Astropy Homepage" href="http://www.astropy.org"></a></li>
+    <li><a title="General Index" href="../../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../../index.html">gammapy v0.7</a>
+	 &#187;
+      </li>
+      <li><a href="../../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for gammapy.astro.population.simulate</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
+<span class="sd">&quot;&quot;&quot;Simulate source catalogs.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">numpy</span> <span class="k">import</span> <span class="n">degrees</span><span class="p">,</span> <span class="n">pi</span><span class="p">,</span> <span class="n">arctan</span><span class="p">,</span> <span class="n">exp</span>
+<span class="kn">from</span> <span class="nn">...extern</span> <span class="k">import</span> <span class="n">six</span>
+<span class="kn">from</span> <span class="nn">astropy.table</span> <span class="k">import</span> <span class="n">Table</span><span class="p">,</span> <span class="n">Column</span>
+<span class="kn">from</span> <span class="nn">astropy.units</span> <span class="k">import</span> <span class="n">Quantity</span>
+<span class="kn">from</span> <span class="nn">astropy.coordinates</span> <span class="k">import</span> <span class="n">SkyCoord</span><span class="p">,</span> <span class="n">spherical_to_cartesian</span>
+<span class="kn">from</span> <span class="nn">...utils</span> <span class="k">import</span> <span class="n">coordinates</span> <span class="k">as</span> <span class="n">astrometry</span>
+<span class="kn">from</span> <span class="nn">...utils.coordinates</span> <span class="k">import</span> <span class="n">D_SUN_TO_GALACTIC_CENTER</span>
+<span class="kn">from</span> <span class="nn">...utils.distributions</span> <span class="k">import</span> <span class="n">draw</span><span class="p">,</span> <span class="n">pdf</span>
+<span class="kn">from</span> <span class="nn">...utils.random</span> <span class="k">import</span> <span class="n">sample_sphere</span><span class="p">,</span> <span class="n">sample_sphere_distance</span><span class="p">,</span> <span class="n">get_random_state</span>
+<span class="kn">from</span> <span class="nn">..source</span> <span class="k">import</span> <span class="n">SNR</span><span class="p">,</span> <span class="n">SNRTrueloveMcKee</span><span class="p">,</span> <span class="n">PWN</span><span class="p">,</span> <span class="n">Pulsar</span>
+<span class="kn">from</span> <span class="nn">..population.spatial</span> <span class="k">import</span> <span class="n">Exponential</span><span class="p">,</span> <span class="n">FaucherSpiral</span><span class="p">,</span> <span class="n">RMIN</span><span class="p">,</span> <span class="n">RMAX</span><span class="p">,</span> <span class="n">ZMIN</span><span class="p">,</span> <span class="n">ZMAX</span><span class="p">,</span> <span class="n">radial_distributions</span>
+<span class="kn">from</span> <span class="nn">..population.velocity</span> <span class="k">import</span> <span class="n">VMIN</span><span class="p">,</span> <span class="n">VMAX</span><span class="p">,</span> <span class="n">velocity_distributions</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;make_catalog_random_positions_cube&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;make_catalog_random_positions_sphere&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;make_base_catalog_galactic&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;add_snr_parameters&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;add_pulsar_parameters&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;add_pwn_parameters&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;add_observed_source_parameters&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;add_observed_parameters&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<div class="viewcode-block" id="make_catalog_random_positions_cube"><a class="viewcode-back" href="../../../../api/gammapy.astro.population.make_catalog_random_positions_cube.html#gammapy.astro.population.make_catalog_random_positions_cube">[docs]</a><span class="k">def</span> <span class="nf">make_catalog_random_positions_cube</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">dimension</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">dmax</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+                                       <span class="n">random_state</span><span class="o">=</span><span class="s1">&#39;random-seed&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Make a catalog of sources randomly distributed on a line, square or cube.</span>
+
+<span class="sd">    TODO: is this useful enough for general use or should we hide it as an</span>
+<span class="sd">      internal method to generate test datasets?</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    size : int, optional</span>
+<span class="sd">        Number of sources</span>
+<span class="sd">    dimension : int, optional</span>
+<span class="sd">        Number of dimensions</span>
+<span class="sd">    dmax : int, optional</span>
+<span class="sd">        Maximum distance in pc.</span>
+<span class="sd">    random_state : {int, &#39;random-seed&#39;, &#39;global-rng&#39;, `~numpy.random.RandomState`}</span>
+<span class="sd">        Defines random number generator initialisation.</span>
+<span class="sd">        Passed to `~gammapy.utils.random.get_random_state`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    catalog : `~astropy.table.Table`</span>
+<span class="sd">        Source catalog with columns:</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">random_state</span> <span class="o">=</span> <span class="n">get_random_state</span><span class="p">(</span><span class="n">random_state</span><span class="p">)</span>
+
+    <span class="c1"># Generate positions 1D, 2D, or 3D</span>
+    <span class="k">if</span> <span class="n">dimension</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">random_state</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="n">dmax</span><span class="p">,</span> <span class="n">dmax</span><span class="p">,</span> <span class="n">size</span><span class="p">)</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="n">random_state</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="n">dmax</span><span class="p">,</span> <span class="n">dmax</span><span class="p">,</span> <span class="n">size</span><span class="p">)</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="n">random_state</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="n">dmax</span><span class="p">,</span> <span class="n">dmax</span><span class="p">,</span> <span class="n">size</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">dimension</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">random_state</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="n">dmax</span><span class="p">,</span> <span class="n">dmax</span><span class="p">,</span> <span class="n">size</span><span class="p">)</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="n">random_state</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="n">dmax</span><span class="p">,</span> <span class="n">dmax</span><span class="p">,</span> <span class="n">size</span><span class="p">)</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">random_state</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="n">dmax</span><span class="p">,</span> <span class="n">dmax</span><span class="p">,</span> <span class="n">size</span><span class="p">)</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+
+    <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">()</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;pc&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Galactic cartesian coordinate&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;y&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;pc&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Galactic cartesian coordinate&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;z&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;pc&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Galactic cartesian coordinate&#39;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">table</span></div>
+
+
+<div class="viewcode-block" id="make_catalog_random_positions_sphere"><a class="viewcode-back" href="../../../../api/gammapy.astro.population.make_catalog_random_positions_sphere.html#gammapy.astro.population.make_catalog_random_positions_sphere">[docs]</a><span class="k">def</span> <span class="nf">make_catalog_random_positions_sphere</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="n">center</span><span class="o">=</span><span class="s1">&#39;Earth&#39;</span><span class="p">,</span>
+                                         <span class="n">distance</span><span class="o">=</span><span class="n">Quantity</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="s1">&#39;Mpc&#39;</span><span class="p">),</span>
+                                         <span class="n">random_state</span><span class="o">=</span><span class="s1">&#39;random-seed&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Sample random source locations in a sphere.</span>
+
+<span class="sd">    This can be used to generate an isotropic source population</span>
+<span class="sd">    to represent extra-galactic sources.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    size : int</span>
+<span class="sd">        Number of sources</span>
+<span class="sd">    center : {&#39;Earth&#39;, &#39;Milky Way&#39;}</span>
+<span class="sd">        Sphere center</span>
+<span class="sd">    distance : `~astropy.units.Quantity` tuple</span>
+<span class="sd">        Distance min / max range.</span>
+<span class="sd">    random_state : {int, &#39;random-seed&#39;, &#39;global-rng&#39;, `~numpy.random.RandomState`}</span>
+<span class="sd">        Defines random number generator initialisation.</span>
+<span class="sd">        Passed to `~gammapy.utils.random.get_random_state`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    catalog : `~astropy.table.Table`</span>
+<span class="sd">        Source catalog with columns:</span>
+
+<span class="sd">        - RAJ2000, DEJ2000 (deg)</span>
+<span class="sd">        - GLON, GLAT (deg)</span>
+<span class="sd">        - Distance (Mpc)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">random_state</span> <span class="o">=</span> <span class="n">get_random_state</span><span class="p">(</span><span class="n">random_state</span><span class="p">)</span>
+
+    <span class="n">lon</span><span class="p">,</span> <span class="n">lat</span> <span class="o">=</span> <span class="n">sample_sphere</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">)</span>
+    <span class="n">radius</span> <span class="o">=</span> <span class="n">sample_sphere_distance</span><span class="p">(</span><span class="n">distance</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">distance</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">size</span><span class="p">,</span>
+                                    <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">)</span>
+
+    <span class="c1"># TODO: it shouldn&#39;t be necessary here to convert to cartesian ourselves ...</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span> <span class="o">=</span> <span class="n">spherical_to_cartesian</span><span class="p">(</span><span class="n">radius</span><span class="p">,</span> <span class="n">lat</span><span class="p">,</span> <span class="n">lon</span><span class="p">)</span>
+    <span class="n">pos</span> <span class="o">=</span> <span class="n">SkyCoord</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">frame</span><span class="o">=</span><span class="s1">&#39;galactocentric&#39;</span><span class="p">,</span> <span class="n">representation</span><span class="o">=</span><span class="s1">&#39;cartesian&#39;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">center</span> <span class="o">==</span> <span class="s1">&#39;Milky Way&#39;</span><span class="p">:</span>
+        <span class="k">pass</span>
+    <span class="k">elif</span> <span class="n">center</span> <span class="o">==</span> <span class="s1">&#39;Earth&#39;</span><span class="p">:</span>
+        <span class="c1"># TODO: add shift Galactic center -&gt; Earth</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s1">&#39;Invalid center: </span><span class="si">{}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">center</span><span class="p">)</span>
+        <span class="n">msg</span> <span class="o">+=</span> <span class="s1">&#39;Choose one of: Earth, Milky Way&#39;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+    <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">()</span>
+    <span class="n">table</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;center&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">center</span>
+
+    <span class="n">icrs</span> <span class="o">=</span> <span class="n">pos</span><span class="o">.</span><span class="n">transform_to</span><span class="p">(</span><span class="s1">&#39;icrs&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;RAJ2000&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">icrs</span><span class="o">.</span><span class="n">ra</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;deg&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;DEJ2000&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">icrs</span><span class="o">.</span><span class="n">dec</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;deg&#39;</span><span class="p">)</span>
+
+    <span class="n">galactic</span> <span class="o">=</span> <span class="n">icrs</span><span class="o">.</span><span class="n">transform_to</span><span class="p">(</span><span class="s1">&#39;galactic&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;GLON&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">galactic</span><span class="o">.</span><span class="n">l</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;deg&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;GLAT&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">galactic</span><span class="o">.</span><span class="n">b</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;deg&#39;</span><span class="p">)</span>
+
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;Distance&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">icrs</span><span class="o">.</span><span class="n">distance</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;Mpc&#39;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">table</span></div>
+
+
+<div class="viewcode-block" id="make_base_catalog_galactic"><a class="viewcode-back" href="../../../../api/gammapy.astro.population.make_base_catalog_galactic.html#gammapy.astro.population.make_base_catalog_galactic">[docs]</a><span class="k">def</span> <span class="nf">make_base_catalog_galactic</span><span class="p">(</span><span class="n">n_sources</span><span class="p">,</span> <span class="n">rad_dis</span><span class="o">=</span><span class="s1">&#39;YK04&#39;</span><span class="p">,</span> <span class="n">vel_dis</span><span class="o">=</span><span class="s1">&#39;H05&#39;</span><span class="p">,</span>
+                               <span class="n">max_age</span><span class="o">=</span><span class="n">Quantity</span><span class="p">(</span><span class="mf">1e6</span><span class="p">,</span> <span class="s1">&#39;yr&#39;</span><span class="p">),</span>
+                               <span class="n">spiralarms</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">n_ISM</span><span class="o">=</span><span class="n">Quantity</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;cm-3&#39;</span><span class="p">),</span>
+                               <span class="n">random_state</span><span class="o">=</span><span class="s1">&#39;random-seed&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Make a catalog of Galactic sources, with basic source parameters.</span>
+
+<span class="sd">    Choose a radial distribution, a velocity distribution, the number</span>
+<span class="sd">    of pulsars n_pulsars, the maximal age max_age[years] and the fraction</span>
+<span class="sd">    of the individual morphtypes. There&#39;s an option spiralarms. If set on</span>
+<span class="sd">    True a spiralarm modelling after Faucher&amp;Kaspi is included.</span>
+
+<span class="sd">    max_age and n_sources effectively correspond to s SN rate:</span>
+<span class="sd">    SN_rate = n_sources / max_age</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_sources : int</span>
+<span class="sd">        Number of sources to simulate.</span>
+<span class="sd">    rad_dis : callable</span>
+<span class="sd">        Radial surface density distribution of sources.</span>
+<span class="sd">    vel_dis : callable</span>
+<span class="sd">        Proper motion velocity distribution of sources.</span>
+<span class="sd">    max_age : `~astropy.units.Quantity`</span>
+<span class="sd">        Maximal age of the source</span>
+<span class="sd">    spiralarms : bool</span>
+<span class="sd">        Include a spiralarm model in the catalog.</span>
+<span class="sd">    n_ISM : `~astropy.units.Quantity`</span>
+<span class="sd">        Density of the interstellar medium.</span>
+<span class="sd">    random_state : {int, &#39;random-seed&#39;, &#39;global-rng&#39;, `~numpy.random.RandomState`}</span>
+<span class="sd">        Defines random number generator initialisation.</span>
+<span class="sd">        Passed to `~gammapy.utils.random.get_random_state`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    table : `~astropy.table.Table`</span>
+<span class="sd">        Catalog of simulated source positions and proper velocities.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">random_state</span> <span class="o">=</span> <span class="n">get_random_state</span><span class="p">(</span><span class="n">random_state</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">rad_dis</span><span class="p">,</span> <span class="n">six</span><span class="o">.</span><span class="n">string_types</span><span class="p">):</span>
+        <span class="n">rad_dis</span> <span class="o">=</span> <span class="n">radial_distributions</span><span class="p">[</span><span class="n">rad_dis</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">vel_dis</span><span class="p">,</span> <span class="n">six</span><span class="o">.</span><span class="n">string_types</span><span class="p">):</span>
+        <span class="n">vel_dis</span> <span class="o">=</span> <span class="n">velocity_distributions</span><span class="p">[</span><span class="n">vel_dis</span><span class="p">]</span>
+
+    <span class="c1"># Draw random values for the age</span>
+    <span class="n">age</span> <span class="o">=</span> <span class="n">random_state</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">max_age</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;yr&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">n_sources</span><span class="p">)</span>
+    <span class="n">age</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">age</span><span class="p">,</span> <span class="s1">&#39;yr&#39;</span><span class="p">)</span>
+
+    <span class="c1"># Draw r and z values from the given distribution</span>
+    <span class="n">r</span> <span class="o">=</span> <span class="n">draw</span><span class="p">(</span><span class="n">RMIN</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;kpc&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">RMAX</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;kpc&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+             <span class="n">n_sources</span><span class="p">,</span> <span class="n">pdf</span><span class="p">(</span><span class="n">rad_dis</span><span class="p">()),</span> <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">)</span>
+    <span class="n">r</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="s1">&#39;kpc&#39;</span><span class="p">)</span>
+
+    <span class="n">z</span> <span class="o">=</span> <span class="n">draw</span><span class="p">(</span><span class="n">ZMIN</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;kpc&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">ZMAX</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;kpc&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+             <span class="n">n_sources</span><span class="p">,</span> <span class="n">Exponential</span><span class="p">(),</span> <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">)</span>
+    <span class="n">z</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="s1">&#39;kpc&#39;</span><span class="p">)</span>
+
+    <span class="c1"># Apply spiralarm modelling or not</span>
+    <span class="k">if</span> <span class="n">spiralarms</span><span class="p">:</span>
+        <span class="n">r</span><span class="p">,</span> <span class="n">theta</span><span class="p">,</span> <span class="n">spiralarm</span> <span class="o">=</span> <span class="n">FaucherSpiral</span><span class="p">()(</span><span class="n">r</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">theta</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">random_state</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">pi</span><span class="p">,</span> <span class="n">n_sources</span><span class="p">),</span> <span class="s1">&#39;rad&#39;</span><span class="p">)</span>
+        <span class="n">spiralarm</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1"># Compute cartesian coordinates</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">astrometry</span><span class="o">.</span><span class="n">cartesian</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">theta</span><span class="p">)</span>
+
+    <span class="c1"># Draw values from velocity distribution</span>
+    <span class="n">v</span> <span class="o">=</span> <span class="n">draw</span><span class="p">(</span><span class="n">VMIN</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;km/s&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">VMAX</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;km/s&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+             <span class="n">n_sources</span><span class="p">,</span> <span class="n">vel_dis</span><span class="p">(),</span> <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">)</span>
+    <span class="n">v</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="s1">&#39;km/s&#39;</span><span class="p">)</span>
+
+    <span class="c1"># Draw random direction of initial velocity</span>
+    <span class="n">theta</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">random_state</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">pi</span><span class="p">,</span> <span class="n">x</span><span class="o">.</span><span class="n">size</span><span class="p">),</span> <span class="s1">&#39;rad&#39;</span><span class="p">)</span>
+    <span class="n">phi</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">random_state</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">pi</span><span class="p">,</span> <span class="n">x</span><span class="o">.</span><span class="n">size</span><span class="p">),</span> <span class="s1">&#39;rad&#39;</span><span class="p">)</span>
+
+    <span class="c1"># Compute new position</span>
+    <span class="n">dx</span><span class="p">,</span> <span class="n">dy</span><span class="p">,</span> <span class="n">dz</span><span class="p">,</span> <span class="n">vx</span><span class="p">,</span> <span class="n">vy</span><span class="p">,</span> <span class="n">vz</span> <span class="o">=</span> <span class="n">astrometry</span><span class="o">.</span><span class="n">motion_since_birth</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">age</span><span class="p">,</span> <span class="n">theta</span><span class="p">,</span> <span class="n">phi</span><span class="p">)</span>
+
+    <span class="c1"># Add displacement to birth position</span>
+    <span class="n">x_moved</span> <span class="o">=</span> <span class="n">x</span> <span class="o">+</span> <span class="n">dx</span>
+    <span class="n">y_moved</span> <span class="o">=</span> <span class="n">y</span> <span class="o">+</span> <span class="n">dy</span>
+    <span class="n">z_moved</span> <span class="o">=</span> <span class="n">z</span> <span class="o">+</span> <span class="n">dz</span>
+
+    <span class="c1"># Set environment interstellar density</span>
+    <span class="n">n_ISM</span> <span class="o">=</span> <span class="n">n_ISM</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_sources</span><span class="p">)</span>
+
+    <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">()</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;age&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">age</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;yr&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Age of the source&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;n_ISM&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">n_ISM</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;cm-3&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Interstellar medium density&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">spiralarms</span><span class="p">:</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;spiralarm&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">spiralarm</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Which spiralarm?&#39;</span><span class="p">)</span>
+
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;x_birth&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;kpc&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Galactocentric x coordinate at birth&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;y_birth&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;kpc&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Galactocentric y coordinate at birth&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;z_birth&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;kpc&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Galactocentric z coordinate at birth&#39;</span><span class="p">)</span>
+
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">x_moved</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;kpc&#39;</span><span class="p">),</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;kpc&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Galactocentric x coordinate&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;y&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">y_moved</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;kpc&#39;</span><span class="p">),</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;kpc&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Galactocentric y coordinate&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;z&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">z_moved</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;kpc&#39;</span><span class="p">),</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;kpc&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Galactocentric z coordinate&#39;</span><span class="p">)</span>
+
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;vx&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">vx</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;km/s&#39;</span><span class="p">),</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;km/s&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Galactocentric velocity in x direction&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;vy&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">vy</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;km/s&#39;</span><span class="p">),</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;km/s&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Galactocentric velocity in y direction&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;vz&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">vz</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;km/s&#39;</span><span class="p">),</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;km/s&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Galactocentric velocity in z direction&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;v_abs&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;km/s&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Galactocentric velocity (absolute)&#39;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">table</span></div>
+
+
+<div class="viewcode-block" id="add_snr_parameters"><a class="viewcode-back" href="../../../../api/gammapy.astro.population.add_snr_parameters.html#gammapy.astro.population.add_snr_parameters">[docs]</a><span class="k">def</span> <span class="nf">add_snr_parameters</span><span class="p">(</span><span class="n">table</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Adds SNR parameters to the table.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Read relevant columns</span>
+    <span class="n">age</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;age&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+    <span class="n">n_ISM</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;n_ISM&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+
+    <span class="c1"># Compute properties</span>
+    <span class="n">snr</span> <span class="o">=</span> <span class="n">SNR</span><span class="p">(</span><span class="n">n_ISM</span><span class="o">=</span><span class="n">n_ISM</span><span class="p">)</span>
+    <span class="n">E_SN</span> <span class="o">=</span> <span class="n">snr</span><span class="o">.</span><span class="n">e_sn</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">table</span><span class="p">))</span>
+    <span class="n">r_out</span> <span class="o">=</span> <span class="n">snr</span><span class="o">.</span><span class="n">radius</span><span class="p">(</span><span class="n">age</span><span class="p">)</span>
+    <span class="n">r_in</span> <span class="o">=</span> <span class="n">snr</span><span class="o">.</span><span class="n">radius_inner</span><span class="p">(</span><span class="n">age</span><span class="p">)</span>
+    <span class="n">L_SNR</span> <span class="o">=</span> <span class="n">snr</span><span class="o">.</span><span class="n">luminosity_tev</span><span class="p">(</span><span class="n">age</span><span class="p">)</span>
+
+    <span class="c1"># Add columns to table</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;E_SN&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">E_SN</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;erg&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;SNR kinetic energy&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;r_out&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">r_out</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;pc&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;SNR outer radius&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;r_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">r_in</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;pc&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;SNR inner radius&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;L_SNR&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">L_SNR</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;s-1&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;SNR luminosity&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">table</span></div>
+
+
+<div class="viewcode-block" id="add_pulsar_parameters"><a class="viewcode-back" href="../../../../api/gammapy.astro.population.add_pulsar_parameters.html#gammapy.astro.population.add_pulsar_parameters">[docs]</a><span class="k">def</span> <span class="nf">add_pulsar_parameters</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="n">B_mean</span><span class="o">=</span><span class="mf">12.05</span><span class="p">,</span> <span class="n">B_stdv</span><span class="o">=</span><span class="mf">0.55</span><span class="p">,</span>
+                          <span class="n">P_mean</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">P_stdv</span><span class="o">=</span><span class="mf">0.15</span><span class="p">,</span>
+                          <span class="n">random_state</span><span class="o">=</span><span class="s1">&#39;random-seed&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Add pulsar parameters to the table.</span>
+
+<span class="sd">    For the initial normal distribution of period and logB can exist the following</span>
+<span class="sd">    Parameters: B_mean=12.05[log Gauss], B_stdv=0.55, P_mean=0.3[s], P_stdv=0.15</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    random_state : {int, &#39;random-seed&#39;, &#39;global-rng&#39;, `~numpy.random.RandomState`}</span>
+<span class="sd">        Defines random number generator initialisation.</span>
+<span class="sd">        Passed to `~gammapy.utils.random.get_random_state`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">random_state</span> <span class="o">=</span> <span class="n">get_random_state</span><span class="p">(</span><span class="n">random_state</span><span class="p">)</span>
+    <span class="c1"># Read relevant columns</span>
+    <span class="n">age</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;age&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+
+    <span class="c1"># Draw the initial values for the period and magnetic field</span>
+    <span class="k">def</span> <span class="nf">p_dist</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="p">((</span><span class="n">x</span> <span class="o">-</span> <span class="n">P_mean</span><span class="p">)</span> <span class="o">/</span> <span class="n">P_stdv</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span>
+
+    <span class="n">p0_birth</span> <span class="o">=</span> <span class="n">draw</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">table</span><span class="p">),</span> <span class="n">p_dist</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">)</span>
+    <span class="n">p0_birth</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">p0_birth</span><span class="p">,</span> <span class="s1">&#39;s&#39;</span><span class="p">)</span>
+
+    <span class="n">logB</span> <span class="o">=</span> <span class="n">random_state</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">B_mean</span><span class="p">,</span> <span class="n">B_stdv</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">table</span><span class="p">))</span>
+
+    <span class="c1"># Compute pulsar parameters</span>
+    <span class="n">psr</span> <span class="o">=</span> <span class="n">Pulsar</span><span class="p">(</span><span class="n">p0_birth</span><span class="p">,</span> <span class="n">logB</span><span class="p">)</span>
+    <span class="n">p0</span> <span class="o">=</span> <span class="n">psr</span><span class="o">.</span><span class="n">period</span><span class="p">(</span><span class="n">age</span><span class="p">)</span>
+    <span class="n">p1</span> <span class="o">=</span> <span class="n">psr</span><span class="o">.</span><span class="n">period_dot</span><span class="p">(</span><span class="n">age</span><span class="p">)</span>
+    <span class="n">p1_birth</span> <span class="o">=</span> <span class="n">psr</span><span class="o">.</span><span class="n">P_dot_0</span>
+    <span class="n">tau</span> <span class="o">=</span> <span class="n">psr</span><span class="o">.</span><span class="n">tau</span><span class="p">(</span><span class="n">age</span><span class="p">)</span>
+    <span class="n">tau_0</span> <span class="o">=</span> <span class="n">psr</span><span class="o">.</span><span class="n">tau_0</span>
+    <span class="n">l_psr</span> <span class="o">=</span> <span class="n">psr</span><span class="o">.</span><span class="n">luminosity_spindown</span><span class="p">(</span><span class="n">age</span><span class="p">)</span>
+    <span class="n">l0_psr</span> <span class="o">=</span> <span class="n">psr</span><span class="o">.</span><span class="n">L_0</span>
+
+    <span class="c1"># Add columns to table</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;P0&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">p0</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;s&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Pulsar period&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;P1&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">p1</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Pulsar period derivative&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;P0_birth&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">p0_birth</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;s&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Pulsar birth period&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;P1_birth&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">p1_birth</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Pulsar birth period derivative&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;CharAge&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">tau</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;yr&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Pulsar characteristic age&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;Tau0&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">tau_0</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;yr&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;L_PSR&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">l_psr</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;erg s-1&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;L0_PSR&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">l0_psr</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;erg s-1&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;logB&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">logB</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;Gauss&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">table</span></div>
+
+
+<div class="viewcode-block" id="add_pwn_parameters"><a class="viewcode-back" href="../../../../api/gammapy.astro.population.add_pwn_parameters.html#gammapy.astro.population.add_pwn_parameters">[docs]</a><span class="k">def</span> <span class="nf">add_pwn_parameters</span><span class="p">(</span><span class="n">table</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Add PWN parameters to the table.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Read relevant columns</span>
+    <span class="n">age</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;age&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+    <span class="n">E_SN</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;E_SN&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+    <span class="n">n_ISM</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;n_ISM&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+    <span class="n">P0_birth</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;P0_birth&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+    <span class="n">logB</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;logB&#39;</span><span class="p">]</span>
+
+    <span class="c1"># Compute properties</span>
+    <span class="n">pulsar</span> <span class="o">=</span> <span class="n">Pulsar</span><span class="p">(</span><span class="n">P0_birth</span><span class="p">,</span> <span class="n">logB</span><span class="p">)</span>
+    <span class="n">snr</span> <span class="o">=</span> <span class="n">SNRTrueloveMcKee</span><span class="p">(</span><span class="n">e_sn</span><span class="o">=</span><span class="n">E_SN</span><span class="p">,</span> <span class="n">n_ISM</span><span class="o">=</span><span class="n">n_ISM</span><span class="p">)</span>
+    <span class="n">pwn</span> <span class="o">=</span> <span class="n">PWN</span><span class="p">(</span><span class="n">pulsar</span><span class="p">,</span> <span class="n">snr</span><span class="p">)</span>
+    <span class="n">r_out_pwn</span> <span class="o">=</span> <span class="n">pwn</span><span class="o">.</span><span class="n">radius</span><span class="p">(</span><span class="n">age</span><span class="p">)</span>
+    <span class="n">L_PWN</span> <span class="o">=</span> <span class="n">pwn</span><span class="o">.</span><span class="n">luminosity_tev</span><span class="p">(</span><span class="n">age</span><span class="p">)</span>
+
+    <span class="c1"># Add columns to table</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;r_out_PWN&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">r_out_pwn</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;pc&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;PWN outer radius&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;L_PWN&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">L_PWN</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;erg&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;PWN luminosity above 1 TeV&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">table</span></div>
+
+
+<div class="viewcode-block" id="add_observed_source_parameters"><a class="viewcode-back" href="../../../../api/gammapy.astro.population.add_observed_source_parameters.html#gammapy.astro.population.add_observed_source_parameters">[docs]</a><span class="k">def</span> <span class="nf">add_observed_source_parameters</span><span class="p">(</span><span class="n">table</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Add observed source parameters to the table.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Read relevant columns</span>
+    <span class="n">distance</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;distance&#39;</span><span class="p">]</span>
+    <span class="n">r_in</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;r_in&#39;</span><span class="p">]</span>
+    <span class="n">r_out</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;r_out&#39;</span><span class="p">]</span>
+    <span class="n">r_out_PWN</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;r_out_PWN&#39;</span><span class="p">]</span>
+    <span class="n">L_SNR</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;L_SNR&#39;</span><span class="p">]</span>
+    <span class="n">L_PSR</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;L_PSR&#39;</span><span class="p">]</span>
+    <span class="n">L_PWN</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;L_PWN&#39;</span><span class="p">]</span>
+
+    <span class="c1"># Compute properties</span>
+    <span class="n">ext_in_SNR</span> <span class="o">=</span> <span class="n">astrometry</span><span class="o">.</span><span class="n">radius_to_angle</span><span class="p">(</span><span class="n">r_in</span><span class="p">,</span> <span class="n">distance</span><span class="p">)</span>
+    <span class="n">ext_out_SNR</span> <span class="o">=</span> <span class="n">astrometry</span><span class="o">.</span><span class="n">radius_to_angle</span><span class="p">(</span><span class="n">r_out</span><span class="p">,</span> <span class="n">distance</span><span class="p">)</span>
+    <span class="n">ext_out_PWN</span> <span class="o">=</span> <span class="n">astrometry</span><span class="o">.</span><span class="n">radius_to_angle</span><span class="p">(</span><span class="n">r_out_PWN</span><span class="p">,</span> <span class="n">distance</span><span class="p">)</span>
+
+    <span class="c1"># Ellipse parameters not used for now</span>
+    <span class="n">theta</span> <span class="o">=</span> <span class="n">pi</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">table</span><span class="p">))</span>  <span class="c1"># Position angle?</span>
+    <span class="n">epsilon</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">table</span><span class="p">))</span>  <span class="c1"># Ellipticity?</span>
+
+    <span class="n">S_SNR</span> <span class="o">=</span> <span class="n">astrometry</span><span class="o">.</span><span class="n">luminosity_to_flux</span><span class="p">(</span><span class="n">L_SNR</span><span class="p">,</span> <span class="n">distance</span><span class="p">)</span>
+    <span class="c1"># Ld2_PSR = astrometry.luminosity_to_flux(L_PSR, distance)</span>
+    <span class="n">Ld2_PSR</span> <span class="o">=</span> <span class="n">L_PSR</span> <span class="o">/</span> <span class="n">distance</span> <span class="o">**</span> <span class="mi">2</span>
+    <span class="n">S_PWN</span> <span class="o">=</span> <span class="n">astrometry</span><span class="o">.</span><span class="n">luminosity_to_flux</span><span class="p">(</span><span class="n">L_PWN</span><span class="p">,</span> <span class="n">distance</span><span class="p">)</span>
+
+    <span class="c1"># Add columns</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;ext_in_SNR&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">ext_in_SNR</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;deg&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;ext_out_SNR&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">ext_out_SNR</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;deg&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;ext_out_PWN&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">ext_out_PWN</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;deg&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;theta&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">theta</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;rad&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;epsilon&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">epsilon</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;S_SNR&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">S_SNR</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;cm-2 s-1&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;Ld2_PSR&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">Ld2_PSR</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;erg s-1 kpc-2&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;S_PWN&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">S_PWN</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;cm-2 s-1&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">table</span></div>
+
+
+<div class="viewcode-block" id="add_observed_parameters"><a class="viewcode-back" href="../../../../api/gammapy.astro.population.add_observed_parameters.html#gammapy.astro.population.add_observed_parameters">[docs]</a><span class="k">def</span> <span class="nf">add_observed_parameters</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="n">obs_pos</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Add observable parameters (such as sky position or distance).</span>
+
+<span class="sd">    Input table columns: x, y, z, extension, luminosity</span>
+
+<span class="sd">    Output table columns: distance, glon, glat, flux, angular_extension</span>
+
+<span class="sd">    Position of observer in cartesian coordinates.</span>
+<span class="sd">    Center of galaxy as origin, x-axis goes trough sun.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    table : `~astropy.table.Table`</span>
+<span class="sd">        Input table</span>
+<span class="sd">    obs_pos : tuple or None</span>
+<span class="sd">        Observation position (X, Y, Z) in Galactocentric coordinates (default: Earth)</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    table : `~astropy.table.Table`</span>
+<span class="sd">        Modified input table with columns added</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">obs_pos</span> <span class="o">=</span> <span class="n">obs_pos</span> <span class="ow">or</span> <span class="p">[</span><span class="n">D_SUN_TO_GALACTIC_CENTER</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+
+    <span class="c1"># Get data</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span><span class="p">,</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;y&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span><span class="p">,</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;z&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+    <span class="n">vx</span><span class="p">,</span> <span class="n">vy</span><span class="p">,</span> <span class="n">vz</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;vx&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span><span class="p">,</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;vy&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span><span class="p">,</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;vz&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+
+    <span class="n">distance</span><span class="p">,</span> <span class="n">glon</span><span class="p">,</span> <span class="n">glat</span> <span class="o">=</span> <span class="n">astrometry</span><span class="o">.</span><span class="n">galactic</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">obs_pos</span><span class="o">=</span><span class="n">obs_pos</span><span class="p">)</span>
+
+    <span class="c1"># Compute projected velocity</span>
+    <span class="n">v_glon</span><span class="p">,</span> <span class="n">v_glat</span> <span class="o">=</span> <span class="n">astrometry</span><span class="o">.</span><span class="n">velocity_glon_glat</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">vx</span><span class="p">,</span> <span class="n">vy</span><span class="p">,</span> <span class="n">vz</span><span class="p">)</span>
+
+    <span class="n">coordinate</span> <span class="o">=</span> <span class="n">SkyCoord</span><span class="p">(</span><span class="n">glon</span><span class="p">,</span> <span class="n">glat</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;deg&#39;</span><span class="p">,</span> <span class="n">frame</span><span class="o">=</span><span class="s1">&#39;galactic&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">transform_to</span><span class="p">(</span><span class="s1">&#39;icrs&#39;</span><span class="p">)</span>
+    <span class="n">ra</span><span class="p">,</span> <span class="n">dec</span> <span class="o">=</span> <span class="n">coordinate</span><span class="o">.</span><span class="n">ra</span><span class="o">.</span><span class="n">deg</span><span class="p">,</span> <span class="n">coordinate</span><span class="o">.</span><span class="n">dec</span><span class="o">.</span><span class="n">deg</span>
+
+    <span class="c1"># Add columns to table</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;distance&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">distance</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;pc&#39;</span><span class="p">,</span>
+                               <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Distance observer to source center&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;GLON&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">glon</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;deg&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Galactic longitude&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;GLAT&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">glat</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;deg&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Galactic latitude&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;VGLON&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">v_glon</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;deg/Myr&#39;</span><span class="p">),</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;deg/Myr&#39;</span><span class="p">,</span>
+                            <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Velocity in Galactic longitude&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;VGLAT&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">v_glat</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;deg/Myr&#39;</span><span class="p">),</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;deg/Myr&#39;</span><span class="p">,</span>
+                            <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Velocity in Galactic latitude&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;RA&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">ra</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;deg&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Right ascension&#39;</span><span class="p">)</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;DEC&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">dec</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;deg&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Declination&#39;</span><span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">luminosity</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;luminosity&#39;</span><span class="p">]</span>
+        <span class="n">flux</span> <span class="o">=</span> <span class="n">astrometry</span><span class="o">.</span><span class="n">luminosity_to_flux</span><span class="p">(</span><span class="n">luminosity</span><span class="p">,</span> <span class="n">distance</span><span class="p">)</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;flux&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">flux</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="n">flux</span><span class="o">.</span><span class="n">unit</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Source flux&#39;</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">extension</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s1">&#39;extension&#39;</span><span class="p">]</span>
+        <span class="n">angular_extension</span> <span class="o">=</span> <span class="n">degrees</span><span class="p">(</span><span class="n">arctan</span><span class="p">(</span><span class="n">extension</span> <span class="o">/</span> <span class="n">distance</span><span class="p">))</span>
+        <span class="n">table</span><span class="p">[</span><span class="s1">&#39;angular_extension&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">angular_extension</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s1">&#39;deg&#39;</span><span class="p">,</span>
+                                            <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Source angular radius (i.e. half-diameter)&#39;</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="k">return</span> <span class="n">table</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2018, The Gammapy developers.<br/>
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.6.7. &nbsp;
+    Last built 01 Mar 2018. <br/>
+  </p>
+</footer>
+  </body>
+</html>

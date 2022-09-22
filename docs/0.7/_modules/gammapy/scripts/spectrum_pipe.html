@@ -1,0 +1,199 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>gammapy.scripts.spectrum_pipe &#8212; gammapy v0.7</title>
+    <link rel="stylesheet" href="../../../_static/gammapy.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.7',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <link rel="shortcut icon" href="../../../_static/astropy_logo.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+<link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+<script type="text/javascript" src="../../../_static/copybutton.js"></script>
+
+
+  </head>
+  <body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">gamma</span><span id="logotext2">py</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="Astropy Homepage" href="http://www.astropy.org"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">gammapy v0.7</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for gammapy.scripts.spectrum_pipe</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">..spectrum</span> <span class="k">import</span> <span class="p">(</span>
+    <span class="n">SpectrumEnergyGroupMaker</span><span class="p">,</span>
+    <span class="n">FluxPointEstimator</span><span class="p">,</span>
+    <span class="n">SpectrumExtraction</span><span class="p">,</span>
+    <span class="n">SpectrumFit</span><span class="p">,</span>
+    <span class="n">SpectrumResult</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">..background</span> <span class="k">import</span> <span class="n">ReflectedRegionsBackgroundEstimator</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;SpectrumAnalysisIACT&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="SpectrumAnalysisIACT"><a class="viewcode-back" href="../../../api/gammapy.scripts.SpectrumAnalysisIACT.html#gammapy.scripts.SpectrumAnalysisIACT">[docs]</a><span class="k">class</span> <span class="nc">SpectrumAnalysisIACT</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;High-level analysis class to perform a full 1D IACT spectral analysis.</span>
+
+<span class="sd">    Observation selection must have happened before.</span>
+
+<span class="sd">    For a usage example see :gp-extra-notebook:`spectrum_pipe`</span>
+
+<span class="sd">    Config options:</span>
+
+<span class="sd">    * outdir : `~gammapy.extern.pathlib.Path`, str</span>
+<span class="sd">        Output folder, None means no output</span>
+<span class="sd">    * background : dict</span>
+<span class="sd">        Forwarded to `~gammapy.background.ReflectedRegionsBackgroundEstimator`</span>
+<span class="sd">    * extraction : dict</span>
+<span class="sd">        Forwarded to `~gammapy.spectrum.SpectrumExtraction`</span>
+<span class="sd">    * fit : dict</span>
+<span class="sd">        Forwareded to `~gammapy.spectrum.SpectrumFit`</span>
+<span class="sd">    * fp_binning : `~astropy.units.Quantity`</span>
+<span class="sd">        Flux points binning</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    observations : `~gammapy.data.ObservationList`</span>
+<span class="sd">        Observations to analyse</span>
+<span class="sd">    config : dict</span>
+<span class="sd">        Config dict</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">config</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">observations</span> <span class="o">=</span> <span class="n">observations</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">config</span>
+
+    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">ss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span>
+        <span class="n">ss</span> <span class="o">+=</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observations</span><span class="p">)</span>
+        <span class="n">ss</span> <span class="o">+=</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ss</span>
+
+<div class="viewcode-block" id="SpectrumAnalysisIACT.run"><a class="viewcode-back" href="../../../api/gammapy.scripts.SpectrumAnalysisIACT.html#gammapy.scripts.SpectrumAnalysisIACT.run">[docs]</a>    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Run all steps.&quot;&quot;&quot;</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Running </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">run_extraction</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">run_fit</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="SpectrumAnalysisIACT.run_extraction"><a class="viewcode-back" href="../../../api/gammapy.scripts.SpectrumAnalysisIACT.html#gammapy.scripts.SpectrumAnalysisIACT.run_extraction">[docs]</a>    <span class="k">def</span> <span class="nf">run_extraction</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Run all steps for the spectrum extraction.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">background_estimator</span> <span class="o">=</span> <span class="n">ReflectedRegionsBackgroundEstimator</span><span class="p">(</span>
+            <span class="n">obs_list</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">observations</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;background&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">background_estimator</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">extraction</span> <span class="o">=</span> <span class="n">SpectrumExtraction</span><span class="p">(</span>
+            <span class="n">obs_list</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">observations</span><span class="p">,</span>
+            <span class="n">bkg_estimate</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">background_estimator</span><span class="o">.</span><span class="n">result</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;extraction&#39;</span><span class="p">])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">extraction</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">outdir</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;outdir&#39;</span><span class="p">])</span></div>
+
+<div class="viewcode-block" id="SpectrumAnalysisIACT.run_fit"><a class="viewcode-back" href="../../../api/gammapy.scripts.SpectrumAnalysisIACT.html#gammapy.scripts.SpectrumAnalysisIACT.run_fit">[docs]</a>    <span class="k">def</span> <span class="nf">run_fit</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Run all step for the spectrum fit.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fit</span> <span class="o">=</span> <span class="n">SpectrumFit</span><span class="p">(</span>
+            <span class="n">obs_list</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">extraction</span><span class="o">.</span><span class="n">observations</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;fit&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fit</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">outdir</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;outdir&#39;</span><span class="p">])</span>
+
+        <span class="c1"># TODO: Don&#39;t stack again if SpectrumFit has already done the stacking</span>
+        <span class="n">stacked_obs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">extraction</span><span class="o">.</span><span class="n">observations</span><span class="o">.</span><span class="n">stack</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">egm</span> <span class="o">=</span> <span class="n">SpectrumEnergyGroupMaker</span><span class="p">(</span><span class="n">stacked_obs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">egm</span><span class="o">.</span><span class="n">compute_groups_fixed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;fp_binning&#39;</span><span class="p">])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">flux_point_estimator</span> <span class="o">=</span> <span class="n">FluxPointEstimator</span><span class="p">(</span>
+            <span class="n">groups</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">egm</span><span class="o">.</span><span class="n">groups</span><span class="p">,</span>
+            <span class="n">model</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fit</span><span class="o">.</span><span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
+            <span class="n">obs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">extraction</span><span class="o">.</span><span class="n">observations</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">flux_point_estimator</span><span class="o">.</span><span class="n">compute_points</span><span class="p">()</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">spectrum_result</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;`~gammapy.spectrum.SpectrumResult`&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">SpectrumResult</span><span class="p">(</span>
+            <span class="n">points</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">flux_point_estimator</span><span class="o">.</span><span class="n">flux_points</span><span class="p">,</span>
+            <span class="n">model</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fit</span><span class="o">.</span><span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">model</span>
+        <span class="p">)</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2018, The Gammapy developers.<br/>
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.6.7. &nbsp;
+    Last built 01 Mar 2018. <br/>
+  </p>
+</footer>
+  </body>
+</html>

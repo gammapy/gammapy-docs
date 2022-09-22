@@ -1,0 +1,207 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>gammapy.irf.irf_stack &#8212; gammapy v0.7</title>
+    <link rel="stylesheet" href="../../../_static/gammapy.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.7',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <link rel="shortcut icon" href="../../../_static/astropy_logo.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+<link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+<script type="text/javascript" src="../../../_static/copybutton.js"></script>
+
+
+  </head>
+  <body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">gamma</span><span id="logotext2">py</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="Astropy Homepage" href="http://www.astropy.org"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">gammapy v0.7</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for gammapy.irf.irf_stack</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">astropy.units</span> <span class="k">import</span> <span class="n">Quantity</span>
+<span class="kn">from</span> <span class="nn">..irf</span> <span class="k">import</span> <span class="n">EffectiveAreaTable</span><span class="p">,</span> <span class="n">EnergyDispersion</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;IRFStacker&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="IRFStacker"><a class="viewcode-back" href="../../../api/gammapy.irf.IRFStacker.html#gammapy.irf.IRFStacker">[docs]</a><span class="k">class</span> <span class="nc">IRFStacker</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Stack instrument response functions.</span>
+
+<span class="sd">    Compute mean effective area and the mean energy dispersion for a given for a</span>
+<span class="sd">    given list of instrument response functions. Results are stored as</span>
+<span class="sd">    attributes.</span>
+
+<span class="sd">    The stacking of :math:`j` elements is implemented as follows.  :math:`k`</span>
+<span class="sd">    and :math:`l` denote a bin in reconstructed and true energy, respectively.</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        \epsilon_{jk} =\left\{\begin{array}{cl} 1, &amp; \mbox{if</span>
+<span class="sd">            bin k is inside the energy thresholds}\\ 0, &amp; \mbox{otherwise} \end{array}\right.</span>
+
+<span class="sd">        \overline{t} = \sum_{j} t_i</span>
+
+<span class="sd">        \overline{\mathrm{aeff}}_l = \frac{\sum_{j}\mathrm{aeff}_{jl}</span>
+<span class="sd">            \cdot t_j}{\overline{t}}</span>
+
+<span class="sd">        \overline{\mathrm{edisp}}_{kl} = \frac{\sum_{j} \mathrm{edisp}_{jkl}</span>
+<span class="sd">            \cdot \mathrm{aeff}_{jl} \cdot t_j \cdot \epsilon_{jk}}{\sum_{j} \mathrm{aeff}_{jl}</span>
+<span class="sd">            \cdot t_j}</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    list_aeff : list</span>
+<span class="sd">        list of `~gammapy.irf.EffectiveAreaTable`</span>
+<span class="sd">    list_livetime : list</span>
+<span class="sd">        list of `~astropy.units.Quantity` (livetime)</span>
+<span class="sd">    list_edisp : list</span>
+<span class="sd">        list of `~gammapy.irf.EnergyDispersion`</span>
+<span class="sd">    list_low_threshold : list</span>
+<span class="sd">        list of low energy threshold, optional for effective area mean computation</span>
+<span class="sd">    list_high_threshold : list</span>
+<span class="sd">        list of high energy threshold, optional for effective area mean computation</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">list_aeff</span><span class="p">,</span> <span class="n">list_livetime</span><span class="p">,</span> <span class="n">list_edisp</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">list_low_threshold</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">list_high_threshold</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">list_aeff</span> <span class="o">=</span> <span class="n">list_aeff</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">list_livetime</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">list_livetime</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">list_edisp</span> <span class="o">=</span> <span class="n">list_edisp</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">list_low_threshold</span> <span class="o">=</span> <span class="n">list_low_threshold</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">list_high_threshold</span> <span class="o">=</span> <span class="n">list_high_threshold</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_aeff</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_edisp</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="IRFStacker.stack_aeff"><a class="viewcode-back" href="../../../api/gammapy.irf.IRFStacker.html#gammapy.irf.IRFStacker.stack_aeff">[docs]</a>    <span class="k">def</span> <span class="nf">stack_aeff</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Compute mean effective area (`~gammapy.irf.EffectiveAreaTable`).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">nbins</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">list_aeff</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">nbins</span>
+        <span class="n">aefft</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nbins</span><span class="p">),</span> <span class="s1">&#39;cm2 s&#39;</span><span class="p">)</span>
+        <span class="n">livetime_tot</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">list_livetime</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">aeff</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">list_aeff</span><span class="p">):</span>
+            <span class="n">aeff_data</span> <span class="o">=</span> <span class="n">aeff</span><span class="o">.</span><span class="n">evaluate_fill_nan</span><span class="p">()</span>
+            <span class="n">aefft_current</span> <span class="o">=</span> <span class="n">aeff_data</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">list_livetime</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">aefft</span> <span class="o">+=</span> <span class="n">aefft_current</span>
+
+        <span class="n">stacked_data</span> <span class="o">=</span> <span class="n">aefft</span> <span class="o">/</span> <span class="n">livetime_tot</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_aeff</span> <span class="o">=</span> <span class="n">EffectiveAreaTable</span><span class="p">(</span>
+            <span class="n">energy_lo</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">list_aeff</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">lo</span><span class="p">,</span>
+            <span class="n">energy_hi</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">list_aeff</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">hi</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">stacked_data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;cm2&#39;</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="IRFStacker.stack_edisp"><a class="viewcode-back" href="../../../api/gammapy.irf.IRFStacker.html#gammapy.irf.IRFStacker.stack_edisp">[docs]</a>    <span class="k">def</span> <span class="nf">stack_edisp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Compute mean energy dispersion (`~gammapy.irf.EnergyDispersion`).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">reco_bins</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">list_edisp</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">e_reco</span><span class="o">.</span><span class="n">nbins</span>
+        <span class="n">true_bins</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">list_edisp</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">e_true</span><span class="o">.</span><span class="n">nbins</span>
+
+        <span class="n">aefft</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">true_bins</span><span class="p">),</span> <span class="s1">&#39;cm2 s&#39;</span><span class="p">)</span>
+        <span class="n">temp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">reco_bins</span><span class="p">,</span> <span class="n">true_bins</span><span class="p">))</span>
+        <span class="n">aefftedisp</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">temp</span><span class="p">,</span> <span class="s1">&#39;cm2 s&#39;</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">edisp</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">list_edisp</span><span class="p">):</span>
+            <span class="n">aeff_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">list_aeff</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">evaluate_fill_nan</span><span class="p">()</span>
+            <span class="n">aefft_current</span> <span class="o">=</span> <span class="n">aeff_data</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">list_livetime</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">aefft</span> <span class="o">+=</span> <span class="n">aefft_current</span>
+            <span class="n">edisp_data</span> <span class="o">=</span> <span class="n">edisp</span><span class="o">.</span><span class="n">pdf_in_safe_range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">list_low_threshold</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
+                                                 <span class="bp">self</span><span class="o">.</span><span class="n">list_high_threshold</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+
+            <span class="n">aefftedisp</span> <span class="o">+=</span> <span class="n">edisp_data</span><span class="o">.</span><span class="n">transpose</span><span class="p">()</span> <span class="o">*</span> <span class="n">aefft_current</span>
+
+        <span class="n">stacked_edisp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">aefftedisp</span> <span class="o">/</span> <span class="n">aefft</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stacked_edisp</span> <span class="o">=</span> <span class="n">EnergyDispersion</span><span class="p">(</span>
+            <span class="n">e_true_lo</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">list_edisp</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">e_true</span><span class="o">.</span><span class="n">lo</span><span class="p">,</span>
+            <span class="n">e_true_hi</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">list_edisp</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">e_true</span><span class="o">.</span><span class="n">hi</span><span class="p">,</span>
+            <span class="n">e_reco_lo</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">list_edisp</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">e_reco</span><span class="o">.</span><span class="n">lo</span><span class="p">,</span>
+            <span class="n">e_reco_hi</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">list_edisp</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">e_reco</span><span class="o">.</span><span class="n">hi</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">stacked_edisp</span><span class="o">.</span><span class="n">transpose</span><span class="p">())</span></div></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2018, The Gammapy developers.<br/>
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.6.7. &nbsp;
+    Last built 01 Mar 2018. <br/>
+  </p>
+</footer>
+  </body>
+</html>

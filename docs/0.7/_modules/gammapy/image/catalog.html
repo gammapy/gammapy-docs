@@ -1,0 +1,257 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>gammapy.image.catalog &#8212; gammapy v0.7</title>
+    <link rel="stylesheet" href="../../../_static/gammapy.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.7',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="../../../_static/sidebar.js"></script>
+    <link rel="shortcut icon" href="../../../_static/astropy_logo.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+<link href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,600' rel='stylesheet' type='text/css'/>
+<script type="text/javascript" src="../../../_static/copybutton.js"></script>
+
+
+  </head>
+  <body>
+<div class="topbar">
+  <a class="brand" title="Documentation Home" href="../../../index.html"><span id="logotext1">gamma</span><span id="logotext2">py</span><span id="logotext3">:docs</span></a>
+  <ul>
+    <li><a class="homelink" title="Astropy Homepage" href="http://www.astropy.org"></a></li>
+    <li><a title="General Index" href="../../../genindex.html">Index</a></li>
+    <li><a title="Module Index" href="../../../py-modindex.html">Modules</a></li>
+    <li>
+      
+      
+<form action="../../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <input type="hidden" name="check_keywords" value="yes" />
+  <input type="hidden" name="area" value="default" />
+</form>
+      
+    </li>
+  </ul>
+</div>
+
+<div class="related">
+    <h3>Navigation</h3>
+    <ul>
+      <li>
+	<a href="../../../index.html">gammapy v0.7</a>
+	 &#187;
+      </li>
+      <li><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+      
+       
+    </ul>
+</div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for gammapy.image.catalog</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
+<span class="sd">&quot;&quot;&quot;Make an image from a source catalog, or simulated catalog, e.g 1FHL 2FGL etc</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">OrderedDict</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">astropy.wcs</span> <span class="k">import</span> <span class="n">WCS</span>
+<span class="kn">from</span> <span class="nn">astropy.units</span> <span class="k">import</span> <span class="n">Quantity</span>
+<span class="kn">from</span> <span class="nn">astropy</span> <span class="k">import</span> <span class="n">units</span> <span class="k">as</span> <span class="n">u</span>
+<span class="kn">from</span> <span class="nn">astropy.table</span> <span class="k">import</span> <span class="n">Table</span>
+<span class="kn">from</span> <span class="nn">.core</span> <span class="k">import</span> <span class="n">SkyImage</span>
+<span class="kn">from</span> <span class="nn">.lists</span> <span class="k">import</span> <span class="n">SkyImageList</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;CatalogImageEstimator&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">BBOX_DELTA2D_PIX</span> <span class="o">=</span> <span class="mi">5</span>
+
+
+<div class="viewcode-block" id="CatalogImageEstimator"><a class="viewcode-back" href="../../../api/gammapy.image.CatalogImageEstimator.html#gammapy.image.CatalogImageEstimator">[docs]</a><span class="k">class</span> <span class="nc">CatalogImageEstimator</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Compute model image for given energy band from a catalog.</span>
+
+<span class="sd">    Sources are only filled when their center lies within the image boundaries.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    reference : `~gammapy.image.SkyImage`</span>
+<span class="sd">        Reference sky image.</span>
+<span class="sd">    emin : `~astropy.units.Quantity`</span>
+<span class="sd">        Lower bound of energy range.</span>
+<span class="sd">    emax : `~astropy.units.Quantity`</span>
+<span class="sd">        Upper bound of energy range.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+
+<span class="sd">    Here is an example how to compute a flux image from a catalog:</span>
+
+<span class="sd">        from astropy import units as u</span>
+<span class="sd">        from gammapy.image import SkyImage, CatalogImageEstimator</span>
+<span class="sd">        from gammapy.catalog import SourceCatalogGammaCat</span>
+
+<span class="sd">        reference = SkyImage.empty(xref=265, yref=-1.5, nxpix=201,</span>
+<span class="sd">                                   nypix=201, binsz=0.04)</span>
+
+<span class="sd">        image_estimator = CatalogImageEstimator(reference=reference,</span>
+<span class="sd">                                                emin=1 * u.TeV,</span>
+<span class="sd">                                                emax=10 * u.TeV)</span>
+
+<span class="sd">        catalog = SourceCatalogGammaCat()</span>
+<span class="sd">        result = image_estimator.run(catalog)</span>
+<span class="sd">        result[&#39;flux&#39;].show()</span>
+
+<span class="sd">    Currently the `CatalogImageEstimator` class does not support to compute model</span>
+<span class="sd">    cubes of catalogs. But this can achieved with only a little more of python code:</span>
+
+<span class="sd">        from astropy import units as u</span>
+<span class="sd">        from gammapy.image import CatalogImageEstimator, SkyImage</span>
+<span class="sd">        from gammapy.cube import SkyCube</span>
+<span class="sd">        from gammapy.catalog import SourceCatalogGammaCat</span>
+<span class="sd">        from gammapy.utils.energy import EnergyBounds</span>
+
+<span class="sd">        reference = SkyImage.empty(xref=265, yref=-1.5, nxpix=201,</span>
+<span class="sd">                                   nypix=201, binsz=0.04)</span>
+
+<span class="sd">        energies = EnergyBounds.equal_log_spacing(1 * u.TeV, 100 * u.TeV, 3)</span>
+
+<span class="sd">        flux_cube = SkyCube.empty_like(reference=reference, energies=energies)</span>
+
+<span class="sd">        catalog = SourceCatalogGammaCat()</span>
+
+<span class="sd">        for idx in range(energies.size - 1):</span>
+<span class="sd">            image_estimator = CatalogImageEstimator(reference=reference,</span>
+<span class="sd">                                                    emin=energies[idx],</span>
+<span class="sd">                                                    emax=energies[idx + 1])</span>
+
+<span class="sd">            result = image_estimator.run(catalog)</span>
+<span class="sd">            flux_cube.data[idx, :, :] = result[&#39;flux&#39;].data</span>
+
+<span class="sd">        flux_cube.show()</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reference</span><span class="p">,</span> <span class="n">emin</span><span class="p">,</span> <span class="n">emax</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reference</span> <span class="o">=</span> <span class="n">reference</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parameters</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span><span class="n">emin</span><span class="o">=</span><span class="n">emin</span><span class="p">,</span> <span class="n">emax</span><span class="o">=</span><span class="n">emax</span><span class="p">)</span>
+
+<div class="viewcode-block" id="CatalogImageEstimator.flux"><a class="viewcode-back" href="../../../api/gammapy.image.CatalogImageEstimator.html#gammapy.image.CatalogImageEstimator.flux">[docs]</a>    <span class="k">def</span> <span class="nf">flux</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">catalog</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute flux image from catalog.</span>
+
+<span class="sd">        Sources are only filled when their center lies within the image boundaries.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        catalog : `~gammapy.catalog.SourceCatalog`</span>
+<span class="sd">            Source catalog instance.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        image :  `~gammapy.image.SkyImage`</span>
+<span class="sd">            Flux sky image.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">..catalog.gammacat</span> <span class="k">import</span> <span class="n">NoDataAvailableError</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameters</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">SkyImage</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reference</span><span class="p">)</span>
+
+        <span class="n">selection</span> <span class="o">=</span> <span class="n">catalog</span><span class="o">.</span><span class="n">select_image_region</span><span class="p">(</span><span class="n">image</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">source</span> <span class="ow">in</span> <span class="n">selection</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">spatial_model</span> <span class="o">=</span> <span class="n">source</span><span class="o">.</span><span class="n">spatial_model</span><span class="p">(</span><span class="n">emin</span><span class="o">=</span><span class="n">p</span><span class="p">[</span><span class="s1">&#39;emin&#39;</span><span class="p">],</span> <span class="n">emax</span><span class="o">=</span><span class="n">p</span><span class="p">[</span><span class="s1">&#39;emax&#39;</span><span class="p">])</span>
+            <span class="c1"># TODO: remove this error handling and add selection to SourceCatalog</span>
+            <span class="c1"># class</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">NotImplementedError</span><span class="p">,</span> <span class="n">NoDataAvailableError</span><span class="p">):</span>
+                <span class="k">continue</span>
+
+            <span class="k">if</span> <span class="n">source</span><span class="o">.</span><span class="n">is_pointlike</span><span class="p">:</span>
+                <span class="c1"># use 5 pixel bbox for point-like models</span>
+                <span class="n">size</span> <span class="o">=</span> <span class="n">BBOX_DELTA2D_PIX</span> <span class="o">*</span> <span class="n">image</span><span class="o">.</span><span class="n">wcs_pixel_scale</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;deg&#39;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">height</span><span class="p">,</span> <span class="n">width</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">spatial_model</span><span class="o">.</span><span class="n">bounding_box</span><span class="p">)</span>
+                <span class="n">size</span> <span class="o">=</span> <span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">height</span><span class="p">)</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">width</span><span class="p">)</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span><span class="p">)</span>
+
+            <span class="n">cutout</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">cutout</span><span class="p">(</span><span class="n">source</span><span class="o">.</span><span class="n">position</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">source</span><span class="o">.</span><span class="n">is_pointlike</span><span class="p">:</span>
+                <span class="n">solid_angle</span> <span class="o">=</span> <span class="mf">1.</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">solid_angle</span> <span class="o">=</span> <span class="n">cutout</span><span class="o">.</span><span class="n">solid_angle</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s1">&#39;deg2&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">value</span>
+
+            <span class="c1"># evaluate model on smaller image and paste</span>
+            <span class="n">c</span> <span class="o">=</span> <span class="n">cutout</span><span class="o">.</span><span class="n">coordinates</span><span class="p">()</span>
+            <span class="n">l</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">galactic</span><span class="o">.</span><span class="n">l</span><span class="o">.</span><span class="n">wrap_at</span><span class="p">(</span><span class="s1">&#39;180d&#39;</span><span class="p">),</span> <span class="n">c</span><span class="o">.</span><span class="n">galactic</span><span class="o">.</span><span class="n">b</span>
+            <span class="n">cutout</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">spatial_model</span><span class="p">(</span><span class="n">l</span><span class="o">.</span><span class="n">deg</span><span class="p">,</span> <span class="n">b</span><span class="o">.</span><span class="n">deg</span><span class="p">)</span> <span class="o">*</span> <span class="n">solid_angle</span>
+            <span class="n">image</span><span class="o">.</span><span class="n">paste</span><span class="p">(</span><span class="n">cutout</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">image</span></div>
+
+<div class="viewcode-block" id="CatalogImageEstimator.run"><a class="viewcode-back" href="../../../api/gammapy.image.CatalogImageEstimator.html#gammapy.image.CatalogImageEstimator.run">[docs]</a>    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">catalog</span><span class="p">,</span> <span class="n">which</span><span class="o">=</span><span class="s1">&#39;flux&#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Run catalog image estimator.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        catalog : `~gammapy.catalog.SourceCatalog`</span>
+<span class="sd">            Source catalog instance.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        sky_images : `~gammapy.image.SkyImageList`</span>
+<span class="sd">            List of sky images</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">SkyImageList</span><span class="p">()</span>
+
+        <span class="c1"># TODO: add input image list and computed derived quantities such as</span>
+        <span class="c1"># excess, psf convolution etc.</span>
+        <span class="k">if</span> <span class="s1">&#39;flux&#39;</span> <span class="ow">in</span> <span class="n">which</span><span class="p">:</span>
+            <span class="n">result</span><span class="p">[</span><span class="s1">&#39;flux&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">flux</span><span class="p">(</span><span class="n">catalog</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">result</span></div></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><h3>Page Contents</h3>
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+<footer class="footer">
+  <p class="pull-right"> &nbsp;
+    <a href="#">Back to Top</a></p>
+  <p>
+    &copy; Copyright 2018, The Gammapy developers.<br/>
+    Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.6.7. &nbsp;
+    Last built 01 Mar 2018. <br/>
+  </p>
+</footer>
+  </body>
+</html>

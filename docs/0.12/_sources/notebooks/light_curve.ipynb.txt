@@ -1,0 +1,440 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "\n",
+    "<div class=\"alert alert-info\">\n",
+    "\n",
+    "**This is a fixed-text formatted version of a Jupyter notebook**\n",
+    "\n",
+    "- Try online [![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/gammapy/gammapy/v0.12?urlpath=lab/tree/light_curve.ipynb)\n",
+    "- You can contribute with your own notebooks in this\n",
+    "[GitHub repository](https://github.com/gammapy/gammapy/tree/master/tutorials).\n",
+    "- **Source files:**\n",
+    "[light_curve.ipynb](../_static/notebooks/light_curve.ipynb) |\n",
+    "[light_curve.py](../_static/notebooks/light_curve.py)\n",
+    "</div>\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Light curves\n",
+    "\n",
+    "## Introduction\n",
+    "\n",
+    "This tutorial explain how to compute a light curve with Gammapy.\n",
+    "\n",
+    "We will use the four Crab nebula observations from the [H.E.S.S. first public test data release](https://www.mpi-hd.mpg.de/hfm/HESS/pages/dl3-dr1/) and compute per-observation fluxes. The Crab nebula is not known to be variable at TeV energies, so we expect constant brightness within statistical and systematic errors.\n",
+    "\n",
+    "The main classes we will use are:\n",
+    "\n",
+    "* [gammapy.time.LightCurve](..\/api/gammapy.time.LightCurve.rst)\n",
+    "* [gammapy.time.LightCurveEstimator](..\/api/gammapy.time.LightCurveEstimator.rst)\n",
+    "\n",
+    "## Setup\n",
+    "\n",
+    "As usual, we'll start with some setup..."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%matplotlib inline\n",
+    "import matplotlib.pyplot as plt\n",
+    "import astropy.units as u\n",
+    "from astropy.coordinates import SkyCoord, Angle\n",
+    "from regions import CircleSkyRegion\n",
+    "from gammapy.utils.energy import EnergyBounds\n",
+    "from gammapy.data import DataStore\n",
+    "from gammapy.spectrum import SpectrumExtraction\n",
+    "from gammapy.spectrum.models import PowerLaw\n",
+    "from gammapy.background import ReflectedRegionsBackgroundEstimator\n",
+    "from gammapy.time import LightCurveEstimator"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Spectrum\n",
+    "\n",
+    "The `LightCurveEstimator` is based on a 1d spectral analysis within each time bin.\n",
+    "So before we can make the light curve, we have to extract 1d spectra."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "data_store = DataStore.from_dir(\"$GAMMAPY_DATA/hess-dl3-dr1/\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Observations\n",
+      "Number of observations: 4\n",
+      "Info for OBS_ID = 23523\n",
+      "- Start time: 53343.92\n",
+      "- Pointing pos: RA 83.63 deg / Dec 21.51 deg\n",
+      "- Observation duration: 1687.0 s\n",
+      "- Dead-time fraction: 6.240 %\n",
+      "Info for OBS_ID = 23526\n",
+      "- Start time: 53343.95\n",
+      "- Pointing pos: RA 83.63 deg / Dec 22.51 deg\n",
+      "- Observation duration: 1683.0 s\n",
+      "- Dead-time fraction: 6.555 %\n",
+      "Info for OBS_ID = 23559\n",
+      "- Start time: 53345.96\n",
+      "- Pointing pos: RA 85.25 deg / Dec 22.01 deg\n",
+      "- Observation duration: 1686.0 s\n",
+      "- Dead-time fraction: 6.398 %\n",
+      "Info for OBS_ID = 23592\n",
+      "- Start time: 53347.91\n",
+      "- Pointing pos: RA 82.01 deg / Dec 22.01 deg\n",
+      "- Observation duration: 1686.0 s\n",
+      "- Dead-time fraction: 6.212 %\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "mask = data_store.obs_table[\"TARGET_NAME\"] == \"Crab\"\n",
+    "obs_ids = data_store.obs_table[\"OBS_ID\"][mask].data\n",
+    "observations = data_store.get_observations(obs_ids)\n",
+    "print(observations)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Target definition\n",
+    "target_position = SkyCoord(ra=83.63308, dec=22.01450, unit=\"deg\")\n",
+    "on_region_radius = Angle(\"0.2 deg\")\n",
+    "on_region = CircleSkyRegion(center=target_position, radius=on_region_radius)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "CPU times: user 814 ms, sys: 16.1 ms, total: 830 ms\n",
+      "Wall time: 833 ms\n"
+     ]
+    }
+   ],
+   "source": [
+    "%%time\n",
+    "bkg_estimator = ReflectedRegionsBackgroundEstimator(\n",
+    "    on_region=on_region, observations=observations\n",
+    ")\n",
+    "bkg_estimator.run()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "CPU times: user 883 ms, sys: 24 ms, total: 907 ms\n",
+      "Wall time: 947 ms\n"
+     ]
+    }
+   ],
+   "source": [
+    "%%time\n",
+    "ebounds = EnergyBounds.equal_log_spacing(0.7, 100, 50, unit=\"TeV\")\n",
+    "extraction = SpectrumExtraction(\n",
+    "    observations=observations,\n",
+    "    bkg_estimate=bkg_estimator.result,\n",
+    "    containment_correction=False,\n",
+    "    e_reco=ebounds,\n",
+    "    e_true=ebounds,\n",
+    ")\n",
+    "extraction.run()\n",
+    "spectrum_observations = extraction.spectrum_observations"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Light curve estimation\n",
+    "\n",
+    "OK, so now that we have prepared 1D spectra (not spectral models, just the 1D counts and exposure and 2D energy dispersion matrix), we can compute a lightcurve.\n",
+    "\n",
+    "To compute the light curve, a spectral model shape has to be assumed, and an energy band chosen.\n",
+    "The method is then to adjust the amplitude parameter of the spectral model in each time bin to the data, resulting in a flux measurement in each time bin."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Creat list of time bin intervals\n",
+    "# Here we do one time bin per observation\n",
+    "time_intervals = [(obs.tstart, obs.tstop) for obs in observations]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Assumed spectral model\n",
+    "spectral_model = PowerLaw(\n",
+    "    index=2, amplitude=2.0e-11 * u.Unit(\"1 / (cm2 s TeV)\"), reference=1 * u.TeV\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "energy_range = [1, 100] * u.TeV"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "CPU times: user 1.05 s, sys: 29.2 ms, total: 1.08 s\n",
+      "Wall time: 1.57 s\n"
+     ]
+    }
+   ],
+   "source": [
+    "%%time\n",
+    "lc_estimator = LightCurveEstimator(extraction)\n",
+    "lc = lc_estimator.light_curve(\n",
+    "    time_intervals=time_intervals,\n",
+    "    spectral_model=spectral_model,\n",
+    "    energy_range=energy_range,\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Results\n",
+    "\n",
+    "The light curve measurement result is stored in a table. Let's have a look at the results:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "['time_min', 'time_max', 'flux', 'flux_err', 'flux_ul', 'is_ul', 'livetime', 'alpha', 'n_on', 'n_off', 'measured_excess', 'expected_excess']\n"
+     ]
+    }
+   ],
+   "source": [
+    "print(lc.table.colnames)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<i>Table length=4</i>\n",
+       "<table id=\"table4479735344\" class=\"table-striped table-bordered table-condensed\">\n",
+       "<thead><tr><th>time_min</th><th>time_max</th><th>flux</th><th>flux_err</th></tr></thead>\n",
+       "<thead><tr><th></th><th></th><th>1 / (cm2 s)</th><th>1 / (cm2 s)</th></tr></thead>\n",
+       "<thead><tr><th>float64</th><th>float64</th><th>float64</th><th>float64</th></tr></thead>\n",
+       "<tr><td>53343.92234009259</td><td>53343.94186555556</td><td>1.8415530028767494e-11</td><td>1.901096920855279e-12</td></tr>\n",
+       "<tr><td>53343.95421509259</td><td>53343.97369425926</td><td>1.998670964314257e-11</td><td>2.0213838634857846e-12</td></tr>\n",
+       "<tr><td>53345.96198129629</td><td>53345.98149518518</td><td>2.193396904197396e-11</td><td>2.5543071221453397e-12</td></tr>\n",
+       "<tr><td>53347.913196574074</td><td>53347.93271046296</td><td>2.321856396079876e-11</td><td>2.5699816445058737e-12</td></tr>\n",
+       "</table>"
+      ],
+      "text/plain": [
+       "<Table length=4>\n",
+       "     time_min           time_max     ...        flux_err       \n",
+       "                                     ...      1 / (cm2 s)      \n",
+       "     float64            float64      ...        float64        \n",
+       "------------------ ----------------- ... ----------------------\n",
+       " 53343.92234009259 53343.94186555556 ...  1.901096920855279e-12\n",
+       " 53343.95421509259 53343.97369425926 ... 2.0213838634857846e-12\n",
+       " 53345.96198129629 53345.98149518518 ... 2.5543071221453397e-12\n",
+       "53347.913196574074 53347.93271046296 ... 2.5699816445058737e-12"
+      ]
+     },
+     "execution_count": 12,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "lc.table[\"time_min\", \"time_max\", \"flux\", \"flux_err\"]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 432x288 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "lc.plot();"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/latex": [
+       "$$2.0740149 \\times 10^{-11} \\; \\mathrm{\\frac{1}{s\\,cm^{2}}}$$"
+      ],
+      "text/plain": [
+       "<Quantity 2.07401493e-11 1 / (cm2 s)>"
+      ]
+     },
+     "execution_count": 14,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "# Let's compare to the expected flux of this source\n",
+    "from gammapy.spectrum import CrabSpectrum\n",
+    "\n",
+    "crab_spec = CrabSpectrum().model\n",
+    "crab_flux = crab_spec.integral(*energy_range).to(\"cm-2 s-1\")\n",
+    "crab_flux"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 15,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 432x288 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "ax = lc.plot(marker=\"o\", lw=2)\n",
+    "ax.hlines(\n",
+    "    crab_flux.value,\n",
+    "    xmin=lc.table[\"time_min\"].min(),\n",
+    "    xmax=lc.table[\"time_max\"].max(),\n",
+    ");"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Exercises\n",
+    "\n",
+    "* Change the assumed spectral model shape (e.g. to a steeper power-law), and see how the integral flux estimate for the lightcurve changes.\n",
+    "* Try a time binning where you split the observation time for every run into two time bins.\n",
+    "* Try to analyse the PKS 2155 flare data from the H.E.S.S. first public test data release.\n",
+    "  Start with per-observation fluxes, and then try fluxes within 5 minute time bins for one or two of the observations where the source was very bright."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 16,
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.6.0"
+  },
+  "nbsphinx": {
+   "orphan": true
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}
