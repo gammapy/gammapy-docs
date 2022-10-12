@@ -1,0 +1,46 @@
+name: Build docs
+on:
+  repository_dispatch:
+    types: [release]
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+    env:
+      GAMMAPY_DATA: /home/runner/work/gammapy-docs/gammapy-docs/gammapy-datasets/${{ github.event.client_payload.release }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.9
+      - name: Install base dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install tox
+      - name: Install Gammapy
+        run: |
+          git clone https://github.com/gammapy/gammapy.git
+          cd gammapy
+          git checkout ${{ github.event.client_payload.release }}
+          python -m pip install tqdm requests
+          python -m pip install -e .
+      - name: Download datasets
+        run: |
+          gammapy download datasets
+      - name: Build docs
+        run: tox -e build_docs
+      - name: Copy docs
+        run: |
+          release="${{ github.event.client_payload.release }}"
+          mv gammapy/docs/_build/html docs/${release}
+          rm -rf gammapy
+          sed -i -E 's|url=\.\./.*"|url=../${release}"|' docs/stable/index.html
+      - name: commit changes
+        uses: stefanzweifel/git-auto-commit-action@v4.1.6
+        if: success()
+        with:
+          commit_author: GitHub Actions <actions@github.com>
+          commit_message: commit docs build
