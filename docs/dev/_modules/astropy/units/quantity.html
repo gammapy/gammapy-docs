@@ -188,7 +188,7 @@ function checkPageExistsAndRedirect(event) {
 
             $("#version_switcher_menu").append(node);
             // replace dropdown button text with the preferred display name of
-            // this version, rather than using sphinx's 1.1.dev119+g09afc818f variable.
+            // this version, rather than using sphinx's 1.1.dev127+g111c8b866 variable.
             // also highlight the dropdown entry for the currently-viewed
             // version's entry
             if (entry.version == "dev") {
@@ -864,6 +864,15 @@ function checkPageExistsAndRedirect(event) {
             <span class="n">out_array</span> <span class="o">=</span> <span class="n">check_output</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">unit</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">function</span><span class="o">=</span><span class="n">function</span><span class="p">)</span>
             <span class="c1"># Ensure output argument remains a tuple.</span>
             <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;out&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">out_array</span><span class="p">,)</span> <span class="k">if</span> <span class="n">function</span><span class="o">.</span><span class="n">nout</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">out_array</span>
+
+        <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;reduce&#39;</span> <span class="ow">and</span> <span class="s1">&#39;initial&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span> <span class="ow">and</span> <span class="n">unit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Special-case for initial argument for reductions like</span>
+            <span class="c1"># np.add.reduce.  This should be converted to the output unit as</span>
+            <span class="c1"># well, which is typically the same as the input unit (but can</span>
+            <span class="c1"># in principle be different: unitless for np.equal, radian</span>
+            <span class="c1"># for np.arctan2, though those are not necessarily useful!)</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;initial&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_own_unit</span><span class="p">(</span><span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;initial&#39;</span><span class="p">],</span>
+                                                  <span class="n">check_precision</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="n">unit</span><span class="p">)</span>
 
         <span class="c1"># Same for inputs, but here also convert if necessary.</span>
         <span class="n">arrays</span> <span class="o">=</span> <span class="p">[]</span>
@@ -1773,9 +1782,32 @@ function checkPageExistsAndRedirect(event) {
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;cannot make a list of Quantities.  Get &quot;</span>
                                   <span class="s2">&quot;list of values with q.value.tolist()&quot;</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_to_own_unit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">check_precision</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_to_own_unit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">check_precision</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Convert value to one&#39;s own unit (or that given).</span>
+
+<span class="sd">        Here, non-quantities are treated as dimensionless, and care is taken</span>
+<span class="sd">        for values of 0, infinity or nan, which are allowed to have any unit.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        value : anything convertible to `~astropy.units.Quantity`</span>
+<span class="sd">            The value to be converted to the requested unit.</span>
+<span class="sd">        check_precision : bool</span>
+<span class="sd">            Whether to forbit conversion of float to integer if that changes</span>
+<span class="sd">            the input number.  Default: `True`.</span>
+<span class="sd">        unit : `~astropy.units.Unit` or None</span>
+<span class="sd">            The unit to convert to.  By default, the unit of ``self``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        value : number or `~numpy.ndarray`</span>
+<span class="sd">            In the requested units.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">unit</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">unit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">unit</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">_value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span>
+            <span class="n">_value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="n">unit</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
             <span class="c1"># We&#39;re not a Quantity.</span>
             <span class="c1"># First remove two special cases (with a fast test):</span>
@@ -1791,7 +1823,7 @@ function checkPageExistsAndRedirect(event) {
             <span class="c1"># but anything with a unit attribute will use that.</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">as_quantity</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-                <span class="n">_value</span> <span class="o">=</span> <span class="n">as_quantity</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span>
+                <span class="n">_value</span> <span class="o">=</span> <span class="n">as_quantity</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="n">unit</span><span class="p">)</span>
             <span class="k">except</span> <span class="n">UnitsError</span><span class="p">:</span>
                 <span class="c1"># last chance: if this was not something with a unit</span>
                 <span class="c1"># and is all 0, inf, or nan, we treat it as arbitrary unit.</span>
@@ -2112,7 +2144,11 @@ function checkPageExistsAndRedirect(event) {
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrap_function</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nansum</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span>
                                        <span class="n">out</span><span class="o">=</span><span class="n">out</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="n">keepdims</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># TODO: deprecate this method? It is not on ndarray, and we do not</span>
+        <span class="c1"># support nanmean, etc., so why this one?</span>
         <span class="k">def</span> <span class="nf">nansum</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">initial</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">where</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">initial</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">initial</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_own_unit</span><span class="p">(</span><span class="n">initial</span><span class="p">)</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrap_function</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nansum</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span>
                                        <span class="n">out</span><span class="o">=</span><span class="n">out</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="n">keepdims</span><span class="p">,</span> <span class="n">initial</span><span class="o">=</span><span class="n">initial</span><span class="p">,</span> <span class="n">where</span><span class="o">=</span><span class="n">where</span><span class="p">)</span>
 
