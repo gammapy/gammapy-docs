@@ -1,0 +1,67 @@
+EDispKernelMap
+==============
+
+.. currentmodule:: gammapy.irf
+
+.. autoclass:: EDispKernelMap
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~EDispKernelMap.edisp_map
+      ~EDispKernelMap.mask_safe_image
+      ~EDispKernelMap.required_axes
+      ~EDispKernelMap.tag
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~EDispKernelMap.copy
+      ~EDispKernelMap.cutout
+      ~EDispKernelMap.downsample
+      ~EDispKernelMap.from_diagonal_response
+      ~EDispKernelMap.from_edisp_kernel
+      ~EDispKernelMap.from_gauss
+      ~EDispKernelMap.from_geom
+      ~EDispKernelMap.from_hdulist
+      ~EDispKernelMap.get_edisp_kernel
+      ~EDispKernelMap.peek
+      ~EDispKernelMap.read
+      ~EDispKernelMap.resample_energy_axis
+      ~EDispKernelMap.slice_by_idx
+      ~EDispKernelMap.stack
+      ~EDispKernelMap.to_hdulist
+      ~EDispKernelMap.to_image
+      ~EDispKernelMap.to_region_nd_map
+      ~EDispKernelMap.write
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: edisp_map
+   .. autoattribute:: mask_safe_image
+   .. autoattribute:: required_axes
+   .. autoattribute:: tag
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: copy
+   .. automethod:: cutout
+   .. automethod:: downsample
+   .. automethod:: from_diagonal_response
+   .. automethod:: from_edisp_kernel
+   .. automethod:: from_gauss
+   .. automethod:: from_geom
+   .. automethod:: from_hdulist
+   .. automethod:: get_edisp_kernel
+   .. automethod:: peek
+   .. automethod:: read
+   .. automethod:: resample_energy_axis
+   .. automethod:: slice_by_idx
+   .. automethod:: stack
+   .. automethod:: to_hdulist
+   .. automethod:: to_image
+   .. automethod:: to_region_nd_map
+   .. automethod:: write
