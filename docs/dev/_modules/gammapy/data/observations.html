@@ -188,7 +188,7 @@ function checkPageExistsAndRedirect(event) {
 
             $("#version_switcher_menu").append(node);
             // replace dropdown button text with the preferred display name of
-            // this version, rather than using sphinx's 1.1.dev389+g8a85e9f04 variable.
+            // this version, rather than using sphinx's 1.1.dev415+g11744a983 variable.
             // also highlight the dropdown entry for the currently-viewed
             // version's entry
             if (entry.version == "dev") {
@@ -267,6 +267,7 @@ function checkPageExistsAndRedirect(event) {
 <span class="kn">import</span> <span class="nn">copy</span>
 <span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">zip_longest</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">astropy.units</span> <span class="k">as</span> <span class="nn">u</span>
@@ -277,6 +278,7 @@ function checkPageExistsAndRedirect(event) {
 <span class="kn">from</span> <span class="nn">astropy.utils</span> <span class="kn">import</span> <span class="n">lazyproperty</span>
 <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
 <span class="kn">from</span> <span class="nn">gammapy</span> <span class="kn">import</span> <span class="n">__version__</span>
+<span class="kn">from</span> <span class="nn">gammapy.utils.deprecation</span> <span class="kn">import</span> <span class="n">GammapyDeprecationWarning</span><span class="p">,</span> <span class="n">deprecated</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.fits</span> <span class="kn">import</span> <span class="n">LazyFitsData</span><span class="p">,</span> <span class="n">earth_location_to_dict</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.scripts</span> <span class="kn">import</span> <span class="n">make_path</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.testing</span> <span class="kn">import</span> <span class="n">Checker</span>
@@ -326,6 +328,7 @@ function checkPageExistsAndRedirect(event) {
     <span class="n">_rad_max</span> <span class="o">=</span> <span class="n">LazyFitsData</span><span class="p">(</span><span class="n">cache</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="n">_events</span> <span class="o">=</span> <span class="n">LazyFitsData</span><span class="p">(</span><span class="n">cache</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="n">_gti</span> <span class="o">=</span> <span class="n">LazyFitsData</span><span class="p">(</span><span class="n">cache</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">_pointing</span> <span class="o">=</span> <span class="n">LazyFitsData</span><span class="p">(</span><span class="n">cache</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -339,6 +342,8 @@ function checkPageExistsAndRedirect(event) {
         <span class="n">rad_max</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">events</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">obs_filter</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">pointing</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">location</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">obs_id</span> <span class="o">=</span> <span class="n">obs_id</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_obs_info</span> <span class="o">=</span> <span class="n">obs_info</span>
@@ -349,6 +354,8 @@ function checkPageExistsAndRedirect(event) {
         <span class="bp">self</span><span class="o">.</span><span class="n">_rad_max</span> <span class="o">=</span> <span class="n">rad_max</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_gti</span> <span class="o">=</span> <span class="n">gti</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_events</span> <span class="o">=</span> <span class="n">events</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pointing</span> <span class="o">=</span> <span class="n">pointing</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_location</span> <span class="o">=</span> <span class="n">location</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">obs_filter</span> <span class="o">=</span> <span class="n">obs_filter</span> <span class="ow">or</span> <span class="n">ObservationFilter</span><span class="p">()</span>
 
     <span class="nd">@property</span>
@@ -406,10 +413,12 @@ function checkPageExistsAndRedirect(event) {
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create obs info dict from in memory data&quot;&quot;&quot;</span>
         <span class="n">obs_info</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;RA_PNT&quot;</span><span class="p">:</span> <span class="n">pointing</span><span class="o">.</span><span class="n">icrs</span><span class="o">.</span><span class="n">ra</span><span class="o">.</span><span class="n">deg</span><span class="p">,</span>
-            <span class="s2">&quot;DEC_PNT&quot;</span><span class="p">:</span> <span class="n">pointing</span><span class="o">.</span><span class="n">icrs</span><span class="o">.</span><span class="n">dec</span><span class="o">.</span><span class="n">deg</span><span class="p">,</span>
             <span class="s2">&quot;DEADC&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">deadtime_fraction</span><span class="p">,</span>
         <span class="p">}</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">SkyCoord</span><span class="p">):</span>
+            <span class="n">obs_info</span><span class="p">[</span><span class="s2">&quot;RA_PNT&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">icrs</span><span class="o">.</span><span class="n">ra</span><span class="o">.</span><span class="n">deg</span>
+            <span class="n">obs_info</span><span class="p">[</span><span class="s2">&quot;DEC_PNT&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">icrs</span><span class="o">.</span><span class="n">dec</span><span class="o">.</span><span class="n">deg</span>
+
         <span class="n">obs_info</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">time_ref_to_dict</span><span class="p">(</span><span class="n">reference_time</span><span class="p">))</span>
         <span class="n">obs_info</span><span class="p">[</span><span class="s2">&quot;TSTART&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">time_relative_to_ref</span><span class="p">(</span><span class="n">time_start</span><span class="p">,</span> <span class="n">obs_info</span><span class="p">)</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="n">u</span><span class="o">.</span><span class="n">s</span><span class="p">)</span>
         <span class="n">obs_info</span><span class="p">[</span><span class="s2">&quot;TSTOP&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">time_relative_to_ref</span><span class="p">(</span><span class="n">time_stop</span><span class="p">,</span> <span class="n">obs_info</span><span class="p">)</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="n">u</span><span class="o">.</span><span class="n">s</span><span class="p">)</span>
@@ -438,8 +447,8 @@ function checkPageExistsAndRedirect(event) {
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        pointing : `~astropy.coordinates.SkyCoord`</span>
-<span class="sd">            Pointing position</span>
+<span class="sd">        pointing : `~gammapy.data.FixedPointingInfo` or `~astropy.coordinates.SkyCoord`</span>
+<span class="sd">            Pointing information</span>
 <span class="sd">        obs_id : int</span>
 <span class="sd">            Observation ID as identifier</span>
 <span class="sd">        livetime : ~astropy.units.Quantity`</span>
@@ -468,7 +477,6 @@ function checkPageExistsAndRedirect(event) {
             <span class="n">tstop</span> <span class="o">=</span> <span class="n">tstart</span> <span class="o">+</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">livetime</span><span class="p">)</span>
 
         <span class="n">gti</span> <span class="o">=</span> <span class="n">GTI</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">tstart</span><span class="p">,</span> <span class="n">tstop</span><span class="p">,</span> <span class="n">reference_time</span><span class="o">=</span><span class="n">reference_time</span><span class="p">)</span>
-
         <span class="n">obs_info</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_get_obs_info</span><span class="p">(</span>
             <span class="n">pointing</span><span class="o">=</span><span class="n">pointing</span><span class="p">,</span>
             <span class="n">deadtime_fraction</span><span class="o">=</span><span class="n">deadtime_fraction</span><span class="p">,</span>
@@ -477,6 +485,13 @@ function checkPageExistsAndRedirect(event) {
             <span class="n">reference_time</span><span class="o">=</span><span class="n">reference_time</span><span class="p">,</span>
             <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">,</span>
         <span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">FixedPointingInfo</span><span class="p">):</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;Pointing will be required to be provided as FixedPointingInfo&quot;</span><span class="p">,</span>
+                <span class="n">GammapyDeprecationWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">pointing</span> <span class="o">=</span> <span class="n">FixedPointingInfo</span><span class="o">.</span><span class="n">from_fits_header</span><span class="p">(</span><span class="n">obs_info</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
             <span class="n">obs_id</span><span class="o">=</span><span class="n">obs_id</span><span class="p">,</span>
@@ -487,6 +502,8 @@ function checkPageExistsAndRedirect(event) {
             <span class="n">edisp</span><span class="o">=</span><span class="n">irfs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;edisp&quot;</span><span class="p">),</span>
             <span class="n">psf</span><span class="o">=</span><span class="n">irfs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;psf&quot;</span><span class="p">),</span>
             <span class="n">rad_max</span><span class="o">=</span><span class="n">irfs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;rad_max&quot;</span><span class="p">),</span>
+            <span class="n">pointing</span><span class="o">=</span><span class="n">pointing</span><span class="p">,</span>
+            <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">,</span>
         <span class="p">)</span></div>
 
     <span class="nd">@property</span>
@@ -498,6 +515,11 @@ function checkPageExistsAndRedirect(event) {
     <span class="k">def</span> <span class="nf">tstop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Observation stop time (`~astropy.time.Time`).&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">gti</span><span class="o">.</span><span class="n">time_stop</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">tmid</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Midpoint between start and stop time&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">tstart</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tstop</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">tstart</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">observation_time_duration</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -550,29 +572,56 @@ function checkPageExistsAndRedirect(event) {
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">meta</span>
 
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">pointing</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pointing</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_pointing</span> <span class="o">=</span> <span class="n">FixedPointingInfo</span><span class="o">.</span><span class="n">from_fits_header</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_info</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pointing</span>
+
+<div class="viewcode-block" id="Observation.get_pointing_altaz"><a class="viewcode-back" href="../../../api/gammapy.data.Observation.html#gammapy.data.Observation.get_pointing_altaz">[docs]</a>    <span class="k">def</span> <span class="nf">get_pointing_altaz</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the pointing in altaz for given time&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">pointing</span><span class="o">.</span><span class="n">get_altaz</span><span class="p">(</span><span class="n">time</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">observatory_earth_location</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Observation.get_pointing_icrs"><a class="viewcode-back" href="../../../api/gammapy.data.Observation.html#gammapy.data.Observation.get_pointing_icrs">[docs]</a>    <span class="k">def</span> <span class="nf">get_pointing_icrs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the pointing in icrs for given time&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">pointing</span><span class="o">.</span><span class="n">get_icrs</span><span class="p">(</span><span class="n">time</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">observatory_earth_location</span><span class="p">)</span></div>
+
     <span class="nd">@lazyproperty</span>
+    <span class="nd">@deprecated</span><span class="p">(</span>
+        <span class="s2">&quot;v1.1&quot;</span><span class="p">,</span>
+        <span class="n">message</span><span class="o">=</span><span class="s2">&quot;Use observation.pointing or observation.get_pointing_{{altaz,icrs}} instead&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
     <span class="k">def</span> <span class="nf">fixed_pointing_info</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Fixed pointing info for this observation (`FixedPointingInfo`).&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">FixedPointingInfo</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obs_info</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pointing</span>
 
     <span class="nd">@property</span>
+    <span class="nd">@deprecated</span><span class="p">(</span><span class="s2">&quot;v1.1&quot;</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="s2">&quot;Use observation.get_pointing_icrs(time) instead&quot;</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">pointing_radec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Pointing RA / DEC sky coordinates (`~astropy.coordinates.SkyCoord`).&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_pointing_info</span><span class="o">.</span><span class="n">radec</span>
 
     <span class="nd">@property</span>
+    <span class="nd">@deprecated</span><span class="p">(</span><span class="s2">&quot;v1.1&quot;</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="s2">&quot;Use observation.get_pointing_altaz(time) instead&quot;</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">pointing_altaz</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_pointing_info</span><span class="o">.</span><span class="n">altaz</span>
 
     <span class="nd">@property</span>
+    <span class="nd">@deprecated</span><span class="p">(</span><span class="s2">&quot;v1.1&quot;</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="s2">&quot;Use observation.get_pointing_altaz(time).zen instead&quot;</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">pointing_zen</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Pointing zenith angle sky (`~astropy.units.Quantity`).&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_pointing_info</span><span class="o">.</span><span class="n">altaz</span><span class="o">.</span><span class="n">zen</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_pointing_altaz</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tmid</span><span class="p">)</span><span class="o">.</span><span class="n">zen</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">observatory_earth_location</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Observatory location (`~astropy.coordinates.EarthLocation`).&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_pointing_info</span><span class="o">.</span><span class="n">location</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_location</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_location</span>
+
+        <span class="c1"># for now we catch the deprecation warning until we store location on the observation properly</span>
+        <span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">,</span> <span class="n">category</span><span class="o">=</span><span class="n">GammapyDeprecationWarning</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_pointing_info</span><span class="o">.</span><span class="n">location</span>
 
     <span class="nd">@lazyproperty</span>
     <span class="k">def</span> <span class="nf">target_radec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -589,8 +638,9 @@ function checkPageExistsAndRedirect(event) {
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;MUONEFF&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">ra</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pointing_radec</span><span class="o">.</span><span class="n">ra</span><span class="o">.</span><span class="n">deg</span>
-        <span class="n">dec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pointing_radec</span><span class="o">.</span><span class="n">dec</span><span class="o">.</span><span class="n">deg</span>
+        <span class="n">pointing</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_pointing_icrs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tmid</span><span class="p">)</span>
+        <span class="n">ra</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">ra</span><span class="o">.</span><span class="n">deg</span>
+        <span class="n">dec</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">dec</span><span class="o">.</span><span class="n">deg</span>
 
         <span class="n">pointing</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">ra</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> deg, </span><span class="si">{</span><span class="n">dec</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> deg</span><span class="se">\n</span><span class="s2">&quot;</span>
         <span class="c1"># TODO: Which target was observed?</span>
@@ -724,6 +774,7 @@ function checkPageExistsAndRedirect(event) {
             <span class="n">gti</span><span class="o">=</span><span class="n">gti</span><span class="p">,</span>
             <span class="n">obs_info</span><span class="o">=</span><span class="n">obs_info</span><span class="p">,</span>
             <span class="n">obs_id</span><span class="o">=</span><span class="n">obs_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;OBS_ID&quot;</span><span class="p">),</span>
+            <span class="n">pointing</span><span class="o">=</span><span class="n">FixedPointingInfo</span><span class="o">.</span><span class="n">from_fits_header</span><span class="p">(</span><span class="n">obs_info</span><span class="p">),</span>
             <span class="o">**</span><span class="n">irf_dict</span><span class="p">,</span>
         <span class="p">)</span></div>
 
@@ -755,7 +806,9 @@ function checkPageExistsAndRedirect(event) {
 
         <span class="n">events</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">events</span>
         <span class="k">if</span> <span class="n">events</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">hdul</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">events</span><span class="o">.</span><span class="n">to_table_hdu</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="nb">format</span><span class="p">))</span>
+            <span class="n">events_hdu</span> <span class="o">=</span> <span class="n">events</span><span class="o">.</span><span class="n">to_table_hdu</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="nb">format</span><span class="p">)</span>
+            <span class="n">events_hdu</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pointing</span><span class="o">.</span><span class="n">to_fits_header</span><span class="p">())</span>
+            <span class="n">hdul</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">events_hdu</span><span class="p">)</span>
 
         <span class="n">gti</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gti</span>
         <span class="k">if</span> <span class="n">gti</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -806,7 +859,11 @@ function checkPageExistsAndRedirect(event) {
             <span class="n">argnames</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="s2">&quot;self&quot;</span><span class="p">)</span>
 
             <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">argnames</span><span class="p">:</span>
-                <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;location&quot;</span><span class="p">:</span>
+                    <span class="n">attr</span> <span class="o">=</span> <span class="s2">&quot;observatory_earth_location&quot;</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">attr</span> <span class="o">=</span> <span class="n">name</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">)</span>
                 <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">value</span><span class="p">))</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
