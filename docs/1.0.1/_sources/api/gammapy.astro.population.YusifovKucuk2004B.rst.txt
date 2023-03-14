@@ -1,0 +1,143 @@
+YusifovKucuk2004B
+=================
+
+.. currentmodule:: gammapy.astro.population
+
+.. autoclass:: YusifovKucuk2004B
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~YusifovKucuk2004B.a
+      ~YusifovKucuk2004B.amplitude
+      ~YusifovKucuk2004B.b
+      ~YusifovKucuk2004B.bbox_with_units
+      ~YusifovKucuk2004B.bounding_box
+      ~YusifovKucuk2004B.bounds
+      ~YusifovKucuk2004B.col_fit_deriv
+      ~YusifovKucuk2004B.cov_matrix
+      ~YusifovKucuk2004B.eqcons
+      ~YusifovKucuk2004B.evolved
+      ~YusifovKucuk2004B.fit_deriv
+      ~YusifovKucuk2004B.fittable
+      ~YusifovKucuk2004B.fixed
+      ~YusifovKucuk2004B.has_user_bounding_box
+      ~YusifovKucuk2004B.has_user_inverse
+      ~YusifovKucuk2004B.ineqcons
+      ~YusifovKucuk2004B.input_units
+      ~YusifovKucuk2004B.input_units_allow_dimensionless
+      ~YusifovKucuk2004B.input_units_equivalencies
+      ~YusifovKucuk2004B.input_units_strict
+      ~YusifovKucuk2004B.inputs
+      ~YusifovKucuk2004B.inverse
+      ~YusifovKucuk2004B.linear
+      ~YusifovKucuk2004B.meta
+      ~YusifovKucuk2004B.model_constraints
+      ~YusifovKucuk2004B.model_set_axis
+      ~YusifovKucuk2004B.n_inputs
+      ~YusifovKucuk2004B.n_outputs
+      ~YusifovKucuk2004B.n_submodels
+      ~YusifovKucuk2004B.name
+      ~YusifovKucuk2004B.outputs
+      ~YusifovKucuk2004B.param_names
+      ~YusifovKucuk2004B.param_sets
+      ~YusifovKucuk2004B.parameter_constraints
+      ~YusifovKucuk2004B.parameters
+      ~YusifovKucuk2004B.return_units
+      ~YusifovKucuk2004B.separable
+      ~YusifovKucuk2004B.standard_broadcasting
+      ~YusifovKucuk2004B.stds
+      ~YusifovKucuk2004B.sync_constraints
+      ~YusifovKucuk2004B.tied
+      ~YusifovKucuk2004B.uses_quantity
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~YusifovKucuk2004B.__call__
+      ~YusifovKucuk2004B.coerce_units
+      ~YusifovKucuk2004B.copy
+      ~YusifovKucuk2004B.deepcopy
+      ~YusifovKucuk2004B.evaluate
+      ~YusifovKucuk2004B.get_bounding_box
+      ~YusifovKucuk2004B.has_inverse
+      ~YusifovKucuk2004B.input_shape
+      ~YusifovKucuk2004B.output_units
+      ~YusifovKucuk2004B.prepare_inputs
+      ~YusifovKucuk2004B.prepare_outputs
+      ~YusifovKucuk2004B.rename
+      ~YusifovKucuk2004B.render
+      ~YusifovKucuk2004B.set_slice_args
+      ~YusifovKucuk2004B.strip_units_from_tree
+      ~YusifovKucuk2004B.sum_of_implicit_terms
+      ~YusifovKucuk2004B.with_units_from_data
+      ~YusifovKucuk2004B.without_units_for_data
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: a
+   .. autoattribute:: amplitude
+   .. autoattribute:: b
+   .. autoattribute:: bbox_with_units
+   .. autoattribute:: bounding_box
+   .. autoattribute:: bounds
+   .. autoattribute:: col_fit_deriv
+   .. autoattribute:: cov_matrix
+   .. autoattribute:: eqcons
+   .. autoattribute:: evolved
+   .. autoattribute:: fit_deriv
+   .. autoattribute:: fittable
+   .. autoattribute:: fixed
+   .. autoattribute:: has_user_bounding_box
+   .. autoattribute:: has_user_inverse
+   .. autoattribute:: ineqcons
+   .. autoattribute:: input_units
+   .. autoattribute:: input_units_allow_dimensionless
+   .. autoattribute:: input_units_equivalencies
+   .. autoattribute:: input_units_strict
+   .. autoattribute:: inputs
+   .. autoattribute:: inverse
+   .. autoattribute:: linear
+   .. autoattribute:: meta
+   .. autoattribute:: model_constraints
+   .. autoattribute:: model_set_axis
+   .. autoattribute:: n_inputs
+   .. autoattribute:: n_outputs
+   .. autoattribute:: n_submodels
+   .. autoattribute:: name
+   .. autoattribute:: outputs
+   .. autoattribute:: param_names
+   .. autoattribute:: param_sets
+   .. autoattribute:: parameter_constraints
+   .. autoattribute:: parameters
+   .. autoattribute:: return_units
+   .. autoattribute:: separable
+   .. autoattribute:: standard_broadcasting
+   .. autoattribute:: stds
+   .. autoattribute:: sync_constraints
+   .. autoattribute:: tied
+   .. autoattribute:: uses_quantity
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: __call__
+   .. automethod:: coerce_units
+   .. automethod:: copy
+   .. automethod:: deepcopy
+   .. automethod:: evaluate
+   .. automethod:: get_bounding_box
+   .. automethod:: has_inverse
+   .. automethod:: input_shape
+   .. automethod:: output_units
+   .. automethod:: prepare_inputs
+   .. automethod:: prepare_outputs
+   .. automethod:: rename
+   .. automethod:: render
+   .. automethod:: set_slice_args
+   .. automethod:: strip_units_from_tree
+   .. automethod:: sum_of_implicit_terms
+   .. automethod:: with_units_from_data
+   .. automethod:: without_units_for_data
