@@ -188,7 +188,7 @@ function checkPageExistsAndRedirect(event) {
 
             $("#version_switcher_menu").append(node);
             // replace dropdown button text with the preferred display name of
-            // this version, rather than using sphinx's 1.1.dev727+g4c5427c6d variable.
+            // this version, rather than using sphinx's 1.1.dev738+g1544e7bfd variable.
             // also highlight the dropdown entry for the currently-viewed
             // version's entry
             if (entry.version == "dev") {
@@ -264,6 +264,8 @@ function checkPageExistsAndRedirect(event) {
   <h1>Source code for gammapy.estimators.points.lightcurve</h1><div class="highlight"><pre>
 <span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
 <span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">repeat</span>
+<span class="kn">from</span> <span class="nn">multiprocessing</span> <span class="kn">import</span> <span class="n">Pool</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">astropy.units</span> <span class="k">as</span> <span class="nn">u</span>
 <span class="kn">from</span> <span class="nn">gammapy.data</span> <span class="kn">import</span> <span class="n">GTI</span>
@@ -330,6 +332,8 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">        Fit instance specifying the backend and fit options.</span>
 <span class="sd">    reoptimize : bool</span>
 <span class="sd">        Re-optimize other free model parameters. Default is True.</span>
+<span class="sd">    n_jobs : int</span>
+<span class="sd">        Number of processes used in parallel for the computation.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -339,9 +343,10 @@ function checkPageExistsAndRedirect(event) {
 
     <span class="n">tag</span> <span class="o">=</span> <span class="s2">&quot;LightCurveEstimator&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time_intervals</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="s2">&quot;1e-6 s&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time_intervals</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="s2">&quot;1e-6 s&quot;</span><span class="p">,</span> <span class="n">n_jobs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">time_intervals</span> <span class="o">=</span> <span class="n">time_intervals</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">atol</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">atol</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_jobs</span> <span class="o">=</span> <span class="n">n_jobs</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
 <div class="viewcode-block" id="LightCurveEstimator.run"><a class="viewcode-back" href="../../../../api/gammapy.estimators.LightCurveEstimator.html#gammapy.estimators.LightCurveEstimator.run">[docs]</a>    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">datasets</span><span class="p">):</span>
@@ -370,6 +375,8 @@ function checkPageExistsAndRedirect(event) {
 
         <span class="n">rows</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">valid_intervals</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">parallel_datasets</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">dataset_names</span> <span class="o">=</span> <span class="n">datasets</span><span class="o">.</span><span class="n">names</span>
         <span class="k">for</span> <span class="n">t_min</span><span class="p">,</span> <span class="n">t_max</span> <span class="ow">in</span> <span class="n">progress_bar</span><span class="p">(</span><span class="n">gti</span><span class="o">.</span><span class="n">time_intervals</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s2">&quot;Time intervals&quot;</span><span class="p">):</span>
             <span class="n">datasets_to_fit</span> <span class="o">=</span> <span class="n">datasets</span><span class="o">.</span><span class="n">select_time</span><span class="p">(</span>
                 <span class="n">time_min</span><span class="o">=</span><span class="n">t_min</span><span class="p">,</span> <span class="n">time_max</span><span class="o">=</span><span class="n">t_max</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">atol</span>
@@ -382,13 +389,22 @@ function checkPageExistsAndRedirect(event) {
                 <span class="k">continue</span>
 
             <span class="n">valid_intervals</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">t_min</span><span class="p">,</span> <span class="n">t_max</span><span class="p">])</span>
-            <span class="n">fp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">estimate_time_bin_flux</span><span class="p">(</span><span class="n">datasets</span><span class="o">=</span><span class="n">datasets_to_fit</span><span class="p">)</span>
 
-            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;counts&quot;</span><span class="p">,</span> <span class="s2">&quot;npred&quot;</span><span class="p">,</span> <span class="s2">&quot;npred_excess&quot;</span><span class="p">]:</span>
-                <span class="n">fp</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expand_map</span><span class="p">(</span>
-                    <span class="n">fp</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">dataset_names</span><span class="o">=</span><span class="n">datasets</span><span class="o">.</span><span class="n">names</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_jobs</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">fp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">estimate_time_bin_flux</span><span class="p">(</span><span class="n">datasets_to_fit</span><span class="p">,</span> <span class="n">dataset_names</span><span class="p">)</span>
+                <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fp</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">parallel_datasets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">datasets_to_fit</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_jobs</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">Pool</span><span class="p">(</span><span class="n">processes</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_jobs</span><span class="p">)</span> <span class="k">as</span> <span class="n">pool</span><span class="p">:</span>
+                <span class="n">rows</span> <span class="o">=</span> <span class="n">pool</span><span class="o">.</span><span class="n">starmap</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">estimate_time_bin_flux</span><span class="p">,</span>
+                    <span class="nb">zip</span><span class="p">(</span>
+                        <span class="n">parallel_datasets</span><span class="p">,</span>
+                        <span class="n">repeat</span><span class="p">(</span><span class="n">dataset_names</span><span class="p">),</span>
+                    <span class="p">),</span>
                 <span class="p">)</span>
-            <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fp</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;LightCurveEstimator: No datasets in time intervals&quot;</span><span class="p">)</span>
@@ -424,7 +440,7 @@ function checkPageExistsAndRedirect(event) {
         <span class="n">result</span><span class="o">.</span><span class="n">set_by_coord</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">vals</span><span class="o">=</span><span class="n">m</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span></div>
 
-<div class="viewcode-block" id="LightCurveEstimator.estimate_time_bin_flux"><a class="viewcode-back" href="../../../../api/gammapy.estimators.LightCurveEstimator.html#gammapy.estimators.LightCurveEstimator.estimate_time_bin_flux">[docs]</a>    <span class="k">def</span> <span class="nf">estimate_time_bin_flux</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">datasets</span><span class="p">):</span>
+<div class="viewcode-block" id="LightCurveEstimator.estimate_time_bin_flux"><a class="viewcode-back" href="../../../../api/gammapy.estimators.LightCurveEstimator.html#gammapy.estimators.LightCurveEstimator.estimate_time_bin_flux">[docs]</a>    <span class="k">def</span> <span class="nf">estimate_time_bin_flux</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">datasets</span><span class="p">,</span> <span class="n">dataset_names</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Estimate flux point for a single energy group.</span>
 
 <span class="sd">        Parameters</span>
@@ -437,7 +453,14 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">        result : `FluxPoints`</span>
 <span class="sd">            Resulting flux points.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">datasets</span><span class="p">)</span></div></div>
+        <span class="n">fp</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">datasets</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">dataset_names</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;counts&quot;</span><span class="p">,</span> <span class="s2">&quot;npred&quot;</span><span class="p">,</span> <span class="s2">&quot;npred_excess&quot;</span><span class="p">]:</span>
+                <span class="n">fp</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expand_map</span><span class="p">(</span>
+                    <span class="n">fp</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">dataset_names</span><span class="o">=</span><span class="n">dataset_names</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="n">fp</span></div></div>
 </pre></div>
 
               </div>
