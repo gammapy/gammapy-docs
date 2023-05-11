@@ -188,7 +188,7 @@ function checkPageExistsAndRedirect(event) {
 
             $("#version_switcher_menu").append(node);
             // replace dropdown button text with the preferred display name of
-            // this version, rather than using sphinx's 1.1.dev870+g2fe130cbb variable.
+            // this version, rather than using sphinx's 1.1.dev908+g0d767d1cf variable.
             // also highlight the dropdown entry for the currently-viewed
             // version's entry
             if (entry.version == "dev") {
@@ -271,11 +271,7 @@ function checkPageExistsAndRedirect(event) {
 <span class="kn">from</span> <span class="nn">astropy.table</span> <span class="kn">import</span> <span class="n">Table</span><span class="p">,</span> <span class="n">vstack</span>
 <span class="kn">from</span> <span class="nn">astropy.time</span> <span class="kn">import</span> <span class="n">Time</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.scripts</span> <span class="kn">import</span> <span class="n">make_path</span>
-<span class="kn">from</span> <span class="nn">gammapy.utils.time</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">time_ref_from_dict</span><span class="p">,</span>
-    <span class="n">time_ref_to_dict</span><span class="p">,</span>
-    <span class="n">time_relative_to_ref</span><span class="p">,</span>
-<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">gammapy.utils.time</span> <span class="kn">import</span> <span class="n">TIME_REF_DEFAULT</span><span class="p">,</span> <span class="n">time_ref_from_dict</span><span class="p">,</span> <span class="n">time_ref_to_dict</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;GTI&quot;</span><span class="p">]</span>
 
@@ -293,6 +289,10 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">    ----------</span>
 <span class="sd">    table : `~astropy.table.Table`</span>
 <span class="sd">        GTI table</span>
+<span class="sd">    reference_time : `~astropy.time.Time`</span>
+<span class="sd">        the reference time</span>
+<span class="sd">        If None, use TIME_REF_DEFAULT.</span>
+<span class="sd">        Default is None</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -322,14 +322,38 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">    - Stop: 2015-08-02T23:14:24.184 (time standard: TT)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">table</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">table</span> <span class="o">=</span> <span class="n">table</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">table</span><span class="p">,</span> <span class="n">reference_time</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">table</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validate_table</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">reference_time</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">reference_time</span> <span class="o">=</span> <span class="n">TIME_REF_DEFAULT</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_time_ref</span> <span class="o">=</span> <span class="n">Time</span><span class="p">(</span><span class="n">reference_time</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_validate_table</span><span class="p">(</span><span class="n">table</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Checks that the input GTI fits the gammapy internal model.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="n">Table</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;GTI table is not an astropy Table.&quot;</span><span class="p">)</span>
+
+        <span class="n">colnames</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;START&quot;</span><span class="p">,</span> <span class="s2">&quot;STOP&quot;</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">set</span><span class="p">(</span><span class="n">colnames</span><span class="p">)</span><span class="o">.</span><span class="n">issubset</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">colnames</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;GTI table not correctly defined.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">table</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">table</span>
+
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">colnames</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">table</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">Time</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Column </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> is not a Time object.&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">table</span>
 
 <div class="viewcode-block" id="GTI.copy"><a class="viewcode-back" href="../../../api/gammapy.data.GTI.html#gammapy.data.GTI.copy">[docs]</a>    <span class="k">def</span> <span class="nf">copy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="GTI.create"><a class="viewcode-back" href="../../../api/gammapy.data.GTI.html#gammapy.data.GTI.create">[docs]</a>    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">create</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">reference_time</span><span class="o">=</span><span class="s2">&quot;2000-01-01&quot;</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">create</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">reference_time</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Creates a GTI table from start and stop times.</span>
 
 <span class="sd">        Parameters</span>
@@ -339,24 +363,27 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">        stop : `~astropy.time.Time` or `~astropy.units.Quantity`</span>
 <span class="sd">            Stop times, if a quantity then w.r.t. reference time</span>
 <span class="sd">        reference_time : `~astropy.time.Time`</span>
-<span class="sd">            the reference time to use in GTI definition</span>
+<span class="sd">            the reference time to use in GTI definition.</span>
+<span class="sd">            If None, use TIME_REF_DEFAULT.</span>
+<span class="sd">            Default is None</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">reference_time</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">reference_time</span> <span class="o">=</span> <span class="n">TIME_REF_DEFAULT</span>
         <span class="n">reference_time</span> <span class="o">=</span> <span class="n">Time</span><span class="p">(</span><span class="n">reference_time</span><span class="p">)</span>
+        <span class="n">reference_time</span><span class="o">.</span><span class="n">format</span> <span class="o">=</span> <span class="s2">&quot;mjd&quot;</span>
 
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">Time</span><span class="p">):</span>
-            <span class="n">start</span> <span class="o">=</span> <span class="p">(</span><span class="n">start</span> <span class="o">-</span> <span class="n">reference_time</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">u</span><span class="o">.</span><span class="n">s</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">Time</span><span class="p">):</span>
+            <span class="n">start</span> <span class="o">=</span> <span class="n">reference_time</span> <span class="o">+</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">start</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stop</span><span class="p">,</span> <span class="n">Time</span><span class="p">):</span>
-            <span class="n">stop</span> <span class="o">=</span> <span class="p">(</span><span class="n">stop</span> <span class="o">-</span> <span class="n">reference_time</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">u</span><span class="o">.</span><span class="n">s</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stop</span><span class="p">,</span> <span class="n">Time</span><span class="p">):</span>
+            <span class="n">stop</span> <span class="o">=</span> <span class="n">reference_time</span> <span class="o">+</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">stop</span><span class="p">)</span>
 
-        <span class="n">start</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">ndmin</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">stop</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">stop</span><span class="p">,</span> <span class="n">ndmin</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">meta</span> <span class="o">=</span> <span class="n">time_ref_to_dict</span><span class="p">(</span><span class="n">reference_time</span><span class="p">)</span>
-        <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">({</span><span class="s2">&quot;START&quot;</span><span class="p">:</span> <span class="n">start</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;s&quot;</span><span class="p">),</span> <span class="s2">&quot;STOP&quot;</span><span class="p">:</span> <span class="n">stop</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;s&quot;</span><span class="p">)},</span> <span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">table</span><span class="p">)</span></div>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">({</span><span class="s2">&quot;START&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">atleast_1d</span><span class="p">(</span><span class="n">start</span><span class="p">),</span> <span class="s2">&quot;STOP&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">atleast_1d</span><span class="p">(</span><span class="n">stop</span><span class="p">)})</span>
+
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="n">reference_time</span><span class="o">=</span><span class="n">reference_time</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="GTI.read"><a class="viewcode-back" href="../../../api/gammapy.data.GTI.html#gammapy.data.GTI.read">[docs]</a>    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="n">hdu</span><span class="o">=</span><span class="s2">&quot;GTI&quot;</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="n">hdu</span><span class="o">=</span><span class="s2">&quot;GTI&quot;</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;gadf&quot;</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Read from FITS file.</span>
 
 <span class="sd">        Parameters</span>
@@ -365,10 +392,36 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">            Filename</span>
 <span class="sd">        hdu : str</span>
 <span class="sd">            hdu name. Default GTI.</span>
+<span class="sd">        format: str</span>
+<span class="sd">            Input format, currently only &quot;gadf&quot; is supported</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">filename</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
-        <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">hdu</span><span class="o">=</span><span class="n">hdu</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">table</span><span class="p">)</span></div>
+        <span class="k">with</span> <span class="n">fits</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">make_path</span><span class="p">(</span><span class="n">filename</span><span class="p">)),</span> <span class="n">memmap</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="k">as</span> <span class="n">hdulist</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_table_hdu</span><span class="p">(</span><span class="n">hdulist</span><span class="p">[</span><span class="n">hdu</span><span class="p">],</span> <span class="nb">format</span><span class="o">=</span><span class="nb">format</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="GTI.from_table_hdu"><a class="viewcode-back" href="../../../api/gammapy.data.GTI.html#gammapy.data.GTI.from_table_hdu">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_table_hdu</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">table_hdu</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;gadf&quot;</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Read from table HDU.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        table_hdu : `~astropy.io.fits.BinTableHDU`</span>
+<span class="sd">            table hdu</span>
+<span class="sd">        format: str</span>
+<span class="sd">            Input format, currently only &quot;gadf&quot; is supported</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">format</span> <span class="o">!=</span> <span class="s2">&quot;gadf&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Only the &quot;gadf&quot; format supported, got </span><span class="si">{</span><span class="nb">format</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+        <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">table_hdu</span><span class="p">)</span>
+        <span class="n">time_ref</span> <span class="o">=</span> <span class="n">time_ref_from_dict</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">meta</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;mjd&quot;</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tt&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Check if TIMEUNIT keyword is present, otherwise assume seconds</span>
+        <span class="n">unit</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;TIMEUNIT&quot;</span><span class="p">,</span> <span class="s2">&quot;s&quot;</span><span class="p">)</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">table</span><span class="p">[</span><span class="s2">&quot;START&quot;</span><span class="p">],</span> <span class="n">unit</span><span class="p">)</span>
+        <span class="n">stop</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">table</span><span class="p">[</span><span class="s2">&quot;STOP&quot;</span><span class="p">],</span> <span class="n">unit</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">time_ref</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="GTI.to_table_hdu"><a class="viewcode-back" href="../../../api/gammapy.data.GTI.html#gammapy.data.GTI.to_table_hdu">[docs]</a>    <span class="k">def</span> <span class="nf">to_table_hdu</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;gadf&quot;</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -387,7 +440,13 @@ function checkPageExistsAndRedirect(event) {
         <span class="k">if</span> <span class="nb">format</span> <span class="o">!=</span> <span class="s2">&quot;gadf&quot;</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Only the &quot;gadf&quot; format supported, got </span><span class="si">{</span><span class="nb">format</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">fits</span><span class="o">.</span><span class="n">BinTableHDU</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;GTI&quot;</span><span class="p">)</span></div>
+        <span class="c1"># Don&#39;t impose the scale. GADF does not require it to be TT</span>
+        <span class="n">meta</span> <span class="o">=</span> <span class="n">time_ref_to_dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">time_ref</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">time_ref</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_start</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_ref</span>
+        <span class="n">stop</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_stop</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_ref</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">({</span><span class="s2">&quot;START&quot;</span><span class="p">:</span> <span class="n">start</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;s&quot;</span><span class="p">),</span> <span class="s2">&quot;STOP&quot;</span><span class="p">:</span> <span class="n">stop</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;s&quot;</span><span class="p">)},</span> <span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">fits</span><span class="o">.</span><span class="n">BinTableHDU</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;GTI&quot;</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="GTI.write"><a class="viewcode-back" href="../../../api/gammapy.data.GTI.html#gammapy.data.GTI.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Write to file.</span>
@@ -402,8 +461,8 @@ function checkPageExistsAndRedirect(event) {
         <span class="n">hdulist</span><span class="o">.</span><span class="n">writeto</span><span class="p">(</span><span class="n">make_path</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
     <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">t_start_met</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s2">&quot;START&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">&quot;float64&quot;</span><span class="p">),</span> <span class="s2">&quot;second&quot;</span><span class="p">)</span>
-        <span class="n">t_stop_met</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s2">&quot;STOP&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">&quot;float64&quot;</span><span class="p">),</span> <span class="s2">&quot;second&quot;</span><span class="p">)</span>
+        <span class="n">t_start_met</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">met_start</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">t_stop_met</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">met_stop</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
         <span class="n">t_start</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_start</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">fits</span>
         <span class="n">t_stop</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_stop</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">fits</span>
         <span class="k">return</span> <span class="p">(</span>
@@ -419,14 +478,13 @@ function checkPageExistsAndRedirect(event) {
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">time_delta</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;GTI durations in seconds (`~astropy.units.Quantity`).&quot;&quot;&quot;</span>
-        <span class="n">start</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s2">&quot;START&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">&quot;float64&quot;</span><span class="p">)</span>
-        <span class="n">stop</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s2">&quot;STOP&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">&quot;float64&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">stop</span> <span class="o">-</span> <span class="n">start</span><span class="p">,</span> <span class="s2">&quot;second&quot;</span><span class="p">)</span>
+        <span class="n">delta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_stop</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_start</span>
+        <span class="k">return</span> <span class="n">delta</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;s&quot;</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">time_ref</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Time reference (`~astropy.time.Time`).&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">time_ref_from_dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">meta</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_time_ref</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">time_sum</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -436,14 +494,22 @@ function checkPageExistsAndRedirect(event) {
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">time_start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;GTI start times (`~astropy.time.Time`).&quot;&quot;&quot;</span>
-        <span class="n">met</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s2">&quot;START&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">&quot;float64&quot;</span><span class="p">),</span> <span class="s2">&quot;second&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_ref</span> <span class="o">+</span> <span class="n">met</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s2">&quot;START&quot;</span><span class="p">]</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">time_stop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;GTI end times (`~astropy.time.Time`).&quot;&quot;&quot;</span>
-        <span class="n">met</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s2">&quot;STOP&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">&quot;float64&quot;</span><span class="p">),</span> <span class="s2">&quot;second&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_ref</span> <span class="o">+</span> <span class="n">met</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s2">&quot;STOP&quot;</span><span class="p">]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">met_start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;GTI start time difference with reference time in sec, MET (`~astropy.units.Quantity`).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">time_start</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_ref</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;s&quot;</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">met_stop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;GTI start time difference with reference time in sec, MET (`~astropy.units.Quantity`).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">time_stop</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_ref</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;s&quot;</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">time_intervals</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -454,7 +520,7 @@ function checkPageExistsAndRedirect(event) {
         <span class="p">]</span>
 
 <div class="viewcode-block" id="GTI.from_time_intervals"><a class="viewcode-back" href="../../../api/gammapy.data.GTI.html#gammapy.data.GTI.from_time_intervals">[docs]</a>    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">from_time_intervals</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">time_intervals</span><span class="p">,</span> <span class="n">reference_time</span><span class="o">=</span><span class="s2">&quot;2000-01-01&quot;</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">from_time_intervals</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">time_intervals</span><span class="p">,</span> <span class="n">reference_time</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;From list of time intervals</span>
 
 <span class="sd">        Parameters</span>
@@ -462,19 +528,21 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">        time_intervals : list of `~astropy.time.Time` objects</span>
 <span class="sd">            Time intervals</span>
 <span class="sd">        reference_time : `~astropy.time.Time`</span>
-<span class="sd">            Reference time to use in GTI definition</span>
+<span class="sd">            Reference time to use in GTI definition. Default is None.</span>
+<span class="sd">            If None, use TIME_REF_DEFAULT.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        gti : `GTI`</span>
 <span class="sd">            GTI table.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">reference_time</span> <span class="o">=</span> <span class="n">Time</span><span class="p">(</span><span class="n">reference_time</span><span class="p">)</span>
-        <span class="n">start</span> <span class="o">=</span> <span class="n">Time</span><span class="p">([</span><span class="n">_</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">time_intervals</span><span class="p">])</span> <span class="o">-</span> <span class="n">reference_time</span>
-        <span class="n">stop</span> <span class="o">=</span> <span class="n">Time</span><span class="p">([</span><span class="n">_</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">time_intervals</span><span class="p">])</span> <span class="o">-</span> <span class="n">reference_time</span>
-        <span class="n">meta</span> <span class="o">=</span> <span class="n">time_ref_to_dict</span><span class="p">(</span><span class="n">reference_time</span><span class="p">)</span>
-        <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">({</span><span class="s2">&quot;START&quot;</span><span class="p">:</span> <span class="n">start</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;s&quot;</span><span class="p">),</span> <span class="s2">&quot;STOP&quot;</span><span class="p">:</span> <span class="n">stop</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;s&quot;</span><span class="p">)},</span> <span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">table</span><span class="o">=</span><span class="n">table</span><span class="p">)</span></div>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">Time</span><span class="p">([</span><span class="n">_</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">time_intervals</span><span class="p">])</span>
+        <span class="n">stop</span> <span class="o">=</span> <span class="n">Time</span><span class="p">([</span><span class="n">_</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">time_intervals</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="n">reference_time</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">reference_time</span> <span class="o">=</span> <span class="n">TIME_REF_DEFAULT</span>
+
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">reference_time</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="GTI.select_time"><a class="viewcode-back" href="../../../api/gammapy.data.GTI.html#gammapy.data.GTI.select_time">[docs]</a>    <span class="k">def</span> <span class="nf">select_time</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time_interval</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Select and crop GTIs in time interval.</span>
@@ -489,23 +557,21 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">        gti : `GTI`</span>
 <span class="sd">            Copy of the GTI table with selection applied.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">interval_start</span><span class="p">,</span> <span class="n">interval_stop</span> <span class="o">=</span> <span class="n">time_interval</span>
+        <span class="n">interval_start</span><span class="o">.</span><span class="n">format</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_start</span><span class="o">.</span><span class="n">format</span>
+        <span class="n">interval_stop</span><span class="o">.</span><span class="n">format</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_stop</span><span class="o">.</span><span class="n">format</span>
+
         <span class="c1"># get GTIs that fall within the time_interval</span>
-        <span class="n">mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_start</span> <span class="o">&lt;</span> <span class="n">time_interval</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-        <span class="n">mask</span> <span class="o">&amp;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_stop</span> <span class="o">&gt;</span> <span class="n">time_interval</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_start</span> <span class="o">&lt;</span> <span class="n">interval_stop</span>
+        <span class="n">mask</span> <span class="o">&amp;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_stop</span> <span class="o">&gt;</span> <span class="n">interval_start</span>
         <span class="n">gti_within</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
 
         <span class="c1"># crop the GTIs</span>
-        <span class="n">start_met</span> <span class="o">=</span> <span class="n">time_relative_to_ref</span><span class="p">(</span><span class="n">time_interval</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">meta</span><span class="p">)</span>
-        <span class="n">stop_met</span> <span class="o">=</span> <span class="n">time_relative_to_ref</span><span class="p">(</span><span class="n">time_interval</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">meta</span><span class="p">)</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span>
-            <span class="n">gti_within</span><span class="p">[</span><span class="s2">&quot;START&quot;</span><span class="p">],</span>
-            <span class="n">start_met</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
-            <span class="n">stop_met</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
-            <span class="n">out</span><span class="o">=</span><span class="n">gti_within</span><span class="p">[</span><span class="s2">&quot;START&quot;</span><span class="p">],</span>
+        <span class="n">gti_within</span><span class="p">[</span><span class="s2">&quot;START&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span>
+            <span class="n">gti_within</span><span class="p">[</span><span class="s2">&quot;START&quot;</span><span class="p">],</span> <span class="n">interval_start</span><span class="p">,</span> <span class="n">interval_stop</span>
         <span class="p">)</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span>
-            <span class="n">gti_within</span><span class="p">[</span><span class="s2">&quot;STOP&quot;</span><span class="p">],</span> <span class="n">start_met</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">stop_met</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">gti_within</span><span class="p">[</span><span class="s2">&quot;STOP&quot;</span><span class="p">]</span>
-        <span class="p">)</span>
+
+        <span class="n">gti_within</span><span class="p">[</span><span class="s2">&quot;STOP&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">gti_within</span><span class="p">[</span><span class="s2">&quot;STOP&quot;</span><span class="p">],</span> <span class="n">interval_start</span><span class="p">,</span> <span class="n">interval_stop</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span><span class="n">gti_within</span><span class="p">)</span></div>
 
@@ -521,14 +587,11 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">            GTI to stack to self</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">start</span> <span class="o">=</span> <span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">time_start</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_ref</span><span class="p">)</span><span class="o">.</span><span class="n">sec</span>
-        <span class="n">end</span> <span class="o">=</span> <span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">time_stop</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_ref</span><span class="p">)</span><span class="o">.</span><span class="n">sec</span>
-        <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">({</span><span class="s2">&quot;START&quot;</span><span class="p">:</span> <span class="n">start</span><span class="p">,</span> <span class="s2">&quot;STOP&quot;</span><span class="p">:</span> <span class="n">end</span><span class="p">},</span> <span class="n">names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;START&quot;</span><span class="p">,</span> <span class="s2">&quot;STOP&quot;</span><span class="p">])</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">table</span> <span class="o">=</span> <span class="n">vstack</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">,</span> <span class="n">table</span><span class="p">])</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">table</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validate_table</span><span class="p">(</span><span class="n">vstack</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">table</span><span class="p">]))</span></div>
 
 <div class="viewcode-block" id="GTI.from_stack"><a class="viewcode-back" href="../../../api/gammapy.data.GTI.html#gammapy.data.GTI.from_stack">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_stack</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">gtis</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Stack (concatenate) list of event lists.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Stack (concatenate) list of GTIs.</span>
 
 <span class="sd">        Calls `~astropy.table.vstack`.</span>
 
@@ -583,7 +646,7 @@ function checkPageExistsAndRedirect(event) {
                 <span class="n">merged</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;STOP&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">interval</span><span class="p">[</span><span class="s2">&quot;STOP&quot;</span><span class="p">],</span> <span class="n">merged</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;STOP&quot;</span><span class="p">])</span>
 
         <span class="n">merged</span> <span class="o">=</span> <span class="n">Table</span><span class="p">(</span><span class="n">rows</span><span class="o">=</span><span class="n">merged</span><span class="p">,</span> <span class="n">names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;START&quot;</span><span class="p">,</span> <span class="s2">&quot;STOP&quot;</span><span class="p">],</span> <span class="n">meta</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">meta</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span><span class="n">merged</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span><span class="n">merged</span><span class="p">,</span> <span class="n">reference_time</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">time_ref</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="GTI.group_table"><a class="viewcode-back" href="../../../api/gammapy.data.GTI.html#gammapy.data.GTI.group_table">[docs]</a>    <span class="k">def</span> <span class="nf">group_table</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time_intervals</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="s2">&quot;1e-6 s&quot;</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the table with the info on the group to which belong each time interval.</span>
