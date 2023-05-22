@@ -188,7 +188,7 @@ function checkPageExistsAndRedirect(event) {
 
             $("#version_switcher_menu").append(node);
             // replace dropdown button text with the preferred display name of
-            // this version, rather than using sphinx's 1.1.dev981+g7f6e4d211 variable.
+            // this version, rather than using sphinx's 1.1.dev1020+gb1b9a4a52 variable.
             // also highlight the dropdown entry for the currently-viewed
             // version's entry
             if (entry.version == "dev") {
@@ -263,9 +263,9 @@ function checkPageExistsAndRedirect(event) {
                 
   <h1>Source code for gammapy.makers.reduce</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">logging</span>
-<span class="kn">from</span> <span class="nn">multiprocessing</span> <span class="kn">import</span> <span class="n">Pool</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">from</span> <span class="nn">astropy.coordinates</span> <span class="kn">import</span> <span class="n">Angle</span>
+<span class="kn">import</span> <span class="nn">gammapy.utils.parallel</span> <span class="k">as</span> <span class="nn">parallel</span>
 <span class="kn">from</span> <span class="nn">gammapy.datasets</span> <span class="kn">import</span> <span class="n">Datasets</span><span class="p">,</span> <span class="n">MapDataset</span><span class="p">,</span> <span class="n">MapDatasetOnOff</span><span class="p">,</span> <span class="n">SpectrumDataset</span>
 <span class="kn">from</span> <span class="nn">.core</span> <span class="kn">import</span> <span class="n">Maker</span>
 <span class="kn">from</span> <span class="nn">.safe</span> <span class="kn">import</span> <span class="n">SafeMaskMaker</span>
@@ -278,7 +278,7 @@ function checkPageExistsAndRedirect(event) {
 <span class="p">]</span>
 
 
-<div class="viewcode-block" id="DatasetsMaker"><a class="viewcode-back" href="../../../api/gammapy.makers.DatasetsMaker.html#gammapy.makers.DatasetsMaker">[docs]</a><span class="k">class</span> <span class="nc">DatasetsMaker</span><span class="p">(</span><span class="n">Maker</span><span class="p">):</span>
+<div class="viewcode-block" id="DatasetsMaker"><a class="viewcode-back" href="../../../api/gammapy.makers.DatasetsMaker.html#gammapy.makers.DatasetsMaker">[docs]</a><span class="k">class</span> <span class="nc">DatasetsMaker</span><span class="p">(</span><span class="n">Maker</span><span class="p">,</span> <span class="n">parallel</span><span class="o">.</span><span class="n">ParallelMixin</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Run makers in a chain</span>
 
 <span class="sd">    Parameters</span>
@@ -288,7 +288,8 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">    stack_datasets : bool</span>
 <span class="sd">        If True stack into the reference dataset (see `run` method arguments).</span>
 <span class="sd">    n_jobs : int</span>
-<span class="sd">        Number of processes to run in parallel</span>
+<span class="sd">        Number of processes to run in parallel.</span>
+<span class="sd">        Default is one, unless `~gammapy.utils.parallel.N_PROCESSES` was modified.</span>
 <span class="sd">    cutout_mode : {&#39;trim&#39;, &#39;partial&#39;, &#39;strict&#39;}</span>
 <span class="sd">        Used only to cutout the reference `MapDataset` around each processed observation.</span>
 <span class="sd">        Mode is an option for Cutout2D, for details see `~astropy.nddata.utils.Cutout2D`.</span>
@@ -309,6 +310,7 @@ function checkPageExistsAndRedirect(event) {
         <span class="n">n_jobs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">cutout_mode</span><span class="o">=</span><span class="s2">&quot;trim&quot;</span><span class="p">,</span>
         <span class="n">cutout_width</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">parallel_backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">makers</span> <span class="o">=</span> <span class="n">makers</span>
@@ -323,6 +325,7 @@ function checkPageExistsAndRedirect(event) {
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">cutout_width</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">offset_max</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_jobs</span> <span class="o">=</span> <span class="n">n_jobs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parallel_backend</span> <span class="o">=</span> <span class="n">parallel_backend</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">stack_datasets</span> <span class="o">=</span> <span class="n">stack_datasets</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_datasets</span> <span class="o">=</span> <span class="p">[]</span>
@@ -420,30 +423,21 @@ function checkPageExistsAndRedirect(event) {
         <span class="k">else</span><span class="p">:</span>
             <span class="n">datasets</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span> <span class="o">*</span> <span class="p">[</span><span class="n">dataset</span><span class="p">]</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_jobs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_jobs</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="n">n_jobs</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_jobs</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">))</span>
-            <span class="k">with</span> <span class="n">Pool</span><span class="p">(</span><span class="n">processes</span><span class="o">=</span><span class="n">n_jobs</span><span class="p">)</span> <span class="k">as</span> <span class="n">pool</span><span class="p">:</span>
-                <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using </span><span class="si">{}</span><span class="s2"> jobs.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">n_jobs</span><span class="p">))</span>
-                <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
-                <span class="k">for</span> <span class="n">base</span><span class="p">,</span> <span class="n">obs</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">datasets</span><span class="p">,</span> <span class="n">observations</span><span class="p">):</span>
-                    <span class="n">result</span> <span class="o">=</span> <span class="n">pool</span><span class="o">.</span><span class="n">apply_async</span><span class="p">(</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">make_dataset</span><span class="p">,</span>
-                        <span class="p">(</span>
-                            <span class="n">base</span><span class="p">,</span>
-                            <span class="n">obs</span><span class="p">,</span>
-                        <span class="p">),</span>
-                        <span class="n">callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">callback</span><span class="p">,</span>
-                        <span class="n">error_callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">error_callback</span><span class="p">,</span>
-                    <span class="p">)</span>
-                    <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
-                <span class="c1"># wait async run is done</span>
-                <span class="p">[</span><span class="n">result</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span><span class="p">]</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_error</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Execution of a sub-process failed&quot;</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">base</span><span class="p">,</span> <span class="n">obs</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">datasets</span><span class="p">,</span> <span class="n">observations</span><span class="p">):</span>
-                <span class="n">dataset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_dataset</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">obs</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">callback</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+        <span class="n">n_jobs</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_jobs</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">))</span>
+        <span class="n">parallel</span><span class="o">.</span><span class="n">run_multiprocessing</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">make_dataset</span><span class="p">,</span>
+            <span class="nb">zip</span><span class="p">(</span><span class="n">datasets</span><span class="p">,</span> <span class="n">observations</span><span class="p">),</span>
+            <span class="n">backend</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">parallel_backend</span><span class="p">,</span>
+            <span class="n">pool_kwargs</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">processes</span><span class="o">=</span><span class="n">n_jobs</span><span class="p">),</span>
+            <span class="n">method</span><span class="o">=</span><span class="s2">&quot;apply_async&quot;</span><span class="p">,</span>
+            <span class="n">method_kwargs</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                <span class="n">callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">callback</span><span class="p">,</span>
+                <span class="n">error_callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">error_callback</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">task_name</span><span class="o">=</span><span class="s2">&quot;Data reduction&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_error</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Execution of a sub-process failed&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack_datasets</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">Datasets</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="p">])</span>
