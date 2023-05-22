@@ -188,7 +188,7 @@ function checkPageExistsAndRedirect(event) {
 
             $("#version_switcher_menu").append(node);
             // replace dropdown button text with the preferred display name of
-            // this version, rather than using sphinx's 1.1.dev1020+gb1b9a4a52 variable.
+            // this version, rather than using sphinx's 1.1.dev1061+g928b166a8 variable.
             // also highlight the dropdown entry for the currently-viewed
             // version's entry
             if (entry.version == "dev") {
@@ -268,11 +268,15 @@ function checkPageExistsAndRedirect(event) {
 <span class="kn">import</span> <span class="nn">astropy.units</span> <span class="k">as</span> <span class="nn">u</span>
 <span class="kn">from</span> <span class="nn">astropy.coordinates</span> <span class="kn">import</span> <span class="n">SkyCoord</span><span class="p">,</span> <span class="n">SkyOffsetFrame</span>
 <span class="kn">from</span> <span class="nn">astropy.table</span> <span class="kn">import</span> <span class="n">Table</span>
-<span class="kn">from</span> <span class="nn">regions</span> <span class="kn">import</span> <span class="n">PointSkyRegion</span>
+<span class="kn">from</span> <span class="nn">astropy.time</span> <span class="kn">import</span> <span class="n">Time</span>
 <span class="kn">import</span> <span class="nn">gammapy</span>
 <span class="kn">from</span> <span class="nn">gammapy.data</span> <span class="kn">import</span> <span class="n">EventList</span><span class="p">,</span> <span class="n">observatory_locations</span>
-<span class="kn">from</span> <span class="nn">gammapy.maps</span> <span class="kn">import</span> <span class="n">MapAxis</span><span class="p">,</span> <span class="n">MapCoord</span><span class="p">,</span> <span class="n">RegionGeom</span>
-<span class="kn">from</span> <span class="nn">gammapy.modeling.models</span> <span class="kn">import</span> <span class="n">ConstantTemporalModel</span><span class="p">,</span> <span class="n">PointSpatialModel</span>
+<span class="kn">from</span> <span class="nn">gammapy.maps</span> <span class="kn">import</span> <span class="n">MapAxis</span><span class="p">,</span> <span class="n">MapCoord</span><span class="p">,</span> <span class="n">RegionNDMap</span><span class="p">,</span> <span class="n">TimeMapAxis</span>
+<span class="kn">from</span> <span class="nn">gammapy.modeling.models</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ConstantSpectralModel</span><span class="p">,</span>
+    <span class="n">ConstantTemporalModel</span><span class="p">,</span>
+    <span class="n">PointSpatialModel</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.random</span> <span class="kn">import</span> <span class="n">get_random_state</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;MapDatasetEventSampler&quot;</span><span class="p">]</span>
@@ -286,10 +290,19 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">    random_state : {int, &#39;random-seed&#39;, &#39;global-rng&#39;, `~numpy.random.RandomState`}</span>
 <span class="sd">        Defines random number generator initialisation.</span>
 <span class="sd">        Passed to `~gammapy.utils.random.get_random_state`.</span>
+<span class="sd">    oversample_energy_factor: {int}</span>
+<span class="sd">        Defines an oversampling factor for the energies; it is used only when sampling</span>
+<span class="sd">        an energy-dependent time-varying source.</span>
+<span class="sd">    t_delta : `~astropy.units.Quantity`</span>
+<span class="sd">        Time interval used to sample the time-dependent source.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="s2">&quot;random-seed&quot;</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="s2">&quot;random-seed&quot;</span><span class="p">,</span> <span class="n">oversample_energy_factor</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">t_delta</span><span class="o">=</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">s</span>
+    <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">random_state</span> <span class="o">=</span> <span class="n">get_random_state</span><span class="p">(</span><span class="n">random_state</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">oversample_energy_factor</span> <span class="o">=</span> <span class="n">oversample_energy_factor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">t_delta</span> <span class="o">=</span> <span class="n">t_delta</span>
 
     <span class="k">def</span> <span class="nf">_make_table</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">time_ref</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a table for sampled events.</span>
@@ -314,70 +327,122 @@ function checkPageExistsAndRedirect(event) {
 
         <span class="n">table</span><span class="p">[</span><span class="s2">&quot;TIME&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="s2">&quot;time&quot;</span><span class="p">]</span> <span class="o">-</span> <span class="n">time_ref</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;s&quot;</span><span class="p">)</span>
         <span class="n">table</span><span class="p">[</span><span class="s2">&quot;ENERGY_TRUE&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">energy</span>
+
         <span class="n">table</span><span class="p">[</span><span class="s2">&quot;RA_TRUE&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">skycoord</span><span class="o">.</span><span class="n">icrs</span><span class="o">.</span><span class="n">ra</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;deg&quot;</span><span class="p">)</span>
         <span class="n">table</span><span class="p">[</span><span class="s2">&quot;DEC_TRUE&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">skycoord</span><span class="o">.</span><span class="n">icrs</span><span class="o">.</span><span class="n">dec</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;deg&quot;</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">table</span>
 
-    <span class="k">def</span> <span class="nf">_evaluate_timevar_source</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">evaluator</span><span class="p">,</span> <span class="n">time_axis</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_evaluate_timevar_source</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">dataset</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">,</span>
+    <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate Npred for a given `dataset.model` by evaluating</span>
-<span class="sd">        it in region geometry.</span>
+<span class="sd">        it on a region geometry.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        dataset : `~gammapy.datasets.MapDataset`</span>
 <span class="sd">            Map dataset.</span>
-<span class="sd">        evaluator : `~gammapy.datasets.evaluators.MapEvaluator`</span>
-<span class="sd">            Map evaluator.</span>
-<span class="sd">        time_axis : `~gammapy.Maps.MapAxis`</span>
-<span class="sd">            Axis of the time.</span>
+<span class="sd">        model : `~gammapy.modeling.models.SkyModel`</span>
+<span class="sd">            Sky model intance.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        npred : `~gammapy.maps.Map`</span>
+<span class="sd">        npred : `~gammapy.maps.RegionNDMap`</span>
 <span class="sd">            Npred map.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">energy_axis</span> <span class="o">=</span> <span class="n">MapAxis</span><span class="o">.</span><span class="n">from_edges</span><span class="p">(</span>
-            <span class="n">dataset</span><span class="o">.</span><span class="n">geoms</span><span class="p">[</span><span class="s2">&quot;geom&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">edges</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;energy_true&quot;</span>
+        <span class="n">energy_true</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">edisp_map</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span>
+        <span class="n">energy_new</span> <span class="o">=</span> <span class="n">energy_true</span><span class="o">.</span><span class="n">upsample</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">oversample_energy_factor</span><span class="p">)</span>
+
+        <span class="n">position</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">spatial_model</span><span class="o">.</span><span class="n">position</span>
+        <span class="n">region_exposure</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">exposure</span><span class="o">.</span><span class="n">to_region_nd_map</span><span class="p">(</span><span class="n">position</span><span class="p">)</span>
+
+        <span class="n">time_axis_eval</span> <span class="o">=</span> <span class="n">TimeMapAxis</span><span class="o">.</span><span class="n">from_gti_bounds</span><span class="p">(</span>
+            <span class="n">gti</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">gti</span><span class="p">,</span> <span class="n">t_delta</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">t_delta</span>
         <span class="p">)</span>
 
-        <span class="n">target</span> <span class="o">=</span> <span class="n">evaluator</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">spatial_model</span><span class="o">.</span><span class="n">position</span>
-        <span class="n">on_region</span> <span class="o">=</span> <span class="n">PointSkyRegion</span><span class="p">(</span><span class="n">center</span><span class="o">=</span><span class="n">target</span><span class="p">)</span>
-        <span class="n">region_geom</span> <span class="o">=</span> <span class="n">RegionGeom</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">on_region</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">[</span><span class="n">energy_axis</span><span class="p">])</span>
+        <span class="n">time_min</span><span class="p">,</span> <span class="n">time_max</span> <span class="o">=</span> <span class="n">time_axis_eval</span><span class="o">.</span><span class="n">time_bounds</span>
+        <span class="n">time_axis</span> <span class="o">=</span> <span class="n">MapAxis</span><span class="o">.</span><span class="n">from_bounds</span><span class="p">(</span>
+            <span class="n">time_min</span><span class="o">.</span><span class="n">mjd</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">d</span><span class="p">,</span>
+            <span class="n">time_max</span><span class="o">.</span><span class="n">mjd</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">d</span><span class="p">,</span>
+            <span class="n">nbin</span><span class="o">=</span><span class="n">time_axis_eval</span><span class="o">.</span><span class="n">nbin</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;time&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
 
-        <span class="n">flux</span> <span class="o">=</span> <span class="n">evaluator</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">evaluate_geom</span><span class="p">(</span><span class="n">region_geom</span><span class="o">.</span><span class="n">to_wcs_geom</span><span class="p">(),</span> <span class="n">gti</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">gti</span><span class="p">)</span>
-        <span class="n">region_exposure</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">exposure</span><span class="o">.</span><span class="n">to_region_nd_map</span><span class="p">(</span><span class="n">region_geom</span><span class="o">.</span><span class="n">center_skydir</span><span class="p">)</span>
+        <span class="n">temp_eval</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">temporal_model</span><span class="p">(</span>
+            <span class="n">time_axis_eval</span><span class="o">.</span><span class="n">time_mid</span><span class="p">,</span> <span class="n">energy</span><span class="o">=</span><span class="n">energy_new</span><span class="o">.</span><span class="n">center</span>
+        <span class="p">)</span>
 
-        <span class="n">npred</span> <span class="o">=</span> <span class="n">flux</span> <span class="o">*</span> <span class="n">region_exposure</span> <span class="o">*</span> <span class="n">dataset</span><span class="o">.</span><span class="n">geoms</span><span class="p">[</span><span class="s2">&quot;geom&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">bin_volume</span><span class="p">()</span>
+        <span class="n">norm_parameters</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">spectral_model</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">norm_parameters</span>
+        <span class="n">norm</span> <span class="o">=</span> <span class="n">norm_parameters</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span>
+
+        <span class="k">if</span> <span class="n">temp_eval</span><span class="o">.</span><span class="n">unit</span><span class="o">.</span><span class="n">is_equivalent</span><span class="p">(</span><span class="n">norm</span><span class="o">.</span><span class="n">unit</span><span class="p">):</span>
+            <span class="n">flux_diff</span> <span class="o">=</span> <span class="n">temp_eval</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">norm</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">flux_diff</span> <span class="o">=</span> <span class="n">temp_eval</span> <span class="o">*</span> <span class="n">norm</span>
+
+        <span class="n">flux_inte</span> <span class="o">=</span> <span class="n">flux_diff</span> <span class="o">*</span> <span class="n">energy_new</span><span class="o">.</span><span class="n">bin_width</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span>
+
+        <span class="n">flux_pred</span> <span class="o">=</span> <span class="n">RegionNDMap</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+            <span class="n">region</span><span class="o">=</span><span class="n">position</span><span class="p">,</span>
+            <span class="n">axes</span><span class="o">=</span><span class="p">[</span><span class="n">time_axis</span><span class="p">,</span> <span class="n">energy_new</span><span class="p">],</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">flux_inte</span><span class="p">),</span>
+            <span class="n">unit</span><span class="o">=</span><span class="n">flux_inte</span><span class="o">.</span><span class="n">unit</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">mapcoord</span> <span class="o">=</span> <span class="n">flux_pred</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">get_coord</span><span class="p">()</span>
+        <span class="n">mapcoord</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">energy_true</span><span class="o">.</span><span class="n">center</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span>
+
+        <span class="n">flux_values</span> <span class="o">=</span> <span class="n">flux_pred</span><span class="o">.</span><span class="n">interp_by_coord</span><span class="p">(</span><span class="n">mapcoord</span><span class="p">)</span> <span class="o">*</span> <span class="n">flux_pred</span><span class="o">.</span><span class="n">unit</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">flux_values</span> <span class="o">*</span> <span class="n">region_exposure</span><span class="o">.</span><span class="n">quantity</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+        <span class="n">data</span> <span class="o">/=</span> <span class="n">time_axis</span><span class="o">.</span><span class="n">nbin</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">oversample_energy_factor</span>
+
+        <span class="n">npred</span> <span class="o">=</span> <span class="n">RegionNDMap</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+            <span class="n">region</span><span class="o">=</span><span class="n">position</span><span class="p">,</span>
+            <span class="n">axes</span><span class="o">=</span><span class="p">[</span><span class="n">time_axis</span><span class="p">,</span> <span class="n">energy_true</span><span class="p">],</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">npred</span>
 
-    <span class="k">def</span> <span class="nf">_sample_coord_time_energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">evaluator</span><span class="p">,</span> <span class="n">t_delta</span><span class="o">=</span><span class="s2">&quot;1 s&quot;</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_sample_coord_time_energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Sample model components of a source with time-dependent spectrum.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        dataset : `~gammapy.datasets.MapDataset`</span>
 <span class="sd">            Map dataset.</span>
-<span class="sd">        evaluator : `~gammapy.datasets.evaluators.MapEvaluator`</span>
-<span class="sd">            Map evaluator.</span>
-<span class="sd">        t_delta : `~astropy.units.Quantity`</span>
-<span class="sd">            Minimum step time.</span>
+<span class="sd">        model : `~gammapy.modeling.models.SkyModel`</span>
+<span class="sd">            Sky model instance.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        table : `~astropy.table.Table`</span>
 <span class="sd">            Table of sampled events.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">evaluator</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">spatial_model</span><span class="p">,</span> <span class="n">PointSpatialModel</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">spatial_model</span><span class="p">,</span> <span class="n">PointSpatialModel</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Event sampler expects PointSpatialModel for a time varying source. Got </span><span class="si">{</span><span class="n">evaluator</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">spatial_model</span><span class="si">}</span><span class="s2"> instead.&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Event sampler expects PointSpatialModel for a time varying source. Got </span><span class="si">{</span><span class="n">model</span><span class="o">.</span><span class="n">spatial_model</span><span class="si">}</span><span class="s2"> instead.&quot;</span>
             <span class="p">)</span>
 
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;The functionality is not yet implemented&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">spectral_model</span><span class="p">,</span> <span class="n">ConstantSpectralModel</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Event sampler expects ConstantSpectralModel for a time varying source. Got </span><span class="si">{</span><span class="n">model</span><span class="o">.</span><span class="n">spectral_model</span><span class="si">}</span><span class="s2"> instead.&quot;</span>
+            <span class="p">)</span>
 
-        <span class="k">return</span>
+        <span class="n">npred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_evaluate_timevar_source</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">npred</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">npred</span><span class="o">.</span><span class="n">data</span><span class="p">)]</span>
+        <span class="n">n_events</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">random_state</span><span class="o">.</span><span class="n">poisson</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+
+        <span class="n">coords</span> <span class="o">=</span> <span class="n">npred</span><span class="o">.</span><span class="n">sample_coord</span><span class="p">(</span><span class="n">n_events</span><span class="o">=</span><span class="n">n_events</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">random_state</span><span class="p">)</span>
+
+        <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;time&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Time</span><span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="s2">&quot;time&quot;</span><span class="p">],</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;mjd&quot;</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tt&quot;</span><span class="p">)</span>
+
+        <span class="n">table</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_table</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">gti</span><span class="o">.</span><span class="n">time_ref</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">table</span>
 
     <span class="k">def</span> <span class="nf">_sample_coord_time</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">npred</span><span class="p">,</span> <span class="n">temporal_model</span><span class="p">,</span> <span class="n">gti</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Sample model components of a time-varying source.</span>
@@ -407,6 +472,7 @@ function checkPageExistsAndRedirect(event) {
             <span class="n">t_min</span><span class="o">=</span><span class="n">time_start</span><span class="p">,</span>
             <span class="n">t_max</span><span class="o">=</span><span class="n">time_stop</span><span class="p">,</span>
             <span class="n">random_state</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">random_state</span><span class="p">,</span>
+            <span class="n">t_delta</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">t_delta</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="n">table</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_table</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">time_ref</span><span class="p">)</span>
@@ -443,9 +509,7 @@ function checkPageExistsAndRedirect(event) {
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">temporal_model</span> <span class="o">=</span> <span class="n">evaluator</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">temporal_model</span>
 
-            <span class="k">if</span> <span class="p">(</span>
-                <span class="n">temporal_model</span> <span class="o">==</span> <span class="s2">&quot;TemplateTemporalModel&quot;</span>
-            <span class="p">):</span>  <span class="c1"># check the condition when the format model is defined</span>
+            <span class="k">if</span> <span class="n">temporal_model</span><span class="o">.</span><span class="n">is_energy_dependent</span><span class="p">:</span>
                 <span class="n">table</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sample_coord_time_energy</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">evaluator</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">flux</span> <span class="o">=</span> <span class="n">evaluator</span><span class="o">.</span><span class="n">compute_flux</span><span class="p">()</span>
