@@ -1,0 +1,169 @@
+HpxGeom
+=======
+
+.. currentmodule:: gammapy.maps
+
+.. autoclass:: HpxGeom
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~HpxGeom.as_energy_true
+      ~HpxGeom.axes
+      ~HpxGeom.axes_names
+      ~HpxGeom.center_coord
+      ~HpxGeom.center_pix
+      ~HpxGeom.center_skydir
+      ~HpxGeom.data_shape
+      ~HpxGeom.data_shape_axes
+      ~HpxGeom.frame
+      ~HpxGeom.has_energy_axis
+      ~HpxGeom.ipix
+      ~HpxGeom.is_allsky
+      ~HpxGeom.is_flat
+      ~HpxGeom.is_hpx
+      ~HpxGeom.is_image
+      ~HpxGeom.is_region
+      ~HpxGeom.is_regular
+      ~HpxGeom.ndim
+      ~HpxGeom.nest
+      ~HpxGeom.npix
+      ~HpxGeom.npix_max
+      ~HpxGeom.nside
+      ~HpxGeom.order
+      ~HpxGeom.ordering
+      ~HpxGeom.pixel_scales
+      ~HpxGeom.projection
+      ~HpxGeom.region
+      ~HpxGeom.shape_axes
+      ~HpxGeom.width
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~HpxGeom.contains
+      ~HpxGeom.contains_pix
+      ~HpxGeom.coord_to_idx
+      ~HpxGeom.coord_to_pix
+      ~HpxGeom.copy
+      ~HpxGeom.create
+      ~HpxGeom.crop
+      ~HpxGeom.cutout
+      ~HpxGeom.data_nbytes
+      ~HpxGeom.downsample
+      ~HpxGeom.drop
+      ~HpxGeom.energy_mask
+      ~HpxGeom.from_hdu
+      ~HpxGeom.from_hdulist
+      ~HpxGeom.from_header
+      ~HpxGeom.get_coord
+      ~HpxGeom.get_idx
+      ~HpxGeom.get_index_list
+      ~HpxGeom.global_to_local
+      ~HpxGeom.interp_weights
+      ~HpxGeom.is_aligned
+      ~HpxGeom.is_allclose
+      ~HpxGeom.local_to_global
+      ~HpxGeom.pad
+      ~HpxGeom.pix_to_coord
+      ~HpxGeom.pix_to_idx
+      ~HpxGeom.region_mask
+      ~HpxGeom.rename_axes
+      ~HpxGeom.replace_axis
+      ~HpxGeom.resample_axis
+      ~HpxGeom.separation
+      ~HpxGeom.slice_by_idx
+      ~HpxGeom.solid_angle
+      ~HpxGeom.squash
+      ~HpxGeom.to_bands_hdu
+      ~HpxGeom.to_binsz
+      ~HpxGeom.to_cube
+      ~HpxGeom.to_header
+      ~HpxGeom.to_image
+      ~HpxGeom.to_nside
+      ~HpxGeom.to_swapped
+      ~HpxGeom.to_wcs_geom
+      ~HpxGeom.to_wcs_tiles
+      ~HpxGeom.upsample
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: as_energy_true
+   .. autoattribute:: axes
+   .. autoattribute:: axes_names
+   .. autoattribute:: center_coord
+   .. autoattribute:: center_pix
+   .. autoattribute:: center_skydir
+   .. autoattribute:: data_shape
+   .. autoattribute:: data_shape_axes
+   .. autoattribute:: frame
+   .. autoattribute:: has_energy_axis
+   .. autoattribute:: ipix
+   .. autoattribute:: is_allsky
+   .. autoattribute:: is_flat
+   .. autoattribute:: is_hpx
+   .. autoattribute:: is_image
+   .. autoattribute:: is_region
+   .. autoattribute:: is_regular
+   .. autoattribute:: ndim
+   .. autoattribute:: nest
+   .. autoattribute:: npix
+   .. autoattribute:: npix_max
+   .. autoattribute:: nside
+   .. autoattribute:: order
+   .. autoattribute:: ordering
+   .. autoattribute:: pixel_scales
+   .. autoattribute:: projection
+   .. autoattribute:: region
+   .. autoattribute:: shape_axes
+   .. autoattribute:: width
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: contains
+   .. automethod:: contains_pix
+   .. automethod:: coord_to_idx
+   .. automethod:: coord_to_pix
+   .. automethod:: copy
+   .. automethod:: create
+   .. automethod:: crop
+   .. automethod:: cutout
+   .. automethod:: data_nbytes
+   .. automethod:: downsample
+   .. automethod:: drop
+   .. automethod:: energy_mask
+   .. automethod:: from_hdu
+   .. automethod:: from_hdulist
+   .. automethod:: from_header
+   .. automethod:: get_coord
+   .. automethod:: get_idx
+   .. automethod:: get_index_list
+   .. automethod:: global_to_local
+   .. automethod:: interp_weights
+   .. automethod:: is_aligned
+   .. automethod:: is_allclose
+   .. automethod:: local_to_global
+   .. automethod:: pad
+   .. automethod:: pix_to_coord
+   .. automethod:: pix_to_idx
+   .. automethod:: region_mask
+   .. automethod:: rename_axes
+   .. automethod:: replace_axis
+   .. automethod:: resample_axis
+   .. automethod:: separation
+   .. automethod:: slice_by_idx
+   .. automethod:: solid_angle
+   .. automethod:: squash
+   .. automethod:: to_bands_hdu
+   .. automethod:: to_binsz
+   .. automethod:: to_cube
+   .. automethod:: to_header
+   .. automethod:: to_image
+   .. automethod:: to_nside
+   .. automethod:: to_swapped
+   .. automethod:: to_wcs_geom
+   .. automethod:: to_wcs_tiles
+   .. automethod:: upsample
