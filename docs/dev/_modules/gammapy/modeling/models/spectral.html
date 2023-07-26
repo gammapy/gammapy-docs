@@ -188,7 +188,7 @@ function checkPageExistsAndRedirect(event) {
 
             $("#version_switcher_menu").append(node);
             // replace dropdown button text with the preferred display name of
-            // this version, rather than using sphinx's 1.2.dev416+g3bb9cab6a variable.
+            // this version, rather than using sphinx's 1.2.dev445+gf6bc79508 variable.
             // also highlight the dropdown entry for the currently-viewed
             // version's entry
             if (entry.version == "dev") {
@@ -476,6 +476,45 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">            Tuple of flux and flux error.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_propagate_error</span><span class="p">(</span><span class="n">epsilon</span><span class="o">=</span><span class="n">epsilon</span><span class="p">,</span> <span class="n">fct</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="o">=</span><span class="n">energy</span><span class="p">)</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">pivot_energy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The pivot or decorrelation energy, for a given spectral model calculated numerically.</span>
+<span class="sd">        It is defined as the energy at which the correlation between the spectral parameters is minimized.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        pivot energy : `~astropy.units.Quantity`</span>
+<span class="sd">            The energy at which the statistical error in the computed flux is smallest.</span>
+<span class="sd">            If no minimum is found, NaN will be returned.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">x_unit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reference</span><span class="o">.</span><span class="n">unit</span>
+
+        <span class="k">def</span> <span class="nf">min_func</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;Function to minimize&quot;&quot;&quot;</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+            <span class="n">dnde</span><span class="p">,</span> <span class="n">dnde_error</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">evaluate_error</span><span class="p">(</span><span class="n">x</span> <span class="o">*</span> <span class="n">x_unit</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">dnde_error</span> <span class="o">/</span> <span class="n">dnde</span>
+
+        <span class="n">bounds</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reference</span><span class="o">.</span><span class="n">value</span><span class="p">)</span> <span class="o">-</span> <span class="mi">3</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reference</span><span class="o">.</span><span class="n">value</span><span class="p">)</span> <span class="o">+</span> <span class="mi">3</span><span class="p">]</span>
+
+        <span class="n">std</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">min_func</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">bounds</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">bounds</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">100</span><span class="p">)))</span>
+        <span class="k">if</span> <span class="n">std</span> <span class="o">&lt;</span> <span class="mf">1e-5</span><span class="p">:</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;The relative error on the flux does not depend on energy. No pivot energy found.&quot;</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span> <span class="o">*</span> <span class="n">x_unit</span>
+
+        <span class="n">minimizer</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">optimize</span><span class="o">.</span><span class="n">minimize_scalar</span><span class="p">(</span><span class="n">min_func</span><span class="p">,</span> <span class="n">bounds</span><span class="o">=</span><span class="n">bounds</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">minimizer</span><span class="o">.</span><span class="n">success</span><span class="p">:</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;No minima found in the relative error on the flux. Pivot energy computation failed.&quot;</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span> <span class="o">*</span> <span class="n">x_unit</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">minimizer</span><span class="o">.</span><span class="n">x</span><span class="p">)</span> <span class="o">*</span> <span class="n">x_unit</span>
 
 <div class="viewcode-block" id="SpectralModel.integral"><a class="viewcode-back" href="../../../../api/gammapy.modeling.models.SpectralModel.html#gammapy.modeling.models.SpectralModel.integral">[docs]</a>    <span class="k">def</span> <span class="nf">integral</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy_min</span><span class="p">,</span> <span class="n">energy_max</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Integrate spectral model numerically if no analytical solution defined.</span>
@@ -1079,13 +1118,18 @@ function checkPageExistsAndRedirect(event) {
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">pivot_energy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;The decorrelation energy is defined as:</span>
+<span class="w">        </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;The pivot or decorrelation energy is defined as:</span>
 
 <span class="sd">        .. math::</span>
 
 <span class="sd">            E_D = E_0 * \exp{cov(\phi_0, \Gamma) / (\phi_0 \Delta \Gamma^2)}</span>
 
 <span class="sd">        Formula (1) in https://arxiv.org/pdf/0910.4881.pdf</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        pivot energy : `~astropy.units.Quantity`</span>
+<span class="sd">            If no minimum is found, NaN will be returned.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">index_err</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">error</span>
         <span class="n">reference</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reference</span><span class="o">.</span><span class="n">quantity</span>
@@ -1172,13 +1216,18 @@ function checkPageExistsAndRedirect(event) {
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">pivot_energy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;The decorrelation energy is defined as:</span>
+<span class="w">        </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;The pivot or decorrelation energy is defined as:</span>
 
 <span class="sd">        .. math::</span>
 
 <span class="sd">            E_D = E_0 * \exp{cov(\phi_0, \Gamma) / (\phi_0 \Delta \Gamma^2)}</span>
 
 <span class="sd">        Formula (1) in https://arxiv.org/pdf/0910.4881.pdf</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        pivot energy : `~astropy.units.Quantity`</span>
+<span class="sd">            If no minimum is found, NaN will be returned.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">tilt_err</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tilt</span><span class="o">.</span><span class="n">error</span>
         <span class="n">reference</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reference</span><span class="o">.</span><span class="n">quantity</span>
