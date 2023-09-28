@@ -188,7 +188,7 @@ function checkPageExistsAndRedirect(event) {
 
             $("#version_switcher_menu").append(node);
             // replace dropdown button text with the preferred display name of
-            // this version, rather than using sphinx's 1.2.dev570+g640deae68 variable.
+            // this version, rather than using sphinx's 1.2.dev577+gd4a7e7840 variable.
             // also highlight the dropdown entry for the currently-viewed
             // version's entry
             if (entry.version == "dev") {
@@ -266,6 +266,7 @@ function checkPageExistsAndRedirect(event) {
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">from</span> <span class="nn">scipy.interpolate</span> <span class="kn">import</span> <span class="n">CubicSpline</span>
 <span class="kn">from</span> <span class="nn">scipy.optimize</span> <span class="kn">import</span> <span class="n">curve_fit</span>
+<span class="kn">from</span> <span class="nn">scipy.stats</span> <span class="kn">import</span> <span class="n">norm</span>
 <span class="kn">from</span> <span class="nn">astropy.visualization</span> <span class="kn">import</span> <span class="n">make_lupton_rgb</span>
 <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
 
@@ -468,9 +469,10 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">        Axis object to plot on. If a list of Axis is provided it has to be the same length as the length of _map.data.</span>
 <span class="sd">    ncols : int</span>
 <span class="sd">        Number of columns to plot if a &quot;plot grid&quot; was to be done.</span>
-<span class="sd">    func : function object</span>
-<span class="sd">        The function to pass to `scipy.optimize.curve_fit`. Default is None.</span>
-<span class="sd">        If None, no fit will be done.</span>
+<span class="sd">    func : function object or str</span>
+<span class="sd">        The function used to fit a map data histogram or &quot;norm&quot;. Default is None.</span>
+<span class="sd">        If None, no fit will be performed. If &quot;norm&quot; is given, `scipy.stats.norm.pdf`</span>
+<span class="sd">        will be passed to `scipy.optimize.curve_fit`.</span>
 <span class="sd">    kwargs_hist : dict</span>
 <span class="sd">        Keyword arguments to pass to `matplotlib.pyplot.hist`.</span>
 <span class="sd">    kwargs_axes : dict</span>
@@ -480,6 +482,8 @@ function checkPageExistsAndRedirect(event) {
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
+<span class="sd">    axes : `~numpy.ndarray` of `~matplotlib.pyplot.Axes`</span>
+<span class="sd">        Array of Axes.</span>
 <span class="sd">    result_list : list of dict</span>
 <span class="sd">        List of dictionnary that contains the results of `scipy.optimize.curve_fit`. The number of elements in the list</span>
 <span class="sd">        correspond to the dimension of the non-spatial axis of the map.</span>
@@ -490,9 +494,6 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">            * `covar` : the covariance matrix for the fitted parameters `param`</span>
 <span class="sd">            * `info_dict` : the `infodict` return of `scipy.optimize.curve_fit`</span>
 
-<span class="sd">    axes : `~numpy.ndarray` of `~matplotlib.pyplot.Axes`</span>
-<span class="sd">        Array of Axes.</span>
-
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
 <span class="sd">    &gt;&gt;&gt; from gammapy.datasets import MapDataset</span>
@@ -501,8 +502,10 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">    &gt;&gt;&gt; from gammapy.visualization import plot_distribution</span>
 <span class="sd">    &gt;&gt;&gt; dataset = MapDataset.read(&quot;$GAMMAPY_DATA/cta-1dc-gc/cta-1dc-gc.fits.gz&quot;)</span>
 <span class="sd">    &gt;&gt;&gt; tsmap_est = TSMapEstimator().run(dataset)</span>
+<span class="sd">    &gt;&gt;&gt; axs, res = plot_distribution(tsmap_est.sqrt_ts, func=&quot;norm&quot;, kwargs_hist={&#39;bins&#39;: 75, &#39;range&#39;: (-10, 10), &#39;density&#39;: True})</span>
+<span class="sd">    &gt;&gt;&gt; # Equivalently, one can do the following:</span>
 <span class="sd">    &gt;&gt;&gt; func = lambda x, mu, sig : norm.pdf(x, loc=mu, scale=sig)</span>
-<span class="sd">    &gt;&gt;&gt; res, ax = plot_distribution(tsmap_est.sqrt_ts, func=func, kwargs_hist={&#39;bins&#39;: 75, &#39;range&#39;: (-10, 10), &#39;density&#39;: True})</span>
+<span class="sd">    &gt;&gt;&gt; axs, res = plot_distribution(tsmap_est.sqrt_ts, func=func, kwargs_hist={&#39;bins&#39;: 75, &#39;range&#39;: (-10, 10), &#39;density&#39;: True})</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="kn">from</span> <span class="nn">gammapy.maps</span> <span class="kn">import</span> <span class="n">WcsNDMap</span>  <span class="c1"># import here to avoid circular import</span>
@@ -557,9 +560,32 @@ function checkPageExistsAndRedirect(event) {
         <span class="n">n</span><span class="p">,</span> <span class="n">bins</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">axe</span><span class="o">.</span><span class="n">hist</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs_hist</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">func</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs_plot_fit</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;Fit&quot;</span><span class="p">}</span>
             <span class="n">centers</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">bins</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">+</span> <span class="n">bins</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
 
-            <span class="n">pars</span><span class="p">,</span> <span class="n">cov</span><span class="p">,</span> <span class="n">infodict</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">curve_fit</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">centers</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs_fit</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">func</span> <span class="o">==</span> <span class="s2">&quot;norm&quot;</span><span class="p">:</span>
+
+                <span class="k">def</span> <span class="nf">func</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">sigma</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="n">norm</span><span class="o">.</span><span class="n">pdf</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">sigma</span><span class="p">)</span>
+
+                <span class="n">pars</span><span class="p">,</span> <span class="n">cov</span><span class="p">,</span> <span class="n">infodict</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">curve_fit</span><span class="p">(</span>
+                    <span class="n">func</span><span class="p">,</span> <span class="n">centers</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs_fit</span>
+                <span class="p">)</span>
+
+                <span class="n">mu</span><span class="p">,</span> <span class="n">sig</span> <span class="o">=</span> <span class="n">pars</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">pars</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+                <span class="n">err_mu</span><span class="p">,</span> <span class="n">err_sig</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">cov</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]),</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">cov</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span>
+
+                <span class="n">label_norm</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="sa">r</span><span class="s2">&quot;$\mu$ = </span><span class="si">{:.2f}</span><span class="s2"> ± </span><span class="si">{:.2E}</span><span class="s2">\n$\sigma$ = </span><span class="si">{:.2f}</span><span class="s2"> ± </span><span class="si">{:.2E}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                        <span class="n">mu</span><span class="p">,</span> <span class="n">err_mu</span><span class="p">,</span> <span class="n">sig</span><span class="p">,</span> <span class="n">err_sig</span>
+                    <span class="p">)</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;\n&quot;</span><span class="p">,</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">kwargs_plot_fit</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">label_norm</span>
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">pars</span><span class="p">,</span> <span class="n">cov</span><span class="p">,</span> <span class="n">infodict</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">curve_fit</span><span class="p">(</span>
+                    <span class="n">func</span><span class="p">,</span> <span class="n">centers</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs_fit</span>
+                <span class="p">)</span>
 
             <span class="n">axis_edges</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="n">wcs_map</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">edges</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span>
@@ -577,12 +603,12 @@ function checkPageExistsAndRedirect(event) {
             <span class="n">xmin</span><span class="p">,</span> <span class="n">xmax</span> <span class="o">=</span> <span class="n">kwargs_hist</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;range&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">d</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">d</span><span class="p">)))</span>
             <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">xmin</span><span class="p">,</span> <span class="n">xmax</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)</span>
 
-            <span class="n">axe</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">func</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">pars</span><span class="p">),</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Fit&quot;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;black&quot;</span><span class="p">)</span>
+            <span class="n">axe</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">func</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">pars</span><span class="p">),</span> <span class="n">lw</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;black&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs_plot_fit</span><span class="p">)</span>
 
         <span class="n">axe</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs_axes</span><span class="p">)</span>
         <span class="n">axe</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
 
-    <span class="k">return</span> <span class="n">result_list</span><span class="p">,</span> <span class="n">axes</span></div>
+    <span class="k">return</span> <span class="n">axes</span><span class="p">,</span> <span class="n">result_list</span></div>
 </pre></div>
 
               </div>
