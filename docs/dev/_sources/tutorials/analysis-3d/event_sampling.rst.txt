@@ -92,7 +92,7 @@ We will work with the following functions and classes:
 -  `~gammapy.datasets.MapDatasetEventSampler`
 -  `~gammapy.data.EventList`
 
-.. GENERATED FROM PYTHON SOURCE LINES 79-84
+.. GENERATED FROM PYTHON SOURCE LINES 78-83
 
 Setup
 -----
@@ -100,7 +100,7 @@ Setup
 As usual, let’s start with some general imports…
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 84-113
+.. GENERATED FROM PYTHON SOURCE LINES 83-115
 
 .. code-block:: python3
 
@@ -113,10 +113,13 @@ As usual, let’s start with some general imports…
     from astropy.time import Time
     from regions import CircleSkyRegion
     import matplotlib.pyplot as plt
-
-    # %matplotlib inline
     from IPython.display import display
-    from gammapy.data import DataStore, Observation, observatory_locations
+    from gammapy.data import (
+        DataStore,
+        FixedPointingInfo,
+        Observation,
+        observatory_locations,
+    )
     from gammapy.datasets import MapDataset, MapDatasetEventSampler
     from gammapy.irf import load_irf_dict_from_file
     from gammapy.makers import MapDatasetMaker
@@ -140,19 +143,18 @@ As usual, let’s start with some general imports…
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 114-116
+.. GENERATED FROM PYTHON SOURCE LINES 116-118
 
 Check setup
 -----------
 
-.. GENERATED FROM PYTHON SOURCE LINES 116-121
+.. GENERATED FROM PYTHON SOURCE LINES 118-122
 
 .. code-block:: python3
 
     from gammapy.utils.check import check_tutorials_setup
 
     check_tutorials_setup()
-
 
 
 
@@ -173,7 +175,7 @@ Check setup
 
     Gammapy package:
 
-            version                : 1.2.dev611+gb038566e9 
+            version                : 1.2.dev622+g40cb08231 
             path                   : /home/runner/work/gammapy-docs/gammapy-docs/gammapy/.tox/build_docs/lib/python3.9/site-packages/gammapy 
 
 
@@ -195,7 +197,7 @@ Check setup
             naima                  : 0.10.0     
             emcee                  : 3.1.4      
             corner                 : 2.2.2      
-            ray                    : 2.7.0      
+            ray                    : 2.7.1      
 
 
     Gammapy environment variables:
@@ -206,10 +208,10 @@ Check setup
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 122-135
+.. GENERATED FROM PYTHON SOURCE LINES 123-135
 
 Define an Observation
-~~~~~~~~~~~~~~~~~~~~~
+---------------------
 
 You can firstly create a `~gammapy.data.Observations` object that
 contains the pointing position, the GTIs and the IRF you want to
@@ -221,8 +223,7 @@ Galactic Center. We also fix the exposure time to 1 hr.
 
 Let’s start with some initial settings:
 
-
-.. GENERATED FROM PYTHON SOURCE LINES 135-143
+.. GENERATED FROM PYTHON SOURCE LINES 135-149
 
 .. code-block:: python3
 
@@ -230,8 +231,15 @@ Let’s start with some initial settings:
     path = Path("$GAMMAPY_DATA/cta-caldb")
     irf_filename = "Prod5-South-20deg-AverageAz-14MSTs37SSTs.180000s-v0.1.fits.gz"
 
-    pointing = SkyCoord(0.0, 0.0, frame="galactic", unit="deg")
+    # telescope is pointing at a fixed position in ICRS for the observation
+    pointing = FixedPointingInfo(
+        fixed_icrs=SkyCoord(0.0, 0.0, frame="galactic", unit="deg").icrs,
+    )
     livetime = 1 * u.hr
+    location = observatory_locations["cta_south"]
+
+
+    irfs = load_irf_dict_from_file(path / irf_filename)
 
 
 
@@ -240,19 +248,15 @@ Let’s start with some initial settings:
 
 
 
-
-.. GENERATED FROM PYTHON SOURCE LINES 144-146
+.. GENERATED FROM PYTHON SOURCE LINES 150-152
 
 Now you can create the observation:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 146-159
+.. GENERATED FROM PYTHON SOURCE LINES 152-162
 
 .. code-block:: python3
 
-
-    irfs = load_irf_dict_from_file(path / irf_filename)
-    location = observatory_locations["cta_south"]
 
     observation = Observation.create(
         obs_id=1001,
@@ -261,7 +265,7 @@ Now you can create the observation:
         irfs=irfs,
         location=location,
     )
-
+    print(observation)
 
 
 
@@ -271,16 +275,24 @@ Now you can create the observation:
 
  .. code-block:: none
 
-    /home/runner/work/gammapy-docs/gammapy-docs/gammapy/.tox/build_docs/lib/python3.9/site-packages/gammapy/data/observations.py:227: GammapyDeprecationWarning: Pointing will be required to be provided as FixedPointingInfo
-      warnings.warn(
+    Observation
+
+            obs id            : 1001 
+            tstart            : 51544.00
+            tstop             : 51544.04
+            duration          : 3600.00 s
+            pointing (icrs)   : 266.4 deg, -28.9 deg
+
+            deadtime fraction : 0.0%
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 160-182
+
+.. GENERATED FROM PYTHON SOURCE LINES 163-185
 
 Define the MapDataset
-~~~~~~~~~~~~~~~~~~~~~
+---------------------
 
 Let’s generate the `~gammapy.datasets.Dataset` object (for more info
 on `~gammapy.datasets.Dataset` objects, please checkout
@@ -302,7 +314,7 @@ the dataset to a field of view of 2degx2deg and we bin the spatial map
 with pixels of 0.02 deg.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 182-198
+.. GENERATED FROM PYTHON SOURCE LINES 185-200
 
 .. code-block:: python3
 
@@ -314,7 +326,7 @@ with pixels of 0.02 deg.
     migra_axis = MapAxis.from_bounds(0.5, 2, nbin=150, node_type="edges", name="migra")
 
     geom = WcsGeom.create(
-        skydir=pointing,
+        skydir=pointing.fixed_icrs,
         width=(2, 2),
         binsz=0.02,
         frame="galactic",
@@ -328,8 +340,7 @@ with pixels of 0.02 deg.
 
 
 
-
-.. GENERATED FROM PYTHON SOURCE LINES 199-204
+.. GENERATED FROM PYTHON SOURCE LINES 201-206
 
 In the following, the dataset is created by selecting the effective
 area, background model, the PSF and the Edisp from the IRF. The dataset
@@ -337,7 +348,7 @@ thus produced can be saved into a FITS file just using the `write()`
 function. We put it into the `evt_sampling` sub-folder:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 206-219
+.. GENERATED FROM PYTHON SOURCE LINES 208-220
 
 .. code-block:: python3
 
@@ -360,18 +371,17 @@ function. We put it into the `evt_sampling` sub-folder:
 
 
 
-
-.. GENERATED FROM PYTHON SOURCE LINES 220-227
+.. GENERATED FROM PYTHON SOURCE LINES 221-228
 
 Define the Sky model: a point-like source
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-----------------------------------------
 
 Now let’s define a sky model for a point-like source centered 0.5
 deg far from the Galactic Center and with a power-law spectrum. We then
 save the model into a yaml file.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 227-249
+.. GENERATED FROM PYTHON SOURCE LINES 228-250
 
 .. code-block:: python3
 
@@ -404,7 +414,7 @@ save the model into a yaml file.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 250-256
+.. GENERATED FROM PYTHON SOURCE LINES 251-257
 
 Sampling the source and background events
 -----------------------------------------
@@ -413,14 +423,13 @@ Now, we can finally add the `~gammapy.modeling.models.SkyModel` we
 want to event-sample to the `~gammapy.datasets.Dataset` container:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 256-261
+.. GENERATED FROM PYTHON SOURCE LINES 257-261
 
 .. code-block:: python3
 
 
     dataset.models = models
     print(dataset.models)
-
 
 
 
@@ -472,7 +481,7 @@ object. From the latter, the
 data information.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 272-276
+.. GENERATED FROM PYTHON SOURCE LINES 272-275
 
 .. code-block:: python3
 
@@ -486,8 +495,7 @@ data information.
 
 
 
-
-.. GENERATED FROM PYTHON SOURCE LINES 277-284
+.. GENERATED FROM PYTHON SOURCE LINES 276-283
 
 The output of the event-sampler is an event list with coordinates,
 energies (true and reconstructed) and time of arrivals of the source and
@@ -497,14 +505,13 @@ Source and background events are flagged by the MC_ID identifier (where
 0 is the default identifier for the background).
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 284-289
+.. GENERATED FROM PYTHON SOURCE LINES 283-287
 
 .. code-block:: python3
 
 
     print(f"Source events: {(events.table['MC_ID'] == 1).sum()}")
     print(f"Background events: {(events.table['MC_ID'] == 0).sum()}")
-
 
 
 
@@ -520,19 +527,18 @@ Source and background events are flagged by the MC_ID identifier (where
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 290-292
+.. GENERATED FROM PYTHON SOURCE LINES 288-290
 
 We can inspect the properties of the simulated events as follows:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 292-297
+.. GENERATED FROM PYTHON SOURCE LINES 290-294
 
 .. code-block:: python3
 
 
     events.select_offset([0, 1] * u.deg).peek()
     plt.show()
-
 
 
 
@@ -546,14 +552,14 @@ We can inspect the properties of the simulated events as follows:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 298-302
+.. GENERATED FROM PYTHON SOURCE LINES 295-299
 
 By default, the `~gammapy.datasets.MapDatasetEventSampler` fills the
 metadata keyword `OBJECT` in the event list using the first model of
 the SkyModel object. You can change it with the following commands:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 302-306
+.. GENERATED FROM PYTHON SOURCE LINES 299-302
 
 .. code-block:: python3
 
@@ -567,14 +573,13 @@ the SkyModel object. You can change it with the following commands:
 
 
 
-
-.. GENERATED FROM PYTHON SOURCE LINES 307-310
+.. GENERATED FROM PYTHON SOURCE LINES 303-306
 
 Let’s write the event list and its GTI extension to a FITS file. We make
 use of `fits` library in `astropy`:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 310-318
+.. GENERATED FROM PYTHON SOURCE LINES 306-313
 
 .. code-block:: python3
 
@@ -584,7 +589,6 @@ use of `fits` library in `astropy`:
     hdu_gti = fits.BinTableHDU(dataset.gti.table, name="GTI")
     hdu_all = fits.HDUList([primary_hdu, hdu_evt, hdu_gti])
     hdu_all.writeto("./event_sampling/events_0001.fits", overwrite=True)
-
 
 
 
@@ -600,7 +604,7 @@ use of `fits` library in `astropy`:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 319-324
+.. GENERATED FROM PYTHON SOURCE LINES 314-319
 
 Generate a skymap
 ~~~~~~~~~~~~~~~~~
@@ -608,7 +612,7 @@ Generate a skymap
 A skymap of the simulated events can be obtained with:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 324-331
+.. GENERATED FROM PYTHON SOURCE LINES 319-325
 
 .. code-block:: python3
 
@@ -617,7 +621,6 @@ A skymap of the simulated events can be obtained with:
     counts.fill_events(events)
     counts.sum_over_axes().plot(add_cbar=True)
     plt.show()
-
 
 
 
@@ -631,10 +634,10 @@ A skymap of the simulated events can be obtained with:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 332-342
+.. GENERATED FROM PYTHON SOURCE LINES 326-336
 
 Fit the simulated data
-~~~~~~~~~~~~~~~~~~~~~~
+----------------------
 
 We can now check the sake of the event sampling by fitting the data.
  We make use of the same
@@ -644,7 +647,7 @@ and we fill the `~gammapy.datasets.Dataset` with the sampled events.
 We set the `counts` map to the `dataset`:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 342-349
+.. GENERATED FROM PYTHON SOURCE LINES 336-342
 
 .. code-block:: python3
 
@@ -661,20 +664,18 @@ We set the `counts` map to the `dataset`:
 
 
 
-
-.. GENERATED FROM PYTHON SOURCE LINES 350-352
+.. GENERATED FROM PYTHON SOURCE LINES 343-345
 
 Let’s fit the data and look at the results:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 354-359
+.. GENERATED FROM PYTHON SOURCE LINES 347-351
 
 .. code-block:: python3
 
     fit = Fit()
     result = fit.run(dataset)
     print(result)
-
 
 
 
@@ -690,8 +691,8 @@ Let’s fit the data and look at the results:
             method     : migrad
             success    : True
             message    : Optimization terminated successfully.
-            nfev       : 104
-            total stat : 76405.24
+            nfev       : 102
+            total stat : 76404.71
 
     CovarianceResult
 
@@ -704,12 +705,12 @@ Let’s fit the data and look at the results:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 360-362
+.. GENERATED FROM PYTHON SOURCE LINES 352-354
 
 The results looks great!
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 365-375
+.. GENERATED FROM PYTHON SOURCE LINES 356-366
 
 Time variable source using a lightcurve
 ---------------------------------------
@@ -722,7 +723,7 @@ observation.
 First of all, let’s create a lightcurve:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 375-383
+.. GENERATED FROM PYTHON SOURCE LINES 366-373
 
 .. code-block:: python3
 
@@ -740,8 +741,7 @@ First of all, let’s create a lightcurve:
 
 
 
-
-.. GENERATED FROM PYTHON SOURCE LINES 384-389
+.. GENERATED FROM PYTHON SOURCE LINES 374-379
 
 where we defined the time axis starting from the reference time
 `t_ref` up to the requested exposure (`livetime`). The bin size of
@@ -749,13 +749,13 @@ the time-axis is quite arbitrary but, as above for spatial and energy
 binning, the finer the better.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 392-395
+.. GENERATED FROM PYTHON SOURCE LINES 381-384
 
 Then, we can create the sky model. Just for the sake of the example,
 let’s boost the flux of the simulated source of an order of magnitude:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 395-413
+.. GENERATED FROM PYTHON SOURCE LINES 384-402
 
 .. code-block:: python3
 
@@ -784,20 +784,19 @@ let’s boost the flux of the simulated source of an order of magnitude:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 414-417
+.. GENERATED FROM PYTHON SOURCE LINES 403-406
 
 For simplicity, we use the same dataset defined for the previous
 example:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 417-422
+.. GENERATED FROM PYTHON SOURCE LINES 406-410
 
 .. code-block:: python3
 
 
     dataset.models = models
     print(dataset.models)
-
 
 
 
@@ -840,12 +839,12 @@ example:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 423-425
+.. GENERATED FROM PYTHON SOURCE LINES 411-413
 
 And now, let’s simulate the variable source:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 427-434
+.. GENERATED FROM PYTHON SOURCE LINES 415-421
 
 .. code-block:: python3
 
@@ -854,7 +853,6 @@ And now, let’s simulate the variable source:
 
     print(f"Source events: {(events.table['MC_ID'] == 1).sum()}")
     print(f"Background events: {(events.table['MC_ID'] == 0).sum()}")
-
 
 
 
@@ -870,14 +868,14 @@ And now, let’s simulate the variable source:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 435-439
+.. GENERATED FROM PYTHON SOURCE LINES 422-426
 
 We can now inspect the properties of the simulated source. To do that,
 we adopt the `select_region` function that extracts only the events
 into a given `SkyRegion` of a `~gammapy.data.EventList` object:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 439-448
+.. GENERATED FROM PYTHON SOURCE LINES 426-434
 
 .. code-block:: python3
 
@@ -896,20 +894,18 @@ into a given `SkyRegion` of a `~gammapy.data.EventList` object:
 
 
 
-
-.. GENERATED FROM PYTHON SOURCE LINES 449-451
+.. GENERATED FROM PYTHON SOURCE LINES 435-437
 
 Then we can have a quick look to the data with the `peek` function:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 451-456
+.. GENERATED FROM PYTHON SOURCE LINES 437-441
 
 .. code-block:: python3
 
 
     src_events.peek()
     plt.show()
-
 
 
 
@@ -923,13 +919,13 @@ Then we can have a quick look to the data with the `peek` function:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 457-460
+.. GENERATED FROM PYTHON SOURCE LINES 442-445
 
 In the right figure of the bottom panel, it is shown the source
 lightcurve that follows a decay trend as expected.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 463-473
+.. GENERATED FROM PYTHON SOURCE LINES 447-457
 
 Extended source using a template
 --------------------------------
@@ -942,7 +938,7 @@ We proceed following the same steps showed above and we finally have a
 look at the event’s properties:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 473-494
+.. GENERATED FROM PYTHON SOURCE LINES 457-479
 
 .. code-block:: python3
 
@@ -967,6 +963,7 @@ look at the event’s properties:
     dataset.models = models_diffuse
     print(dataset.models)
 
+    ""
 
 
 
@@ -1001,10 +998,11 @@ look at the event’s properties:
 
 
 
+    ''
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 495-502
+.. GENERATED FROM PYTHON SOURCE LINES 480-486
 
 .. code-block:: python3
 
@@ -1013,7 +1011,6 @@ look at the event’s properties:
 
     events.select_offset([0, 1] * u.deg).peek()
     plt.show()
-
 
 
 
@@ -1027,7 +1024,7 @@ look at the event’s properties:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 503-514
+.. GENERATED FROM PYTHON SOURCE LINES 487-498
 
 Simulate multiple event lists
 -----------------------------
@@ -1041,7 +1038,7 @@ Let’s firstly define the time start and the livetime of each
 observation:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 514-518
+.. GENERATED FROM PYTHON SOURCE LINES 498-502
 
 .. code-block:: python3
 
@@ -1056,7 +1053,7 @@ observation:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 519-544
+.. GENERATED FROM PYTHON SOURCE LINES 503-527
 
 .. code-block:: python3
 
@@ -1088,29 +1085,22 @@ observation:
 
 
 
-
 .. rst-class:: sphx-glr-script-out
 
  .. code-block:: none
 
-    /home/runner/work/gammapy-docs/gammapy-docs/gammapy/.tox/build_docs/lib/python3.9/site-packages/gammapy/data/observations.py:227: GammapyDeprecationWarning: Pointing will be required to be provided as FixedPointingInfo
-      warnings.warn(
     /home/runner/work/gammapy-docs/gammapy-docs/gammapy/.tox/build_docs/lib/python3.9/site-packages/gammapy/utils/random/inverse_cdf.py:35: RuntimeWarning: invalid value encountered in divide
       pdf = pdf.ravel() / pdf.sum()
     /home/runner/work/gammapy-docs/gammapy-docs/gammapy/.tox/build_docs/lib/python3.9/site-packages/astropy/units/quantity.py:673: RuntimeWarning: divide by zero encountered in divide
       result = super().__array_ufunc__(function, method, *arrays, **kwargs)
     /home/runner/work/gammapy-docs/gammapy-docs/gammapy/.tox/build_docs/lib/python3.9/site-packages/astropy/units/quantity.py:673: RuntimeWarning: invalid value encountered in divide
       result = super().__array_ufunc__(function, method, *arrays, **kwargs)
-    /home/runner/work/gammapy-docs/gammapy-docs/gammapy/.tox/build_docs/lib/python3.9/site-packages/gammapy/data/observations.py:227: GammapyDeprecationWarning: Pointing will be required to be provided as FixedPointingInfo
-      warnings.warn(
     /home/runner/work/gammapy-docs/gammapy-docs/gammapy/.tox/build_docs/lib/python3.9/site-packages/gammapy/utils/random/inverse_cdf.py:35: RuntimeWarning: invalid value encountered in divide
       pdf = pdf.ravel() / pdf.sum()
     /home/runner/work/gammapy-docs/gammapy-docs/gammapy/.tox/build_docs/lib/python3.9/site-packages/astropy/units/quantity.py:673: RuntimeWarning: divide by zero encountered in divide
       result = super().__array_ufunc__(function, method, *arrays, **kwargs)
     /home/runner/work/gammapy-docs/gammapy-docs/gammapy/.tox/build_docs/lib/python3.9/site-packages/astropy/units/quantity.py:673: RuntimeWarning: invalid value encountered in divide
       result = super().__array_ufunc__(function, method, *arrays, **kwargs)
-    /home/runner/work/gammapy-docs/gammapy-docs/gammapy/.tox/build_docs/lib/python3.9/site-packages/gammapy/data/observations.py:227: GammapyDeprecationWarning: Pointing will be required to be provided as FixedPointingInfo
-      warnings.warn(
     /home/runner/work/gammapy-docs/gammapy-docs/gammapy/.tox/build_docs/lib/python3.9/site-packages/gammapy/utils/random/inverse_cdf.py:35: RuntimeWarning: invalid value encountered in divide
       pdf = pdf.ravel() / pdf.sum()
     /home/runner/work/gammapy-docs/gammapy-docs/gammapy/.tox/build_docs/lib/python3.9/site-packages/astropy/units/quantity.py:673: RuntimeWarning: divide by zero encountered in divide
@@ -1121,13 +1111,13 @@ observation:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 545-548
+.. GENERATED FROM PYTHON SOURCE LINES 528-531
 
 You can now load the event list and the corresponding IRFs with
 `DataStore.from_events_files` :
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 548-555
+.. GENERATED FROM PYTHON SOURCE LINES 531-538
 
 .. code-block:: python3
 
@@ -1156,14 +1146,14 @@ You can now load the event list and the corresponding IRFs with
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 556-560
+.. GENERATED FROM PYTHON SOURCE LINES 539-543
 
 Then you can create the observations from the data store and make your own
 analysis following the instructions in the
 :doc:`/tutorials/starting/analysis_2` tutorial.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 560-566
+.. GENERATED FROM PYTHON SOURCE LINES 543-548
 
 .. code-block:: python3
 
@@ -1171,7 +1161,6 @@ analysis following the instructions in the
     observations = data_store.get_observations()
     observations[0].peek()
     plt.show()
-
 
 
 
@@ -1185,7 +1174,7 @@ analysis following the instructions in the
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 567-575
+.. GENERATED FROM PYTHON SOURCE LINES 549-557
 
 Exercises
 ---------
@@ -1199,7 +1188,7 @@ Exercises
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 1 minutes  2.266 seconds)
+   **Total running time of the script:** ( 0 minutes  51.622 seconds)
 
 
 .. _sphx_glr_download_tutorials_analysis-3d_event_sampling.py:
