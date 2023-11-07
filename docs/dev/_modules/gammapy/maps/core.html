@@ -188,7 +188,7 @@ function checkPageExistsAndRedirect(event) {
 
             $("#version_switcher_menu").append(node);
             // replace dropdown button text with the preferred display name of
-            // this version, rather than using sphinx's 1.2.dev992+g8140b39d2 variable.
+            // this version, rather than using sphinx's 1.2.dev1005+g0eb754593 variable.
             // also highlight the dropdown entry for the currently-viewed
             // version's entry
             if (entry.version == "dev") {
@@ -269,10 +269,12 @@ function checkPageExistsAndRedirect(event) {
 <span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">repeat</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">from</span> <span class="nn">astropy</span> <span class="kn">import</span> <span class="n">units</span> <span class="k">as</span> <span class="n">u</span>
 <span class="kn">from</span> <span class="nn">astropy.io</span> <span class="kn">import</span> <span class="n">fits</span>
 <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">gammapy.utils.parallel</span> <span class="k">as</span> <span class="nn">parallel</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.deprecation</span> <span class="kn">import</span> <span class="n">deprecated</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.random</span> <span class="kn">import</span> <span class="n">InverseCDFSampler</span><span class="p">,</span> <span class="n">get_random_state</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.scripts</span> <span class="kn">import</span> <span class="n">make_path</span>
@@ -1380,6 +1382,57 @@ function checkPageExistsAndRedirect(event) {
                     <span class="p">)</span>
             <span class="n">output_map</span> <span class="o">=</span> <span class="n">output_map</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">preserve_counts</span><span class="o">=</span><span class="n">preserve_counts</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">output_map</span></div>
+
+<div class="viewcode-block" id="Map.reproject_by_image"><a class="viewcode-back" href="../../../api/gammapy.maps.Map.html#gammapy.maps.Map.reproject_by_image">[docs]</a>    <span class="k">def</span> <span class="nf">reproject_by_image</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">geom</span><span class="p">,</span>
+        <span class="n">preserve_counts</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">precision_factor</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reproject each image of a ND map to input 2d geometry.</span>
+
+<span class="sd">        For large maps this method is faster than `reproject_to_geom`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        geom : `~gammapy.maps.Geom`</span>
+<span class="sd">            Target slice geometry (2d)</span>
+<span class="sd">        preserve_counts : bool</span>
+<span class="sd">            Preserve the integral over each bin.  This should be True</span>
+<span class="sd">            if the map is an integral quantity (e.g. counts) and False if</span>
+<span class="sd">            the map is a differential quantity (e.g. intensity).</span>
+<span class="sd">        precision_factor : int</span>
+<span class="sd">            Minimal factor between the bin size of the output map and the oversampled base map.</span>
+<span class="sd">            Used only for the oversampling method.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        output_map : `Map`</span>
+<span class="sd">            Reprojected Map</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">geom</span><span class="o">.</span><span class="n">is_image</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;This method is only valid for 2d geom&quot;</span><span class="p">)</span>
+
+        <span class="n">output_map</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="o">.</span><span class="n">to_cube</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">))</span>
+        <span class="n">maps</span> <span class="o">=</span> <span class="n">parallel</span><span class="o">.</span><span class="n">run_multiprocessing</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_reproject_image</span><span class="p">,</span>
+            <span class="nb">zip</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">iter_by_image</span><span class="p">(),</span>
+                <span class="n">repeat</span><span class="p">(</span><span class="n">geom</span><span class="p">),</span>
+                <span class="n">repeat</span><span class="p">(</span><span class="n">preserve_counts</span><span class="p">),</span>
+                <span class="n">repeat</span><span class="p">(</span><span class="n">precision_factor</span><span class="p">),</span>
+            <span class="p">),</span>
+            <span class="n">task_name</span><span class="o">=</span><span class="s2">&quot;Reprojection&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">ndindex</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">shape_axes</span><span class="p">):</span>
+            <span class="n">output_map</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">=</span> <span class="n">maps</span><span class="p">[</span><span class="n">idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span><span class="o">.</span><span class="n">data</span>
+        <span class="k">return</span> <span class="n">output_map</span></div>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_reproject_image</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">geom</span><span class="p">,</span> <span class="n">preserve_counts</span><span class="p">,</span> <span class="n">precision_factor</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">image</span><span class="o">.</span><span class="n">reproject_to_geom</span><span class="p">(</span>
+            <span class="n">geom</span><span class="p">,</span> <span class="n">precision_factor</span><span class="o">=</span><span class="n">precision_factor</span><span class="p">,</span> <span class="n">preserve_counts</span><span class="o">=</span><span class="n">preserve_counts</span>
+        <span class="p">)</span>
 
 <div class="viewcode-block" id="Map.fill_events"><a class="viewcode-back" href="../../../api/gammapy.maps.Map.html#gammapy.maps.Map.fill_events">[docs]</a>    <span class="k">def</span> <span class="nf">fill_events</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">events</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Fill event coordinates (`~gammapy.data.EventList`).</span>
