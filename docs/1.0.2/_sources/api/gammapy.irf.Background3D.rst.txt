@@ -1,0 +1,85 @@
+Background3D
+============
+
+.. currentmodule:: gammapy.irf
+
+.. autoclass:: Background3D
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~Background3D.axes
+      ~Background3D.data
+      ~Background3D.default_interp_kwargs
+      ~Background3D.default_unit
+      ~Background3D.fov_alignment
+      ~Background3D.has_offset_axis
+      ~Background3D.is_pointlike
+      ~Background3D.quantity
+      ~Background3D.required_axes
+      ~Background3D.tag
+      ~Background3D.unit
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~Background3D.cumsum
+      ~Background3D.evaluate
+      ~Background3D.from_hdulist
+      ~Background3D.from_table
+      ~Background3D.integral
+      ~Background3D.integrate_log_log
+      ~Background3D.interp_missing_data
+      ~Background3D.is_allclose
+      ~Background3D.normalize
+      ~Background3D.pad
+      ~Background3D.peek
+      ~Background3D.plot_at_energy
+      ~Background3D.read
+      ~Background3D.slice_by_idx
+      ~Background3D.to_2d
+      ~Background3D.to_hdulist
+      ~Background3D.to_table
+      ~Background3D.to_table_hdu
+      ~Background3D.to_unit
+      ~Background3D.write
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: axes
+   .. autoattribute:: data
+   .. autoattribute:: default_interp_kwargs
+   .. autoattribute:: default_unit
+   .. autoattribute:: fov_alignment
+   .. autoattribute:: has_offset_axis
+   .. autoattribute:: is_pointlike
+   .. autoattribute:: quantity
+   .. autoattribute:: required_axes
+   .. autoattribute:: tag
+   .. autoattribute:: unit
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: cumsum
+   .. automethod:: evaluate
+   .. automethod:: from_hdulist
+   .. automethod:: from_table
+   .. automethod:: integral
+   .. automethod:: integrate_log_log
+   .. automethod:: interp_missing_data
+   .. automethod:: is_allclose
+   .. automethod:: normalize
+   .. automethod:: pad
+   .. automethod:: peek
+   .. automethod:: plot_at_energy
+   .. automethod:: read
+   .. automethod:: slice_by_idx
+   .. automethod:: to_2d
+   .. automethod:: to_hdulist
+   .. automethod:: to_table
+   .. automethod:: to_table_hdu
+   .. automethod:: to_unit
+   .. automethod:: write

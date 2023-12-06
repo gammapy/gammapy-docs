@@ -1,0 +1,6 @@
+velocity_glon_glat
+==================
+
+.. currentmodule:: gammapy.utils.coordinates
+
+.. autofunction:: velocity_glon_glat
