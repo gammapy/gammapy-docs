@@ -188,7 +188,7 @@ function checkPageExistsAndRedirect(event) {
 
             $("#version_switcher_menu").append(node);
             // replace dropdown button text with the preferred display name of
-            // this version, rather than using sphinx's 1.2.dev1572+g0dd739944 variable.
+            // this version, rather than using sphinx's 1.2.dev1781+g566e24edd variable.
             // also highlight the dropdown entry for the currently-viewed
             // version's entry
             if (entry.version == "dev") {
@@ -310,6 +310,9 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">        it uses the position of the center of the map by default.</span>
 <span class="sd">    offset_max : str or `~astropy.units.Quantity`</span>
 <span class="sd">        Maximum offset cut.</span>
+<span class="sd">    irfs : {&quot;DL4&quot;, &quot;DL3&quot;}</span>
+<span class="sd">        Whether to use reprojected (&quot;DL4&quot;) or raw (&quot;DL3&quot;) irfs.</span>
+<span class="sd">        Default is &quot;DL4&quot;.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">tag</span> <span class="o">=</span> <span class="s2">&quot;SafeMaskMaker&quot;</span>
@@ -329,6 +332,7 @@ function checkPageExistsAndRedirect(event) {
         <span class="n">position</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">fixed_offset</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">offset_max</span><span class="o">=</span><span class="s2">&quot;3 deg&quot;</span><span class="p">,</span>
+        <span class="n">irfs</span><span class="o">=</span><span class="s2">&quot;DL4&quot;</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="n">methods</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">methods</span><span class="p">)</span>
 
@@ -346,6 +350,12 @@ function checkPageExistsAndRedirect(event) {
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">&quot;`position` and `fixed_offset` attributes are mutually exclusive&quot;</span>
             <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">irfs</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;DL3&quot;</span><span class="p">,</span> <span class="s2">&quot;DL4&quot;</span><span class="p">]:</span>
+            <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Invalid option for irfs: expected &#39;DL3&#39; or &#39;DL4&#39;, got </span><span class="si">{irfs}</span><span class="s2"> instead.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">irfs</span> <span class="o">=</span> <span class="n">irfs</span>
 
 <div class="viewcode-block" id="SafeMaskMaker.make_mask_offset_max"><a class="viewcode-back" href="../../../api/gammapy.makers.SafeMaskMaker.html#gammapy.makers.SafeMaskMaker.make_mask_offset_max">[docs]</a>    <span class="k">def</span> <span class="nf">make_mask_offset_max</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">observation</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Make maximum offset mask.</span>
@@ -387,7 +397,7 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">            Safe data range mask.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">observation</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Method &#39;offset-max&#39; requires an observation object.&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Method &#39;aeff-default&#39; requires an observation object.&quot;</span><span class="p">)</span>
 
         <span class="n">energy_max</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;HI_THRES&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
@@ -409,6 +419,28 @@ function checkPageExistsAndRedirect(event) {
 
         <span class="k">return</span> <span class="n">dataset</span><span class="o">.</span><span class="n">_geom</span><span class="o">.</span><span class="n">energy_mask</span><span class="p">(</span><span class="n">energy_min</span><span class="o">=</span><span class="n">energy_min</span><span class="p">,</span> <span class="n">energy_max</span><span class="o">=</span><span class="n">energy_max</span><span class="p">)</span></div>
 
+    <span class="k">def</span> <span class="nf">_get_offset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation</span><span class="p">):</span>
+        <span class="n">offset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_offset</span>
+        <span class="k">if</span> <span class="n">offset</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span><span class="p">:</span>
+                <span class="n">offset</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">get_pointing_icrs</span><span class="p">(</span><span class="n">observation</span><span class="o">.</span><span class="n">tmid</span><span class="p">)</span><span class="o">.</span><span class="n">separation</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">position</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">offset</span> <span class="o">=</span> <span class="mf">0.0</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span>
+        <span class="k">return</span> <span class="n">offset</span>
+
+    <span class="k">def</span> <span class="nf">_get_position</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">geom</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_offset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">observation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">pointing</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">get_pointing_icrs</span><span class="p">(</span><span class="n">observation</span><span class="o">.</span><span class="n">tmid</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">pointing</span><span class="o">.</span><span class="n">directional_offset_by</span><span class="p">(</span>
+                <span class="n">position_angle</span><span class="o">=</span><span class="mi">0</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span><span class="p">,</span> <span class="n">separation</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fixed_offset</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">geom</span><span class="o">.</span><span class="n">center_skydir</span>
+
 <div class="viewcode-block" id="SafeMaskMaker.make_mask_energy_aeff_max"><a class="viewcode-back" href="../../../api/gammapy.makers.SafeMaskMaker.html#gammapy.makers.SafeMaskMaker.make_mask_energy_aeff_max">[docs]</a>    <span class="k">def</span> <span class="nf">make_mask_energy_aeff_max</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">observation</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Make safe energy mask from effective area maximum value.</span>
 
@@ -424,47 +456,50 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">        mask_safe : `~numpy.ndarray`</span>
 <span class="sd">            Safe data range mask.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_offset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">observation</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">observation</span><span class="si">}</span><span class="s2"> argument is mandatory with </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">fixed_offset</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
         <span class="n">geom</span><span class="p">,</span> <span class="n">exposure</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">_geom</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">exposure</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_offset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">observation</span><span class="p">:</span>
-                <span class="n">position</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">get_pointing_icrs</span><span class="p">(</span>
-                    <span class="n">observation</span><span class="o">.</span><span class="n">tmid</span>
-                <span class="p">)</span><span class="o">.</span><span class="n">directional_offset_by</span><span class="p">(</span>
-                    <span class="n">position_angle</span><span class="o">=</span><span class="mf">0.0</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span><span class="p">,</span> <span class="n">separation</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fixed_offset</span>
-                <span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;observation argument is mandatory with </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">fixed_offset</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">irfs</span> <span class="o">==</span> <span class="s2">&quot;DL3&quot;</span><span class="p">:</span>
+            <span class="n">offset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_offset</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span>
 
-        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span><span class="p">:</span>
-            <span class="n">position</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">position</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">center_skydir</span>
-
-        <span class="n">aeff</span> <span class="o">=</span> <span class="n">exposure</span><span class="o">.</span><span class="n">get_spectrum</span><span class="p">(</span><span class="n">position</span><span class="p">)</span> <span class="o">/</span> <span class="n">exposure</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s2">&quot;livetime&quot;</span><span class="p">]</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">aeff</span><span class="o">.</span><span class="n">data</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">):</span>
-            <span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Effective area is all zero at [</span><span class="si">{</span><span class="n">position</span><span class="o">.</span><span class="n">to_string</span><span class="p">(</span><span class="s1">&#39;dms&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">]. &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;No safe energy band can be defined for the dataset &#39;</span><span class="si">{</span><span class="n">dataset</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;: &quot;</span>
-                <span class="s2">&quot;setting `mask_safe` to all False.&quot;</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span>
+                <span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span> <span class="n">energy_true</span><span class="o">=</span><span class="n">observation</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">edges</span>
             <span class="p">)</span>
-            <span class="k">return</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;bool&quot;</span><span class="p">)</span>
+            <span class="n">valid</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">edges</span><span class="p">[</span>
+                <span class="n">values</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">aeff_percent</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">values</span><span class="p">)</span> <span class="o">/</span> <span class="mi">100</span>
+            <span class="p">]</span>
+            <span class="n">energy_min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">valid</span><span class="p">)</span>
 
-        <span class="n">model</span> <span class="o">=</span> <span class="n">TemplateSpectralModel</span><span class="o">.</span><span class="n">from_region_map</span><span class="p">(</span><span class="n">aeff</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">position</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_position</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">geom</span><span class="p">)</span>
 
-        <span class="n">energy_true</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">energy</span>
-        <span class="n">energy_min</span> <span class="o">=</span> <span class="n">energy_true</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">values</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]]</span>
-        <span class="n">energy_max</span> <span class="o">=</span> <span class="n">energy_true</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">aeff</span> <span class="o">=</span> <span class="n">exposure</span><span class="o">.</span><span class="n">get_spectrum</span><span class="p">(</span><span class="n">position</span><span class="p">)</span> <span class="o">/</span> <span class="n">exposure</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s2">&quot;livetime&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">aeff</span><span class="o">.</span><span class="n">data</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">):</span>
+                <span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Effective area is all zero at [</span><span class="si">{</span><span class="n">position</span><span class="o">.</span><span class="n">to_string</span><span class="p">(</span><span class="s1">&#39;dms&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">]. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;No safe energy band can be defined for the dataset &#39;</span><span class="si">{</span><span class="n">dataset</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;: &quot;</span>
+                    <span class="s2">&quot;setting `mask_safe` to all False.&quot;</span>
+                <span class="p">)</span>
+                <span class="k">return</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;bool&quot;</span><span class="p">)</span>
 
-        <span class="n">aeff_thres</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">aeff_percent</span> <span class="o">/</span> <span class="mi">100</span><span class="p">)</span> <span class="o">*</span> <span class="n">aeff</span><span class="o">.</span><span class="n">quantity</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
-        <span class="n">inversion</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">inverse</span><span class="p">(</span>
-            <span class="n">aeff_thres</span><span class="p">,</span> <span class="n">energy_min</span><span class="o">=</span><span class="n">energy_min</span><span class="p">,</span> <span class="n">energy_max</span><span class="o">=</span><span class="n">energy_max</span>
-        <span class="p">)</span>
+            <span class="n">model</span> <span class="o">=</span> <span class="n">TemplateSpectralModel</span><span class="o">.</span><span class="n">from_region_map</span><span class="p">(</span><span class="n">aeff</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">inversion</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
-            <span class="n">energy_min</span> <span class="o">=</span> <span class="n">inversion</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">energy_true</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">energy</span>
+            <span class="n">energy_min</span> <span class="o">=</span> <span class="n">energy_true</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">values</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]]</span>
+            <span class="n">energy_max</span> <span class="o">=</span> <span class="n">energy_true</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+            <span class="n">aeff_thres</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">aeff_percent</span> <span class="o">/</span> <span class="mi">100</span><span class="p">)</span> <span class="o">*</span> <span class="n">aeff</span><span class="o">.</span><span class="n">quantity</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+            <span class="n">inversion</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">inverse</span><span class="p">(</span>
+                <span class="n">aeff_thres</span><span class="p">,</span> <span class="n">energy_min</span><span class="o">=</span><span class="n">energy_min</span><span class="p">,</span> <span class="n">energy_max</span><span class="o">=</span><span class="n">energy_max</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">inversion</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+                <span class="n">energy_min</span> <span class="o">=</span> <span class="n">inversion</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
         <span class="k">return</span> <span class="n">geom</span><span class="o">.</span><span class="n">energy_mask</span><span class="p">(</span><span class="n">energy_min</span><span class="o">=</span><span class="n">energy_min</span><span class="p">)</span></div>
 
@@ -483,39 +518,27 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">        mask_safe : `~numpy.ndarray`</span>
 <span class="sd">            Safe data range mask.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_offset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">observation</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">observation</span><span class="si">}</span><span class="s2"> argument is mandatory with </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">fixed_offset</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
         <span class="n">edisp</span><span class="p">,</span> <span class="n">geom</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">edisp</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">_geom</span>
-        <span class="n">position</span> <span class="o">=</span> <span class="kc">None</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_offset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">observation</span><span class="p">:</span>
-                <span class="n">pointing</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">get_pointing_icrs</span><span class="p">(</span><span class="n">observation</span><span class="o">.</span><span class="n">tmid</span><span class="p">)</span>
-                <span class="n">position</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">directional_offset_by</span><span class="p">(</span>
-                    <span class="n">position_angle</span><span class="o">=</span><span class="mi">0</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span><span class="p">,</span> <span class="n">separation</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fixed_offset</span>
-                <span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">observation</span><span class="si">}</span><span class="s2"> argument is mandatory with </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">fixed_offset</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">edisp</span><span class="p">,</span> <span class="n">EDispKernelMap</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">position</span><span class="p">:</span>
-                <span class="n">edisp</span> <span class="o">=</span> <span class="n">edisp</span><span class="o">.</span><span class="n">get_edisp_kernel</span><span class="p">(</span><span class="n">position</span><span class="o">=</span><span class="n">position</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">edisp</span> <span class="o">=</span> <span class="n">edisp</span><span class="o">.</span><span class="n">get_edisp_kernel</span><span class="p">(</span><span class="n">position</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">position</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">irfs</span> <span class="o">==</span> <span class="s2">&quot;DL3&quot;</span><span class="p">:</span>
+            <span class="n">offset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_offset</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span>
+            <span class="n">edisp</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">to_edisp_kernel</span><span class="p">(</span><span class="n">offset</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">e_reco</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">_geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span>
-            <span class="k">if</span> <span class="n">position</span><span class="p">:</span>
-                <span class="n">edisp</span> <span class="o">=</span> <span class="n">edisp</span><span class="o">.</span><span class="n">get_edisp_kernel</span><span class="p">(</span><span class="n">position</span><span class="o">=</span><span class="n">position</span><span class="p">,</span> <span class="n">energy_axis</span><span class="o">=</span><span class="n">e_reco</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">edisp</span> <span class="o">=</span> <span class="n">edisp</span><span class="o">.</span><span class="n">get_edisp_kernel</span><span class="p">(</span>
-                    <span class="n">position</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">position</span><span class="p">,</span> <span class="n">energy_axis</span><span class="o">=</span><span class="n">e_reco</span>
-                <span class="p">)</span>
+            <span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;position&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_position</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">geom</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">edisp</span><span class="p">,</span> <span class="n">EDispKernelMap</span><span class="p">):</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;energy_axis&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">_geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span>
+            <span class="n">edisp</span> <span class="o">=</span> <span class="n">edisp</span><span class="o">.</span><span class="n">get_edisp_kernel</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">energy_min</span> <span class="o">=</span> <span class="n">edisp</span><span class="o">.</span><span class="n">get_bias_energy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bias_percent</span> <span class="o">/</span> <span class="mi">100</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">geom</span><span class="o">.</span><span class="n">energy_mask</span><span class="p">(</span><span class="n">energy_min</span><span class="o">=</span><span class="n">energy_min</span><span class="p">)</span></div>
 
-        <span class="n">energy_min</span> <span class="o">=</span> <span class="n">edisp</span><span class="o">.</span><span class="n">get_bias_energy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bias_percent</span> <span class="o">/</span> <span class="mi">100</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">geom</span><span class="o">.</span><span class="n">energy_mask</span><span class="p">(</span><span class="n">energy_min</span><span class="o">=</span><span class="n">energy_min</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span></div>
-
-<div class="viewcode-block" id="SafeMaskMaker.make_mask_energy_bkg_peak"><a class="viewcode-back" href="../../../api/gammapy.makers.SafeMaskMaker.html#gammapy.makers.SafeMaskMaker.make_mask_energy_bkg_peak">[docs]</a>    <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">make_mask_energy_bkg_peak</span><span class="p">(</span><span class="n">dataset</span><span class="p">):</span>
+<div class="viewcode-block" id="SafeMaskMaker.make_mask_energy_bkg_peak"><a class="viewcode-back" href="../../../api/gammapy.makers.SafeMaskMaker.html#gammapy.makers.SafeMaskMaker.make_mask_energy_bkg_peak">[docs]</a>    <span class="k">def</span> <span class="nf">make_mask_energy_bkg_peak</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">observation</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Make safe energy mask based on the binned background.</span>
 
 <span class="sd">        The energy threshold is defined as the lower edge of the energy</span>
@@ -528,6 +551,9 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">        ----------</span>
 <span class="sd">        dataset : `~gammapy.datasets.MapDataset` or `~gammapy.datasets.SpectrumDataset`</span>
 <span class="sd">            Dataset to compute mask for.</span>
+<span class="sd">        observation: `~gammapy.data.Observation`</span>
+<span class="sd">            Observation to compute mask for. It is a mandatory argument when DL3 irfs are used.</span>
+
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -535,11 +561,18 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">            Safe data range mask.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">geom</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">_geom</span>
-        <span class="n">background_spectrum</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">npred_background</span><span class="p">()</span><span class="o">.</span><span class="n">get_spectrum</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">irfs</span> <span class="o">==</span> <span class="s2">&quot;DL3&quot;</span><span class="p">:</span>
+            <span class="n">bkg</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">bkg</span><span class="o">.</span><span class="n">to_2d</span><span class="p">()</span>
+            <span class="n">background_spectrum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ravel</span><span class="p">(</span>
+                <span class="n">bkg</span><span class="o">.</span><span class="n">integral</span><span class="p">(</span><span class="n">axis_name</span><span class="o">=</span><span class="s2">&quot;offset&quot;</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="n">bkg</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;offset&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">bounds</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+            <span class="p">)</span>
+            <span class="n">energy_axis</span> <span class="o">=</span> <span class="n">bkg</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">background_spectrum</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">npred_background</span><span class="p">()</span><span class="o">.</span><span class="n">get_spectrum</span><span class="p">()</span>
+            <span class="n">energy_axis</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span>
+
         <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">background_spectrum</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-        <span class="n">energy_axis</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span>
-        <span class="n">energy_min</span> <span class="o">=</span> <span class="n">energy_axis</span><span class="o">.</span><span class="n">edges</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
-        <span class="k">return</span> <span class="n">geom</span><span class="o">.</span><span class="n">energy_mask</span><span class="p">(</span><span class="n">energy_min</span><span class="o">=</span><span class="n">energy_min</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">geom</span><span class="o">.</span><span class="n">energy_mask</span><span class="p">(</span><span class="n">energy_min</span><span class="o">=</span><span class="n">energy_axis</span><span class="o">.</span><span class="n">edges</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span></div>
 
 <div class="viewcode-block" id="SafeMaskMaker.make_mask_bkg_invalid"><a class="viewcode-back" href="../../../api/gammapy.makers.SafeMaskMaker.html#gammapy.makers.SafeMaskMaker.make_mask_bkg_invalid">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">make_mask_bkg_invalid</span><span class="p">(</span><span class="n">dataset</span><span class="p">):</span>
@@ -578,6 +611,11 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">        dataset : `Dataset`</span>
 <span class="sd">            Dataset with defined safe range mask.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">irfs</span> <span class="o">==</span> <span class="s2">&quot;DL3&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">observation</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;observation argument is mandatory with DL3 irfs&quot;</span><span class="p">)</span>
+
         <span class="k">if</span> <span class="n">dataset</span><span class="o">.</span><span class="n">mask_safe</span><span class="p">:</span>
             <span class="n">mask_safe</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">mask_safe</span><span class="o">.</span><span class="n">data</span>
         <span class="k">else</span><span class="p">:</span>
@@ -600,7 +638,7 @@ function checkPageExistsAndRedirect(event) {
             <span class="n">mask_safe</span> <span class="o">&amp;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_mask_energy_edisp_bias</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">observation</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="s2">&quot;bkg-peak&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">methods</span><span class="p">:</span>
-            <span class="n">mask_safe</span> <span class="o">&amp;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_mask_energy_bkg_peak</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+            <span class="n">mask_safe</span> <span class="o">&amp;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_mask_energy_bkg_peak</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">observation</span><span class="p">)</span>
 
         <span class="n">dataset</span><span class="o">.</span><span class="n">mask_safe</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">_geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">mask_safe</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">dataset</span></div></div>

@@ -188,7 +188,7 @@ function checkPageExistsAndRedirect(event) {
 
             $("#version_switcher_menu").append(node);
             // replace dropdown button text with the preferred display name of
-            // this version, rather than using sphinx's 1.2.dev1572+g0dd739944 variable.
+            // this version, rather than using sphinx's 1.2.dev1781+g566e24edd variable.
             // also highlight the dropdown entry for the currently-viewed
             // version's entry
             if (entry.version == "dev") {
@@ -308,6 +308,7 @@ function checkPageExistsAndRedirect(event) {
 
 <span class="n">BACKEND_DEFAULT</span> <span class="o">=</span> <span class="n">ParallelBackendEnum</span><span class="o">.</span><span class="n">multiprocessing</span>
 <span class="n">N_JOBS_DEFAULT</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">ALLOW_CHILD_JOBS</span> <span class="o">=</span> <span class="kc">False</span>
 <span class="n">POOL_KWARGS_DEFAULT</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">processes</span><span class="o">=</span><span class="n">N_JOBS_DEFAULT</span><span class="p">)</span>
 <span class="n">METHOD_DEFAULT</span> <span class="o">=</span> <span class="n">PoolMethodEnum</span><span class="o">.</span><span class="n">starmap</span>
 <span class="n">METHOD_KWARGS_DEFAULT</span> <span class="o">=</span> <span class="p">{}</span>
@@ -415,6 +416,8 @@ function checkPageExistsAndRedirect(event) {
 <span class="k">class</span> <span class="nc">ParallelMixin</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Mixin class to handle parallel processing.&quot;&quot;&quot;</span>
 
+    <span class="n">_n_child_jobs</span> <span class="o">=</span> <span class="mi">1</span>
+
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">n_jobs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Number of jobs as an integer.&quot;&quot;&quot;</span>
@@ -433,6 +436,21 @@ function checkPageExistsAndRedirect(event) {
             <span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_n_jobs</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">if</span> <span class="n">ALLOW_CHILD_JOBS</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_n_child_jobs</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="k">def</span> <span class="nf">_update_child_jobs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;needed because we can update only in the main process</span>
+<span class="sd">        otherwise global ALLOW_CHILD_JOBS has default value&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">ALLOW_CHILD_JOBS</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_n_child_jobs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_jobs</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_n_child_jobs</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">_get_n_child_jobs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Number of allowed child jobs as an integer.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_child_jobs</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">parallel_backend</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -510,9 +528,8 @@ function checkPageExistsAndRedirect(event) {
             <span class="n">processes</span> <span class="o">=</span> <span class="n">cpu_count</span>
 
         <span class="k">if</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">current_process</span><span class="p">()</span><span class="o">.</span><span class="n">name</span> <span class="o">!=</span> <span class="s2">&quot;MainProcess&quot;</span><span class="p">:</span>
-            <span class="c1"># subprocesses cannot have childs</span>
+            <span class="c1"># with multiprocessing subprocesses cannot have childs (but possible with ray)</span>
             <span class="n">processes</span> <span class="o">=</span> <span class="mi">1</span>
-    <span class="c1"># TODO: check for ray</span>
 
     <span class="k">if</span> <span class="n">processes</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">run_loop</span><span class="p">(</span>

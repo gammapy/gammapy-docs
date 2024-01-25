@@ -188,7 +188,7 @@ function checkPageExistsAndRedirect(event) {
 
             $("#version_switcher_menu").append(node);
             // replace dropdown button text with the preferred display name of
-            // this version, rather than using sphinx's 1.2.dev1572+g0dd739944 variable.
+            // this version, rather than using sphinx's 1.2.dev1781+g566e24edd variable.
             // also highlight the dropdown entry for the currently-viewed
             // version's entry
             if (entry.version == "dev") {
@@ -265,15 +265,16 @@ function checkPageExistsAndRedirect(event) {
 <span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">scipy.stats</span> <span class="kn">import</span> <span class="n">median_abs_deviation</span> <span class="k">as</span> <span class="n">mad</span>
 <span class="kn">import</span> <span class="nn">astropy.units</span> <span class="k">as</span> <span class="nn">u</span>
 <span class="kn">from</span> <span class="nn">astropy.io</span> <span class="kn">import</span> <span class="n">fits</span>
 <span class="kn">from</span> <span class="nn">astropy.table</span> <span class="kn">import</span> <span class="n">Table</span>
 <span class="kn">from</span> <span class="nn">regions</span> <span class="kn">import</span> <span class="n">CircleSkyRegion</span>
 <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
-<span class="kn">from</span> <span class="nn">gammapy.data</span> <span class="kn">import</span> <span class="n">GTI</span>
+<span class="kn">from</span> <span class="nn">gammapy.data</span> <span class="kn">import</span> <span class="n">GTI</span><span class="p">,</span> <span class="n">PointingMode</span>
 <span class="kn">from</span> <span class="nn">gammapy.irf</span> <span class="kn">import</span> <span class="n">EDispKernelMap</span><span class="p">,</span> <span class="n">EDispMap</span><span class="p">,</span> <span class="n">PSFKernel</span><span class="p">,</span> <span class="n">PSFMap</span><span class="p">,</span> <span class="n">RecoPSFMap</span>
-<span class="kn">from</span> <span class="nn">gammapy.maps</span> <span class="kn">import</span> <span class="n">LabelMapAxis</span><span class="p">,</span> <span class="n">Map</span><span class="p">,</span> <span class="n">MapAxis</span>
-<span class="kn">from</span> <span class="nn">gammapy.modeling.models</span> <span class="kn">import</span> <span class="n">DatasetModels</span><span class="p">,</span> <span class="n">FoVBackgroundModel</span>
+<span class="kn">from</span> <span class="nn">gammapy.maps</span> <span class="kn">import</span> <span class="n">LabelMapAxis</span><span class="p">,</span> <span class="n">Map</span><span class="p">,</span> <span class="n">MapAxis</span><span class="p">,</span> <span class="n">WcsGeom</span>
+<span class="kn">from</span> <span class="nn">gammapy.modeling.models</span> <span class="kn">import</span> <span class="n">DatasetModels</span><span class="p">,</span> <span class="n">FoVBackgroundModel</span><span class="p">,</span> <span class="n">Models</span>
 <span class="kn">from</span> <span class="nn">gammapy.stats</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">CashCountsStatistic</span><span class="p">,</span>
     <span class="n">WStatCountsStatistic</span><span class="p">,</span>
@@ -294,6 +295,7 @@ function checkPageExistsAndRedirect(event) {
     <span class="s2">&quot;MapDataset&quot;</span><span class="p">,</span>
     <span class="s2">&quot;MapDatasetOnOff&quot;</span><span class="p">,</span>
     <span class="s2">&quot;create_map_dataset_geoms&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;create_map_dataset_from_observation&quot;</span><span class="p">,</span>
 <span class="p">]</span>
 
 <span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
@@ -371,6 +373,168 @@ function checkPageExistsAndRedirect(event) {
         <span class="s2">&quot;geom_psf&quot;</span><span class="p">:</span> <span class="n">geom_psf</span><span class="p">,</span>
         <span class="s2">&quot;geom_edisp&quot;</span><span class="p">:</span> <span class="n">geom_edisp</span><span class="p">,</span>
     <span class="p">}</span></div>
+
+
+<span class="k">def</span> <span class="nf">_default_energy_axis</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">energy_bin_per_decade_max</span><span class="o">=</span><span class="mi">30</span><span class="p">):</span>
+    <span class="c1"># number of bins per decade estimated from the energy resolution</span>
+    <span class="c1"># such as diff(ereco.edges)/ereco.center ~ min(eres)</span>
+    <span class="n">etrue</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">psf</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">edges</span>  <span class="c1"># only where psf is defined</span>
+    <span class="n">eres</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">to_edisp_kernel</span><span class="p">(</span><span class="mi">0</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span><span class="p">)</span><span class="o">.</span><span class="n">get_resolution</span><span class="p">(</span><span class="n">etrue</span><span class="p">)</span>
+    <span class="n">eres</span> <span class="o">=</span> <span class="n">eres</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">eres</span><span class="p">)]</span>
+    <span class="k">if</span> <span class="n">eres</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="c1"># remove outliers</span>
+        <span class="n">beyond_mad</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">eres</span><span class="p">)</span> <span class="o">-</span> <span class="n">mad</span><span class="p">(</span><span class="n">eres</span><span class="p">)</span> <span class="o">*</span> <span class="n">eres</span><span class="o">.</span><span class="n">unit</span>
+        <span class="n">eres</span><span class="p">[</span><span class="n">eres</span> <span class="o">&lt;</span> <span class="n">beyond_mad</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+        <span class="n">nbin_per_decade</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span>
+            <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">rint</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">nanmin</span><span class="p">(</span><span class="n">eres</span><span class="o">.</span><span class="n">value</span><span class="p">))),</span> <span class="n">nan</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+        <span class="p">)</span>
+        <span class="n">nbin_per_decade</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="n">nbin_per_decade</span><span class="p">,</span> <span class="n">energy_bin_per_decade_max</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">nbin_per_decade</span> <span class="o">=</span> <span class="n">energy_bin_per_decade_max</span>
+
+    <span class="n">energy_axis</span> <span class="o">=</span> <span class="n">MapAxis</span><span class="o">.</span><span class="n">from_energy_bounds</span><span class="p">(</span>
+        <span class="n">etrue</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+        <span class="n">etrue</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+        <span class="n">nbin</span><span class="o">=</span><span class="n">nbin_per_decade</span><span class="p">,</span>
+        <span class="n">per_decade</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">energy_axis</span>
+
+
+<span class="k">def</span> <span class="nf">_default_binsz</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">spatial_bin_size_min</span><span class="o">=</span><span class="mf">0.01</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span><span class="p">):</span>
+    <span class="c1"># bin size estimated from the minimal r68 of the psf</span>
+    <span class="n">etrue</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">psf</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">edges</span>  <span class="c1"># only where psf is defined</span>
+    <span class="n">psf_r68</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">psf</span><span class="o">.</span><span class="n">containment_radius</span><span class="p">(</span>
+        <span class="mf">0.68</span><span class="p">,</span> <span class="n">energy_true</span><span class="o">=</span><span class="n">etrue</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mf">0.0</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span>
+    <span class="p">)</span>
+    <span class="n">psf_r68</span> <span class="o">=</span> <span class="n">psf_r68</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">psf_r68</span><span class="p">)]</span>
+    <span class="k">if</span> <span class="n">psf_r68</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="c1"># remove outliers</span>
+        <span class="n">beyond_mad</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">psf_r68</span><span class="p">)</span> <span class="o">-</span> <span class="n">mad</span><span class="p">(</span><span class="n">psf_r68</span><span class="p">)</span> <span class="o">*</span> <span class="n">psf_r68</span><span class="o">.</span><span class="n">unit</span>
+        <span class="n">psf_r68</span><span class="p">[</span><span class="n">psf_r68</span> <span class="o">&lt;</span> <span class="n">beyond_mad</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+        <span class="n">binsz</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nanmin</span><span class="p">(</span><span class="n">psf_r68</span><span class="p">),</span> <span class="n">nan</span><span class="o">=-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+        <span class="n">binsz</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">binsz</span><span class="p">,</span> <span class="n">spatial_bin_size_min</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">binsz</span> <span class="o">=</span> <span class="n">spatial_bin_size_min</span>
+    <span class="k">return</span> <span class="n">binsz</span>
+
+
+<span class="k">def</span> <span class="nf">_default_width</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">spatial_width_max</span><span class="o">=</span><span class="mi">12</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span><span class="p">):</span>
+    <span class="c1"># width estimated from the rad_max or the offset_max</span>
+    <span class="k">if</span> <span class="n">observation</span><span class="o">.</span><span class="n">rad_max</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">width</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">observation</span><span class="o">.</span><span class="n">rad_max</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">width</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">observation</span><span class="o">.</span><span class="n">psf</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;offset&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">edges</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="n">width</span><span class="p">,</span> <span class="n">spatial_width_max</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="create_map_dataset_from_observation"><a class="viewcode-back" href="../../../api/gammapy.datasets.create_map_dataset_from_observation.html#gammapy.datasets.create_map_dataset_from_observation">[docs]</a><span class="k">def</span> <span class="nf">create_map_dataset_from_observation</span><span class="p">(</span>
+    <span class="n">observation</span><span class="p">,</span>
+    <span class="n">models</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">dataset_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">energy_axis_true</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">energy_axis</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">energy_bin_per_decade_max</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span>
+    <span class="n">spatial_width</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">spatial_width_max</span><span class="o">=</span><span class="mi">12</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span><span class="p">,</span>
+    <span class="n">spatial_bin_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">spatial_bin_size_min</span><span class="o">=</span><span class="mf">0.01</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a MapDataset, if energy axes, spatial width or bin size are not given</span>
+<span class="sd">    they are determined automatically from the observation IRFs,</span>
+<span class="sd">    but the estimated value cannot exceed the given limits.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    observation : `~gammapy.data.Observation`</span>
+<span class="sd">        Observation to be simulated.</span>
+<span class="sd">    models : `~gammapy.modeling.Models`, optional</span>
+<span class="sd">        Models. Default is None.</span>
+<span class="sd">    dataset_name : str, optional</span>
+<span class="sd">        If `models` contains one or multiple `FoVBackgroundModel`</span>
+<span class="sd">        it should match the `dataset_name` of the background model to use.</span>
+<span class="sd">        Default is None. If None it is determined from the observation ID.</span>
+<span class="sd">    energy_axis_true : `~gammapy.maps.MapAxis`, optional</span>
+<span class="sd">        True energy axis. Default is None.</span>
+<span class="sd">        If None it is determined from the observation IRFs.</span>
+<span class="sd">    energy_axis : `~gammapy.maps.MapAxis`, optional</span>
+<span class="sd">        Reconstructed energy axis. Default is None.</span>
+<span class="sd">        If None it is determined from the observation IRFs.</span>
+<span class="sd">    energy_bin_per_decade_max : int, optional</span>
+<span class="sd">        Maximal number of bin per decade in energy for the reference dataset</span>
+<span class="sd">    spatial_width : `~astropy.units.Quantity`, optional</span>
+<span class="sd">        Spatial window size. Default is None.</span>
+<span class="sd">         If None it is determined from the observation offset max or rad max.</span>
+<span class="sd">    spatial_width_max : `~astropy.quantity.Quantity`, optional</span>
+<span class="sd">        Maximal spatial width. Default is 12 degree.</span>
+<span class="sd">    spatial_bin_size : `~astropy.units.Quantity`, optional</span>
+<span class="sd">        Pixel size. Default is None.</span>
+<span class="sd">        If None it is determined from the observation PSF R68.</span>
+<span class="sd">    spatial_bin_size_min : `~astropy.quantity.Quantity`, optional</span>
+<span class="sd">        Minimal spatial bin size. Default is 0.01 degree.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">gammapy.makers</span> <span class="kn">import</span> <span class="n">MapDatasetMaker</span>
+
+    <span class="k">if</span> <span class="n">spatial_width</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">spatial_width</span> <span class="o">=</span> <span class="n">_default_width</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">spatial_width_max</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">spatial_bin_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">spatial_bin_size</span> <span class="o">=</span> <span class="n">_default_binsz</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">spatial_bin_size_min</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">energy_axis</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">energy_axis</span> <span class="o">=</span> <span class="n">_default_energy_axis</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">energy_bin_per_decade_max</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">energy_axis_true</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">energy_axis_true</span> <span class="o">=</span> <span class="n">energy_axis</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="s2">&quot;energy_true&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">models</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">models</span> <span class="o">=</span> <span class="n">Models</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">dataset_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">dataset_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;obs_</span><span class="si">{</span><span class="n">observation</span><span class="o">.</span><span class="n">obs_id</span><span class="si">}</span><span class="s2">&quot;</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">FoVBackgroundModel</span><span class="p">)</span> <span class="ow">and</span> <span class="n">m</span><span class="o">.</span><span class="n">datasets_names</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">dataset_name</span>
+            <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">models</span>
+        <span class="p">]</span>
+    <span class="p">):</span>
+        <span class="n">models</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">FoVBackgroundModel</span><span class="p">(</span><span class="n">dataset_name</span><span class="o">=</span><span class="n">dataset_name</span><span class="p">))</span>
+
+    <span class="k">if</span> <span class="n">observation</span><span class="o">.</span><span class="n">pointing</span><span class="o">.</span><span class="n">mode</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">PointingMode</span><span class="o">.</span><span class="n">POINTING</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="s2">&quot;Only observations with fixed pointing in ICRS are supported&quot;</span>
+        <span class="p">)</span>
+    <span class="n">pointing_icrs</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">pointing</span><span class="o">.</span><span class="n">fixed_icrs</span>
+    <span class="n">geom</span> <span class="o">=</span> <span class="n">WcsGeom</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+        <span class="n">skydir</span><span class="o">=</span><span class="n">pointing_icrs</span><span class="p">,</span>
+        <span class="n">width</span><span class="o">=</span><span class="n">spatial_width</span><span class="p">,</span>
+        <span class="n">binsz</span><span class="o">=</span><span class="n">spatial_bin_size</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="n">u</span><span class="o">.</span><span class="n">deg</span><span class="p">),</span>
+        <span class="n">frame</span><span class="o">=</span><span class="s2">&quot;icrs&quot;</span><span class="p">,</span>
+        <span class="n">axes</span><span class="o">=</span><span class="p">[</span><span class="n">energy_axis</span><span class="p">],</span>
+    <span class="p">)</span>
+
+    <span class="n">components</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;exposure&quot;</span><span class="p">]</span>
+    <span class="n">axes</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+        <span class="n">energy_axis_true</span><span class="o">=</span><span class="n">energy_axis_true</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">observation</span><span class="o">.</span><span class="n">edisp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">components</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;edisp&quot;</span><span class="p">)</span>
+        <span class="n">axes</span><span class="p">[</span><span class="s2">&quot;migra_axis&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">edisp</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;migra&quot;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">observation</span><span class="o">.</span><span class="n">bkg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">components</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;background&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">observation</span><span class="o">.</span><span class="n">psf</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">components</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;psf&quot;</span><span class="p">)</span>
+
+    <span class="n">dataset</span> <span class="o">=</span> <span class="n">MapDataset</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+        <span class="n">geom</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">dataset_name</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">axes</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">maker</span> <span class="o">=</span> <span class="n">MapDatasetMaker</span><span class="p">(</span><span class="n">selection</span><span class="o">=</span><span class="n">components</span><span class="p">)</span>
+    <span class="n">dataset</span> <span class="o">=</span> <span class="n">maker</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">observation</span><span class="p">)</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">models</span> <span class="o">=</span> <span class="n">models</span>
+    <span class="k">return</span> <span class="n">dataset</span></div>
 
 
 <div class="viewcode-block" id="MapDataset"><a class="viewcode-back" href="../../../api/gammapy.datasets.MapDataset.html#gammapy.datasets.MapDataset">[docs]</a><span class="k">class</span> <span class="nc">MapDataset</span><span class="p">(</span><span class="n">Dataset</span><span class="p">):</span>
@@ -753,9 +917,6 @@ function checkPageExistsAndRedirect(event) {
 
     <span class="k">def</span> <span class="nf">_background_parameters_changed</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">values</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">background_model</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">value</span>
-        <span class="c1"># TODO: possibly allow for a tolerance here?</span>
-        <span class="c1"># changed = not np.allclose(self._background_parameters_cached, values, rtol=1e-3)</span>
-
         <span class="n">changed</span> <span class="o">=</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_background_parameters_cached</span> <span class="o">==</span> <span class="n">values</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">changed</span><span class="p">:</span>
@@ -2353,19 +2514,24 @@ function checkPageExistsAndRedirect(event) {
     <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">str_</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__str__</span><span class="p">()</span>
 
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_safe</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_safe</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+
         <span class="n">counts_off</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">counts_off</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">counts_off</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">counts_off</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+            <span class="n">counts_off</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">counts_off</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">mask</span><span class="p">])</span>
         <span class="n">str_</span> <span class="o">+=</span> <span class="s2">&quot;</span><span class="se">\t</span><span class="si">{:32}</span><span class="s2">: </span><span class="si">{:.0f}</span><span class="s2"> </span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">&quot;Total counts_off&quot;</span><span class="p">,</span> <span class="n">counts_off</span><span class="p">)</span>
 
         <span class="n">acceptance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">acceptance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">acceptance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">acceptance</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+            <span class="n">acceptance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">acceptance</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">mask</span><span class="p">])</span>
         <span class="n">str_</span> <span class="o">+=</span> <span class="s2">&quot;</span><span class="se">\t</span><span class="si">{:32}</span><span class="s2">: </span><span class="si">{:.0f}</span><span class="s2"> </span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">&quot;Acceptance&quot;</span><span class="p">,</span> <span class="n">acceptance</span><span class="p">)</span>
 
         <span class="n">acceptance_off</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">acceptance_off</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">acceptance_off</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">acceptance_off</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+            <span class="n">acceptance_off</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">acceptance_off</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">mask</span><span class="p">])</span>
         <span class="n">str_</span> <span class="o">+=</span> <span class="s2">&quot;</span><span class="se">\t</span><span class="si">{:32}</span><span class="s2">: </span><span class="si">{:.0f}</span><span class="s2"> </span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">&quot;Acceptance off&quot;</span><span class="p">,</span> <span class="n">acceptance_off</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">str_</span><span class="o">.</span><span class="n">expandtabs</span><span class="p">(</span><span class="n">tabsize</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>

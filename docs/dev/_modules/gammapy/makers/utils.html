@@ -188,7 +188,7 @@ function checkPageExistsAndRedirect(event) {
 
             $("#version_switcher_menu").append(node);
             // replace dropdown button text with the preferred display name of
-            // this version, rather than using sphinx's 1.2.dev1572+g0dd739944 variable.
+            // this version, rather than using sphinx's 1.2.dev1781+g566e24edd variable.
             // also highlight the dropdown entry for the currently-viewed
             // version's entry
             if (entry.version == "dev") {
@@ -270,7 +270,7 @@ function checkPageExistsAndRedirect(event) {
 <span class="kn">from</span> <span class="nn">astropy.coordinates</span> <span class="kn">import</span> <span class="n">Angle</span><span class="p">,</span> <span class="n">SkyOffsetFrame</span>
 <span class="kn">from</span> <span class="nn">astropy.table</span> <span class="kn">import</span> <span class="n">Table</span>
 <span class="kn">from</span> <span class="nn">gammapy.data</span> <span class="kn">import</span> <span class="n">FixedPointingInfo</span>
-<span class="kn">from</span> <span class="nn">gammapy.irf</span> <span class="kn">import</span> <span class="n">EDispMap</span><span class="p">,</span> <span class="n">FoVAlignment</span><span class="p">,</span> <span class="n">PSFMap</span>
+<span class="kn">from</span> <span class="nn">gammapy.irf</span> <span class="kn">import</span> <span class="n">BackgroundIRF</span><span class="p">,</span> <span class="n">EDispMap</span><span class="p">,</span> <span class="n">FoVAlignment</span><span class="p">,</span> <span class="n">PSFMap</span>
 <span class="kn">from</span> <span class="nn">gammapy.maps</span> <span class="kn">import</span> <span class="n">Map</span><span class="p">,</span> <span class="n">RegionNDMap</span>
 <span class="kn">from</span> <span class="nn">gammapy.modeling.models</span> <span class="kn">import</span> <span class="n">PowerLawSpectralModel</span>
 <span class="kn">from</span> <span class="nn">gammapy.stats</span> <span class="kn">import</span> <span class="n">WStatCountsStatistic</span>
@@ -290,6 +290,75 @@ function checkPageExistsAndRedirect(event) {
 <span class="p">]</span>
 
 <span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_get_fov_coords</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">irf</span><span class="p">,</span> <span class="n">geom</span><span class="p">,</span> <span class="n">use_region_center</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">obstime</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="c1"># TODO: create dedicated coordinate handling see #5041</span>
+    <span class="n">coords</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">FixedPointingInfo</span><span class="p">):</span>
+        <span class="c1"># for backwards compatibility, obstime should be required</span>
+        <span class="k">if</span> <span class="n">obstime</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obstime</span><span class="p">,</span> <span class="n">BackgroundIRF</span><span class="p">):</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="s2">&quot;Future versions of gammapy will require the obstime keyword for this function&quot;</span><span class="p">,</span>
+                    <span class="ne">DeprecationWarning</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="n">obstime</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">obstime</span>
+
+        <span class="n">pointing_icrs</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">get_icrs</span><span class="p">(</span><span class="n">obstime</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">pointing_icrs</span> <span class="o">=</span> <span class="n">pointing</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">use_region_center</span><span class="p">:</span>
+        <span class="n">region_coord</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_wcs_coord_and_weights</span><span class="p">()</span>
+        <span class="n">sky_coord</span> <span class="o">=</span> <span class="n">region_coord</span><span class="o">.</span><span class="n">skycoord</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">image_geom</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span>
+        <span class="n">map_coord</span> <span class="o">=</span> <span class="n">image_geom</span><span class="o">.</span><span class="n">get_coord</span><span class="p">()</span>
+        <span class="n">sky_coord</span> <span class="o">=</span> <span class="n">map_coord</span><span class="o">.</span><span class="n">skycoord</span>
+
+    <span class="k">if</span> <span class="n">irf</span><span class="o">.</span><span class="n">has_offset_axis</span><span class="p">:</span>
+        <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;offset&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sky_coord</span><span class="o">.</span><span class="n">separation</span><span class="p">(</span><span class="n">pointing_icrs</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">irf</span><span class="o">.</span><span class="n">fov_alignment</span> <span class="o">==</span> <span class="n">FoVAlignment</span><span class="o">.</span><span class="n">ALTAZ</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">FixedPointingInfo</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span>
+                <span class="n">irf</span><span class="p">,</span> <span class="n">BackgroundIRF</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">&quot;make_map_background_irf requires FixedPointingInfo if &quot;</span>
+                    <span class="s2">&quot;BackgroundIRF.fov_alignement is ALTAZ&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+
+            <span class="c1"># for backwards compatibility, obstime should be required</span>
+            <span class="k">if</span> <span class="n">obstime</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="s2">&quot;Future versions of gammapy will require the obstime keyword for this function&quot;</span><span class="p">,</span>
+                    <span class="ne">DeprecationWarning</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">obstime</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">obstime</span>
+
+            <span class="n">pointing_altaz</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">get_altaz</span><span class="p">(</span><span class="n">obstime</span><span class="p">)</span>
+            <span class="n">altaz_coord</span> <span class="o">=</span> <span class="n">sky_coord</span><span class="o">.</span><span class="n">transform_to</span><span class="p">(</span><span class="n">pointing_altaz</span><span class="o">.</span><span class="n">frame</span><span class="p">)</span>
+
+            <span class="c1"># Compute FOV coordinates of map relative to pointing</span>
+            <span class="n">fov_lon</span><span class="p">,</span> <span class="n">fov_lat</span> <span class="o">=</span> <span class="n">sky_to_fov</span><span class="p">(</span>
+                <span class="n">altaz_coord</span><span class="o">.</span><span class="n">az</span><span class="p">,</span> <span class="n">altaz_coord</span><span class="o">.</span><span class="n">alt</span><span class="p">,</span> <span class="n">pointing_altaz</span><span class="o">.</span><span class="n">az</span><span class="p">,</span> <span class="n">pointing_altaz</span><span class="o">.</span><span class="n">alt</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">irf</span><span class="o">.</span><span class="n">fov_alignment</span> <span class="o">==</span> <span class="n">FoVAlignment</span><span class="o">.</span><span class="n">RADEC</span><span class="p">:</span>
+            <span class="c1"># Create OffsetFrame</span>
+            <span class="n">frame</span> <span class="o">=</span> <span class="n">SkyOffsetFrame</span><span class="p">(</span><span class="n">origin</span><span class="o">=</span><span class="n">pointing_icrs</span><span class="p">)</span>
+            <span class="n">pseudo_fov_coord</span> <span class="o">=</span> <span class="n">sky_coord</span><span class="o">.</span><span class="n">transform_to</span><span class="p">(</span><span class="n">frame</span><span class="p">)</span>
+            <span class="n">fov_lon</span> <span class="o">=</span> <span class="n">pseudo_fov_coord</span><span class="o">.</span><span class="n">lon</span>
+            <span class="n">fov_lat</span> <span class="o">=</span> <span class="n">pseudo_fov_coord</span><span class="o">.</span><span class="n">lat</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unsupported background coordinate system: </span><span class="si">{</span><span class="n">irf</span><span class="o">.</span><span class="n">fov_alignment</span><span class="si">!r}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;fov_lon&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">fov_lon</span>
+        <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;fov_lat&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">fov_lat</span>
+    <span class="k">return</span> <span class="n">coords</span>
 
 
 <div class="viewcode-block" id="make_map_exposure_true_energy"><a class="viewcode-back" href="../../../api/gammapy.makers.utils.make_map_exposure_true_energy.html#gammapy.makers.utils.make_map_exposure_true_energy">[docs]</a><span class="k">def</span> <span class="nf">make_map_exposure_true_energy</span><span class="p">(</span>
@@ -320,19 +389,22 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">    map : `~gammapy.maps.WcsNDMap`</span>
 <span class="sd">        Exposure map.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">use_region_center</span><span class="p">:</span>
-        <span class="n">coords</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_wcs_coord_and_weights</span><span class="p">()</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">coords</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_coord</span><span class="p">(</span><span class="n">sparse</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="kc">None</span>
-
-    <span class="n">offset</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">skycoord</span><span class="o">.</span><span class="n">separation</span><span class="p">(</span><span class="n">pointing</span><span class="p">)</span>
-    <span class="n">exposure</span> <span class="o">=</span> <span class="n">aeff</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span> <span class="n">energy_true</span><span class="o">=</span><span class="n">coords</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">])</span>
+    <span class="n">coords</span> <span class="o">=</span> <span class="n">_get_fov_coords</span><span class="p">(</span>
+        <span class="n">pointing</span><span class="o">=</span><span class="n">pointing</span><span class="p">,</span>
+        <span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span>
+        <span class="n">use_region_center</span><span class="o">=</span><span class="n">use_region_center</span><span class="p">,</span>
+        <span class="n">irf</span><span class="o">=</span><span class="n">aeff</span><span class="p">,</span>
+        <span class="n">obstime</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">center</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="n">exposure</span> <span class="o">=</span> <span class="n">aeff</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="o">**</span><span class="n">coords</span><span class="p">)</span>
 
     <span class="n">data</span> <span class="o">=</span> <span class="p">(</span><span class="n">exposure</span> <span class="o">*</span> <span class="n">livetime</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;m2 s&quot;</span><span class="p">)</span>
     <span class="n">meta</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;livetime&quot;</span><span class="p">:</span> <span class="n">livetime</span><span class="p">,</span> <span class="s2">&quot;is_pointlike&quot;</span><span class="p">:</span> <span class="n">aeff</span><span class="o">.</span><span class="n">is_pointlike</span><span class="p">}</span>
 
     <span class="k">if</span> <span class="ow">not</span> <span class="n">use_region_center</span><span class="p">:</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">average</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">)</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_wcs_coord_and_weights</span><span class="p">()</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">average</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">unit</span><span class="p">,</span> <span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">)</span></div>
 
@@ -431,76 +503,29 @@ function checkPageExistsAndRedirect(event) {
     <span class="k">if</span> <span class="n">oversampling</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">geom</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">upsample</span><span class="p">(</span><span class="n">factor</span><span class="o">=</span><span class="n">oversampling</span><span class="p">,</span> <span class="n">axis_name</span><span class="o">=</span><span class="s2">&quot;energy&quot;</span><span class="p">)</span>
 
-    <span class="n">coords</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;energy&quot;</span><span class="p">:</span> <span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">edges</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))}</span>
-
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">FixedPointingInfo</span><span class="p">):</span>
-        <span class="c1"># for backwards compatibility, obstime should be required</span>
-        <span class="k">if</span> <span class="n">obstime</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="s2">&quot;Future versions of gammapy will require the obstime keyword for this function&quot;</span><span class="p">,</span>
-                <span class="ne">DeprecationWarning</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="n">obstime</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">obstime</span>
-
-        <span class="n">pointing_icrs</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">get_icrs</span><span class="p">(</span><span class="n">obstime</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">pointing_icrs</span> <span class="o">=</span> <span class="n">pointing</span>
-
     <span class="k">if</span> <span class="ow">not</span> <span class="n">use_region_center</span><span class="p">:</span>
         <span class="n">image_geom</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">to_wcs_geom</span><span class="p">()</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span>
         <span class="n">region_coord</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_wcs_coord_and_weights</span><span class="p">()</span>
         <span class="n">idx</span> <span class="o">=</span> <span class="n">image_geom</span><span class="o">.</span><span class="n">coord_to_idx</span><span class="p">(</span><span class="n">region_coord</span><span class="p">)</span>
-        <span class="n">sky_coord</span> <span class="o">=</span> <span class="n">region_coord</span><span class="o">.</span><span class="n">skycoord</span>
         <span class="n">d_omega</span> <span class="o">=</span> <span class="n">image_geom</span><span class="o">.</span><span class="n">solid_angle</span><span class="p">()</span><span class="o">.</span><span class="n">T</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">image_geom</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span>
-        <span class="n">map_coord</span> <span class="o">=</span> <span class="n">image_geom</span><span class="o">.</span><span class="n">get_coord</span><span class="p">()</span>
-        <span class="n">sky_coord</span> <span class="o">=</span> <span class="n">map_coord</span><span class="o">.</span><span class="n">skycoord</span>
         <span class="n">d_omega</span> <span class="o">=</span> <span class="n">image_geom</span><span class="o">.</span><span class="n">solid_angle</span><span class="p">()</span>
 
-    <span class="k">if</span> <span class="n">bkg</span><span class="o">.</span><span class="n">has_offset_axis</span><span class="p">:</span>
-        <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;offset&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sky_coord</span><span class="o">.</span><span class="n">separation</span><span class="p">(</span><span class="n">pointing_icrs</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">bkg</span><span class="o">.</span><span class="n">fov_alignment</span> <span class="o">==</span> <span class="n">FoVAlignment</span><span class="o">.</span><span class="n">ALTAZ</span><span class="p">:</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">FixedPointingInfo</span><span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-                    <span class="s2">&quot;make_map_background_irf requires FixedPointingInfo if &quot;</span>
-                    <span class="s2">&quot;BackgroundIRF.fov_alignement is ALTAZ&quot;</span><span class="p">,</span>
-                <span class="p">)</span>
-
-            <span class="c1"># for backwards compatibility, obstime should be required</span>
-            <span class="k">if</span> <span class="n">obstime</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                    <span class="s2">&quot;Future versions of gammapy will require the obstime keyword for this function&quot;</span><span class="p">,</span>
-                    <span class="ne">DeprecationWarning</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="n">obstime</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">obstime</span>
-
-            <span class="n">pointing_altaz</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">get_altaz</span><span class="p">(</span><span class="n">obstime</span><span class="p">)</span>
-            <span class="n">altaz_coord</span> <span class="o">=</span> <span class="n">sky_coord</span><span class="o">.</span><span class="n">transform_to</span><span class="p">(</span><span class="n">pointing_altaz</span><span class="o">.</span><span class="n">frame</span><span class="p">)</span>
-
-            <span class="c1"># Compute FOV coordinates of map relative to pointing</span>
-            <span class="n">fov_lon</span><span class="p">,</span> <span class="n">fov_lat</span> <span class="o">=</span> <span class="n">sky_to_fov</span><span class="p">(</span>
-                <span class="n">altaz_coord</span><span class="o">.</span><span class="n">az</span><span class="p">,</span> <span class="n">altaz_coord</span><span class="o">.</span><span class="n">alt</span><span class="p">,</span> <span class="n">pointing_altaz</span><span class="o">.</span><span class="n">az</span><span class="p">,</span> <span class="n">pointing_altaz</span><span class="o">.</span><span class="n">alt</span>
-            <span class="p">)</span>
-        <span class="k">elif</span> <span class="n">bkg</span><span class="o">.</span><span class="n">fov_alignment</span> <span class="o">==</span> <span class="n">FoVAlignment</span><span class="o">.</span><span class="n">RADEC</span><span class="p">:</span>
-            <span class="c1"># Create OffsetFrame</span>
-            <span class="n">frame</span> <span class="o">=</span> <span class="n">SkyOffsetFrame</span><span class="p">(</span><span class="n">origin</span><span class="o">=</span><span class="n">pointing_icrs</span><span class="p">)</span>
-            <span class="n">pseudo_fov_coord</span> <span class="o">=</span> <span class="n">sky_coord</span><span class="o">.</span><span class="n">transform_to</span><span class="p">(</span><span class="n">frame</span><span class="p">)</span>
-            <span class="n">fov_lon</span> <span class="o">=</span> <span class="n">pseudo_fov_coord</span><span class="o">.</span><span class="n">lon</span>
-            <span class="n">fov_lat</span> <span class="o">=</span> <span class="n">pseudo_fov_coord</span><span class="o">.</span><span class="n">lat</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Unsupported background coordinate system: </span><span class="si">{</span><span class="n">bkg</span><span class="o">.</span><span class="n">fov_alignment</span><span class="si">!r}</span><span class="s2">&quot;</span>
-            <span class="p">)</span>
-
-        <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;fov_lon&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">fov_lon</span>
-        <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;fov_lat&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">fov_lat</span>
+    <span class="n">coords</span> <span class="o">=</span> <span class="n">_get_fov_coords</span><span class="p">(</span>
+        <span class="n">pointing</span><span class="o">=</span><span class="n">pointing</span><span class="p">,</span>
+        <span class="n">irf</span><span class="o">=</span><span class="n">bkg</span><span class="p">,</span>
+        <span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span>
+        <span class="n">use_region_center</span><span class="o">=</span><span class="n">use_region_center</span><span class="p">,</span>
+        <span class="n">obstime</span><span class="o">=</span><span class="n">obstime</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">edges</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
 
     <span class="n">bkg_de</span> <span class="o">=</span> <span class="n">bkg</span><span class="o">.</span><span class="n">integrate_log_log</span><span class="p">(</span><span class="o">**</span><span class="n">coords</span><span class="p">,</span> <span class="n">axis_name</span><span class="o">=</span><span class="s2">&quot;energy&quot;</span><span class="p">)</span>
     <span class="n">data</span> <span class="o">=</span> <span class="p">(</span><span class="n">bkg_de</span> <span class="o">*</span> <span class="n">d_omega</span> <span class="o">*</span> <span class="n">ontime</span><span class="p">)</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="ow">not</span> <span class="n">use_region_center</span><span class="p">:</span>
+        <span class="n">region_coord</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_wcs_coord_and_weights</span><span class="p">()</span>
         <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">weights</span> <span class="o">*</span> <span class="n">data</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 
     <span class="n">bkg_map</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
@@ -535,17 +560,19 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">    psfmap : `~gammapy.irf.PSFMap`</span>
 <span class="sd">        The resulting PSF map.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">coords</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_coord</span><span class="p">(</span><span class="n">sparse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">coords</span> <span class="o">=</span> <span class="n">_get_fov_coords</span><span class="p">(</span>
+        <span class="n">pointing</span><span class="o">=</span><span class="n">pointing</span><span class="p">,</span>
+        <span class="n">irf</span><span class="o">=</span><span class="n">psf</span><span class="p">,</span>
+        <span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span>
+        <span class="n">use_region_center</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">obstime</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span>
 
-    <span class="c1"># Compute separations with pointing position</span>
-    <span class="n">offset</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">skycoord</span><span class="o">.</span><span class="n">separation</span><span class="p">(</span><span class="n">pointing</span><span class="p">)</span>
+    <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">center</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;rad&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;rad&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">center</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
 
     <span class="c1"># Compute PSF values</span>
-    <span class="n">data</span> <span class="o">=</span> <span class="n">psf</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span>
-        <span class="n">energy_true</span><span class="o">=</span><span class="n">coords</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">],</span>
-        <span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span>
-        <span class="n">rad</span><span class="o">=</span><span class="n">coords</span><span class="p">[</span><span class="s2">&quot;rad&quot;</span><span class="p">],</span>
-    <span class="p">)</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">psf</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="o">**</span><span class="n">coords</span><span class="p">)</span>
 
     <span class="c1"># Create Map and fill relevant entries</span>
     <span class="n">psf_map</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span>
@@ -581,23 +608,16 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">    edispmap : `~gammapy.irf.EDispMap`</span>
 <span class="sd">        The resulting energy dispersion map.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># Compute separations with pointing position</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">use_region_center</span><span class="p">:</span>
-        <span class="n">coords</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_wcs_coord_and_weights</span><span class="p">()</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">coords</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_coord</span><span class="p">(</span><span class="n">sparse</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="kc">None</span>
-
-    <span class="n">offset</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">skycoord</span><span class="o">.</span><span class="n">separation</span><span class="p">(</span><span class="n">pointing</span><span class="p">)</span>
+    <span class="n">coords</span> <span class="o">=</span> <span class="n">_get_fov_coords</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">edisp</span><span class="p">,</span> <span class="n">geom</span><span class="p">,</span> <span class="n">use_region_center</span><span class="o">=</span><span class="n">use_region_center</span><span class="p">)</span>
+    <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">center</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;migra&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;migra&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">center</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
 
     <span class="c1"># Compute EDisp values</span>
-    <span class="n">data</span> <span class="o">=</span> <span class="n">edisp</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span>
-        <span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span>
-        <span class="n">energy_true</span><span class="o">=</span><span class="n">coords</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">],</span>
-        <span class="n">migra</span><span class="o">=</span><span class="n">coords</span><span class="p">[</span><span class="s2">&quot;migra&quot;</span><span class="p">],</span>
-    <span class="p">)</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">edisp</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="o">**</span><span class="n">coords</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="ow">not</span> <span class="n">use_region_center</span><span class="p">:</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">average</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">)</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_wcs_coord_and_weights</span><span class="p">()</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">average</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">)</span>
 
     <span class="c1"># Create Map and fill relevant entries</span>
     <span class="n">edisp_map</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">),</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
@@ -636,6 +656,15 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">    edispmap : `~gammapy.irf.EDispKernelMap`</span>
 <span class="sd">        the resulting EDispKernel map</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">coords</span> <span class="o">=</span> <span class="n">_get_fov_coords</span><span class="p">(</span>
+        <span class="n">pointing</span><span class="o">=</span><span class="n">pointing</span><span class="p">,</span>
+        <span class="n">irf</span><span class="o">=</span><span class="n">edisp</span><span class="p">,</span>
+        <span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span>
+        <span class="n">use_region_center</span><span class="o">=</span><span class="n">use_region_center</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">edges</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+
     <span class="c1"># Use EnergyDispersion2D migra axis.</span>
     <span class="n">migra_axis</span> <span class="o">=</span> <span class="n">edisp</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;migra&quot;</span><span class="p">]</span>
 

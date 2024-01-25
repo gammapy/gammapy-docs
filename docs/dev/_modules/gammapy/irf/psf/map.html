@@ -188,7 +188,7 @@ function checkPageExistsAndRedirect(event) {
 
             $("#version_switcher_menu").append(node);
             // replace dropdown button text with the preferred display name of
-            // this version, rather than using sphinx's 1.2.dev1572+g0dd739944 variable.
+            // this version, rather than using sphinx's 1.2.dev1781+g566e24edd variable.
             // also highlight the dropdown entry for the currently-viewed
             // version's entry
             if (entry.version == "dev") {
@@ -268,9 +268,10 @@ function checkPageExistsAndRedirect(event) {
 <span class="kn">from</span> <span class="nn">astropy.visualization</span> <span class="kn">import</span> <span class="n">quantity_support</span>
 <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
 <span class="kn">from</span> <span class="nn">matplotlib.ticker</span> <span class="kn">import</span> <span class="n">FormatStrFormatter</span>
-<span class="kn">from</span> <span class="nn">gammapy.maps</span> <span class="kn">import</span> <span class="n">Map</span><span class="p">,</span> <span class="n">MapAxes</span><span class="p">,</span> <span class="n">MapAxis</span><span class="p">,</span> <span class="n">MapCoord</span><span class="p">,</span> <span class="n">WcsGeom</span>
+<span class="kn">from</span> <span class="nn">gammapy.maps</span> <span class="kn">import</span> <span class="n">HpxGeom</span><span class="p">,</span> <span class="n">Map</span><span class="p">,</span> <span class="n">MapAxes</span><span class="p">,</span> <span class="n">MapAxis</span><span class="p">,</span> <span class="n">MapCoord</span><span class="p">,</span> <span class="n">WcsGeom</span>
 <span class="kn">from</span> <span class="nn">gammapy.maps.axes</span> <span class="kn">import</span> <span class="n">UNIT_STRING_FORMAT</span>
 <span class="kn">from</span> <span class="nn">gammapy.modeling.models</span> <span class="kn">import</span> <span class="n">PowerLawSpectralModel</span>
+<span class="kn">from</span> <span class="nn">gammapy.utils.deprecation</span> <span class="kn">import</span> <span class="n">deprecated_renamed_argument</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.gauss</span> <span class="kn">import</span> <span class="n">Gauss2DPDF</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.random</span> <span class="kn">import</span> <span class="n">InverseCDFSampler</span><span class="p">,</span> <span class="n">get_random_state</span>
 <span class="kn">from</span> <span class="nn">..core</span> <span class="kn">import</span> <span class="n">IRFMap</span>
@@ -278,6 +279,26 @@ function checkPageExistsAndRedirect(event) {
 <span class="kn">from</span> <span class="nn">.kernel</span> <span class="kn">import</span> <span class="n">PSFKernel</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;PSFMap&quot;</span><span class="p">,</span> <span class="s2">&quot;RecoPSFMap&quot;</span><span class="p">]</span>
+
+
+<span class="n">PSF_MAX_OVERSAMPLING</span> <span class="o">=</span> <span class="mi">4</span>  <span class="c1"># for backward compatibility</span>
+
+
+<span class="k">def</span> <span class="nf">_psf_upsampling_factor</span><span class="p">(</span><span class="n">psf</span><span class="p">,</span> <span class="n">geom</span><span class="p">,</span> <span class="n">position</span><span class="p">,</span> <span class="n">energy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">precision_factor</span><span class="o">=</span><span class="mi">12</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Minimal factor between the bin half-width of the geom and the median R68% containment radius.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">energy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">energy</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="n">psf</span><span class="o">.</span><span class="n">energy_name</span><span class="p">]</span><span class="o">.</span><span class="n">center</span>
+    <span class="n">psf_r68</span> <span class="o">=</span> <span class="n">psf</span><span class="o">.</span><span class="n">containment_radius</span><span class="p">(</span>
+        <span class="mf">0.68</span><span class="p">,</span> <span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="n">psf</span><span class="o">.</span><span class="n">energy_name</span><span class="p">]</span><span class="o">.</span><span class="n">center</span><span class="p">,</span> <span class="n">position</span><span class="o">=</span><span class="n">position</span>
+    <span class="p">)</span>
+    <span class="n">psf_r68_median</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">psf_r68</span><span class="p">,</span> <span class="mi">50</span><span class="p">)</span>
+    <span class="n">base_factor</span> <span class="o">=</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">psf_r68_median</span> <span class="o">/</span> <span class="n">geom</span><span class="o">.</span><span class="n">pixel_scales</span><span class="o">.</span><span class="n">max</span><span class="p">())</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="n">factor</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span>
+        <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">precision_factor</span> <span class="o">/</span> <span class="n">base_factor</span><span class="p">)),</span> <span class="n">PSF_MAX_OVERSAMPLING</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">HpxGeom</span><span class="p">):</span>
+        <span class="n">factor</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="mi">2</span> <span class="o">**</span> <span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">factor</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">2</span><span class="p">)))</span>
+    <span class="k">return</span> <span class="n">factor</span>
 
 
 <span class="k">class</span> <span class="nc">IRFLikePSF</span><span class="p">(</span><span class="n">PSF</span><span class="p">):</span>
@@ -486,8 +507,17 @@ function checkPageExistsAndRedirect(event) {
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="PSFMap.get_psf_kernel"><a class="viewcode-back" href="../../../../api/gammapy.irf.PSFMap.html#gammapy.irf.PSFMap.get_psf_kernel">[docs]</a>    <span class="k">def</span> <span class="nf">get_psf_kernel</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">geom</span><span class="p">,</span> <span class="n">position</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_radius</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">containment</span><span class="o">=</span><span class="mf">0.999</span><span class="p">,</span> <span class="n">factor</span><span class="o">=</span><span class="mi">4</span>
+<div class="viewcode-block" id="PSFMap.get_psf_kernel"><a class="viewcode-back" href="../../../../api/gammapy.irf.PSFMap.html#gammapy.irf.PSFMap.get_psf_kernel">[docs]</a>    <span class="nd">@deprecated_renamed_argument</span><span class="p">(</span>
+        <span class="s2">&quot;factor&quot;</span><span class="p">,</span> <span class="s2">&quot;precision_factor&quot;</span><span class="p">,</span> <span class="s2">&quot;v1.2&quot;</span><span class="p">,</span> <span class="n">arg_in_kwargs</span><span class="o">=</span><span class="kc">True</span>
+    <span class="p">)</span>
+    <span class="k">def</span> <span class="nf">get_psf_kernel</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">geom</span><span class="p">,</span>
+        <span class="n">position</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">max_radius</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">containment</span><span class="o">=</span><span class="mf">0.999</span><span class="p">,</span>
+        <span class="n">factor</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">precision_factor</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a PSF kernel at the given position.</span>
 
@@ -507,14 +537,20 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">            across all energies is used. The radius can be overwritten using</span>
 <span class="sd">            the `max_radius` argument. Default is 0.999.</span>
 <span class="sd">        factor : int, optional</span>
-<span class="sd">            Oversampling factor to compute the PSF. Default is 4.</span>
+<span class="sd">            Oversampling factor to compute the PSF.</span>
+<span class="sd">            Default is None and it will be computed automatically.</span>
+<span class="sd">        precision_factor : int, optional</span>
+<span class="sd">            Factor between the bin half-width of the geom and the median R68% containment radius.</span>
+<span class="sd">            Used only for the oversampling method. Default is 10.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        kernel : `~gammapy.irf.PSFKernel`</span>
 <span class="sd">            The resulting kernel.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># TODO: try to simplify...is the oversampling needed?</span>
+        <span class="k">if</span> <span class="n">factor</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># TODO: remove once deprecated</span>
+            <span class="n">factor</span> <span class="o">=</span> <span class="n">_psf_upsampling_factor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">geom</span><span class="p">,</span> <span class="n">position</span><span class="p">,</span> <span class="n">precision_factor</span><span class="p">)</span>
+
         <span class="k">if</span> <span class="n">position</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">position</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">psf_map</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">center_skydir</span>
 
@@ -530,9 +566,8 @@ function checkPageExistsAndRedirect(event) {
             <span class="n">radii</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">containment_radius</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
             <span class="n">max_radius</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">radii</span><span class="p">)</span>
 
-        <span class="n">geom</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">to_odd_npix</span><span class="p">(</span><span class="n">max_radius</span><span class="o">=</span><span class="n">max_radius</span><span class="p">)</span>
-        <span class="n">geom_upsampled</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">upsample</span><span class="p">(</span><span class="n">factor</span><span class="o">=</span><span class="n">factor</span><span class="p">)</span>
-        <span class="n">coords</span> <span class="o">=</span> <span class="n">geom_upsampled</span><span class="o">.</span><span class="n">get_coord</span><span class="p">(</span><span class="n">sparse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">geom</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">to_odd_npix</span><span class="p">(</span><span class="n">max_radius</span><span class="o">=</span><span class="n">max_radius</span><span class="p">)</span><span class="o">.</span><span class="n">upsample</span><span class="p">(</span><span class="n">factor</span><span class="o">=</span><span class="n">factor</span><span class="p">)</span>
+        <span class="n">coords</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_coord</span><span class="p">(</span><span class="n">sparse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="n">rad</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">skycoord</span><span class="o">.</span><span class="n">separation</span><span class="p">(</span><span class="n">geom</span><span class="o">.</span><span class="n">center_skydir</span><span class="p">)</span>
 
         <span class="n">coords</span> <span class="o">=</span> <span class="p">{</span>
@@ -545,9 +580,8 @@ function checkPageExistsAndRedirect(event) {
             <span class="n">coords</span><span class="o">=</span><span class="n">coords</span><span class="p">,</span>
             <span class="n">method</span><span class="o">=</span><span class="s2">&quot;linear&quot;</span><span class="p">,</span>
         <span class="p">)</span>
-
-        <span class="n">kernel_map</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="o">=</span><span class="n">geom_upsampled</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">))</span>
-        <span class="n">kernel_map</span> <span class="o">=</span> <span class="n">kernel_map</span><span class="o">.</span><span class="n">downsample</span><span class="p">(</span><span class="n">factor</span><span class="p">,</span> <span class="n">preserve_counts</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">kernel_map</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">))</span>
+        <span class="n">kernel_map</span> <span class="o">=</span> <span class="n">kernel_map</span><span class="o">.</span><span class="n">downsample</span><span class="p">(</span><span class="n">factor</span><span class="o">=</span><span class="n">factor</span><span class="p">,</span> <span class="n">preserve_counts</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">PSFKernel</span><span class="p">(</span><span class="n">kernel_map</span><span class="p">,</span> <span class="n">normalize</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="PSFMap.sample_coord"><a class="viewcode-back" href="../../../../api/gammapy.irf.PSFMap.html#gammapy.irf.PSFMap.sample_coord">[docs]</a>    <span class="k">def</span> <span class="nf">sample_coord</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">map_coord</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>

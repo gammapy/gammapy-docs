@@ -188,7 +188,7 @@ function checkPageExistsAndRedirect(event) {
 
             $("#version_switcher_menu").append(node);
             // replace dropdown button text with the preferred display name of
-            // this version, rather than using sphinx's 1.2.dev1572+g0dd739944 variable.
+            // this version, rather than using sphinx's 1.2.dev1781+g566e24edd variable.
             // also highlight the dropdown entry for the currently-viewed
             // version's entry
             if (entry.version == "dev") {
@@ -267,17 +267,16 @@ function checkPageExistsAndRedirect(event) {
 <span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Mapping</span>
 <span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span>
-<span class="kn">from</span> <span class="nn">astropy.coordinates</span> <span class="kn">import</span> <span class="n">Angle</span>
-<span class="kn">from</span> <span class="nn">astropy.time</span> <span class="kn">import</span> <span class="n">Time</span>
-<span class="kn">from</span> <span class="nn">astropy.units</span> <span class="kn">import</span> <span class="n">Quantity</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">from</span> <span class="nn">astropy</span> <span class="kn">import</span> <span class="n">units</span> <span class="k">as</span> <span class="n">u</span>
 <span class="kn">import</span> <span class="nn">yaml</span>
-<span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">BaseModel</span>
-<span class="kn">from</span> <span class="nn">pydantic.utils</span> <span class="kn">import</span> <span class="n">deep_update</span>
+<span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">ConfigDict</span>
 <span class="kn">from</span> <span class="nn">gammapy.makers</span> <span class="kn">import</span> <span class="n">MapDatasetMaker</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.scripts</span> <span class="kn">import</span> <span class="n">make_path</span><span class="p">,</span> <span class="n">read_yaml</span>
+<span class="kn">from</span> <span class="nn">gammapy.utils.types</span> <span class="kn">import</span> <span class="n">AngleType</span><span class="p">,</span> <span class="n">EnergyType</span><span class="p">,</span> <span class="n">PathType</span><span class="p">,</span> <span class="n">TimeType</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;AnalysisConfig&quot;</span><span class="p">]</span>
 
@@ -287,37 +286,17 @@ function checkPageExistsAndRedirect(event) {
 <span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 
-<span class="k">class</span> <span class="nc">AngleType</span><span class="p">(</span><span class="n">Angle</span><span class="p">):</span>
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">__get_validators__</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
-        <span class="k">yield</span> <span class="bp">cls</span><span class="o">.</span><span class="n">validate</span>
+<span class="k">def</span> <span class="nf">deep_update</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">u</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Recursively update a nested dictionary.</span>
 
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">validate</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">Angle</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
-
-
-<span class="k">class</span> <span class="nc">EnergyType</span><span class="p">(</span><span class="n">Quantity</span><span class="p">):</span>
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">__get_validators__</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
-        <span class="k">yield</span> <span class="bp">cls</span><span class="o">.</span><span class="n">validate</span>
-
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">validate</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">):</span>
-        <span class="n">v</span> <span class="o">=</span> <span class="n">Quantity</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">v</span><span class="o">.</span><span class="n">unit</span><span class="o">.</span><span class="n">physical_type</span> <span class="o">!=</span> <span class="s2">&quot;energy&quot;</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid unit for energy: </span><span class="si">{</span><span class="n">v</span><span class="o">.</span><span class="n">unit</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">v</span>
-
-
-<span class="k">class</span> <span class="nc">TimeType</span><span class="p">(</span><span class="n">Time</span><span class="p">):</span>
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">__get_validators__</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
-        <span class="k">yield</span> <span class="bp">cls</span><span class="o">.</span><span class="n">validate</span>
-
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">validate</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">v</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">Time</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+<span class="sd">    Taken from: https://stackoverflow.com/a/3233356/19802442</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">u</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="n">d</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">deep_update</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="p">{}),</span> <span class="n">v</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">d</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
+    <span class="k">return</span> <span class="n">d</span>
 
 
 <span class="k">class</span> <span class="nc">ReductionTypeEnum</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Enum</span><span class="p">):</span>
@@ -363,15 +342,14 @@ function checkPageExistsAndRedirect(event) {
 
 
 <span class="k">class</span> <span class="nc">GammapyBaseConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
-    <span class="k">class</span> <span class="nc">Config</span><span class="p">:</span>
-        <span class="n">validate_all</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="n">validate_assignment</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="n">extra</span> <span class="o">=</span> <span class="s2">&quot;forbid&quot;</span>
-        <span class="n">json_encoders</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="n">Angle</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">v</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">v</span><span class="o">.</span><span class="n">value</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">v</span><span class="o">.</span><span class="n">unit</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-            <span class="n">Quantity</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">v</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">v</span><span class="o">.</span><span class="n">value</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">v</span><span class="o">.</span><span class="n">unit</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-            <span class="n">Time</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">v</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">v</span><span class="o">.</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-        <span class="p">}</span>
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span>
+        <span class="n">arbitrary_types_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">validate_assignment</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">extra</span><span class="o">=</span><span class="s2">&quot;forbid&quot;</span><span class="p">,</span>
+        <span class="n">validate_default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">use_enum_values</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">json_encoders</span><span class="o">=</span><span class="p">{</span><span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">v</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">v</span><span class="o">.</span><span class="n">value</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">v</span><span class="o">.</span><span class="n">unit</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">},</span>
+    <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_repr_html_</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">try</span><span class="p">:</span>
@@ -381,32 +359,32 @@ function checkPageExistsAndRedirect(event) {
 
 
 <span class="k">class</span> <span class="nc">SkyCoordConfig</span><span class="p">(</span><span class="n">GammapyBaseConfig</span><span class="p">):</span>
-    <span class="n">frame</span><span class="p">:</span> <span class="n">FrameEnum</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">lon</span><span class="p">:</span> <span class="n">AngleType</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">lat</span><span class="p">:</span> <span class="n">AngleType</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">frame</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">FrameEnum</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">lon</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AngleType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">lat</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AngleType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
 
 <span class="k">class</span> <span class="nc">EnergyAxisConfig</span><span class="p">(</span><span class="n">GammapyBaseConfig</span><span class="p">):</span>
-    <span class="nb">min</span><span class="p">:</span> <span class="n">EnergyType</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="nb">max</span><span class="p">:</span> <span class="n">EnergyType</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">nbins</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="nb">min</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">EnergyType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="nb">max</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">EnergyType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">nbins</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
 
 <span class="k">class</span> <span class="nc">SpatialCircleConfig</span><span class="p">(</span><span class="n">GammapyBaseConfig</span><span class="p">):</span>
-    <span class="n">frame</span><span class="p">:</span> <span class="n">FrameEnum</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">lon</span><span class="p">:</span> <span class="n">AngleType</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">lat</span><span class="p">:</span> <span class="n">AngleType</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">radius</span><span class="p">:</span> <span class="n">AngleType</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">frame</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">FrameEnum</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">lon</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AngleType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">lat</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AngleType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">radius</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AngleType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
 
 <span class="k">class</span> <span class="nc">EnergyRangeConfig</span><span class="p">(</span><span class="n">GammapyBaseConfig</span><span class="p">):</span>
-    <span class="nb">min</span><span class="p">:</span> <span class="n">EnergyType</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="nb">max</span><span class="p">:</span> <span class="n">EnergyType</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="nb">min</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">EnergyType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="nb">max</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">EnergyType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
 
 <span class="k">class</span> <span class="nc">TimeRangeConfig</span><span class="p">(</span><span class="n">GammapyBaseConfig</span><span class="p">):</span>
-    <span class="n">start</span><span class="p">:</span> <span class="n">TimeType</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">stop</span><span class="p">:</span> <span class="n">TimeType</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">start</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">TimeType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">TimeType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
 
 <span class="k">class</span> <span class="nc">FluxPointsConfig</span><span class="p">(</span><span class="n">GammapyBaseConfig</span><span class="p">):</span>
@@ -433,8 +411,8 @@ function checkPageExistsAndRedirect(event) {
 
 
 <span class="k">class</span> <span class="nc">BackgroundConfig</span><span class="p">(</span><span class="n">GammapyBaseConfig</span><span class="p">):</span>
-    <span class="n">method</span><span class="p">:</span> <span class="n">BackgroundMethodEnum</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">exclusion</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">method</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BackgroundMethodEnum</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">exclusion</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">PathType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">parameters</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{}</span>
 
 
@@ -484,9 +462,9 @@ function checkPageExistsAndRedirect(event) {
 
 
 <span class="k">class</span> <span class="nc">ObservationsConfig</span><span class="p">(</span><span class="n">GammapyBaseConfig</span><span class="p">):</span>
-    <span class="n">datastore</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;$GAMMAPY_DATA/hess-dl3-dr1/&quot;</span><span class="p">)</span>
+    <span class="n">datastore</span><span class="p">:</span> <span class="n">PathType</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;$GAMMAPY_DATA/hess-dl3-dr1/&quot;</span><span class="p">)</span>
     <span class="n">obs_ids</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">obs_file</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">obs_file</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">PathType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">obs_cone</span><span class="p">:</span> <span class="n">SpatialCircleConfig</span> <span class="o">=</span> <span class="n">SpatialCircleConfig</span><span class="p">()</span>
     <span class="n">obs_time</span><span class="p">:</span> <span class="n">TimeRangeConfig</span> <span class="o">=</span> <span class="n">TimeRangeConfig</span><span class="p">()</span>
     <span class="n">required_irf</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">RequiredHDUEnum</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;aeff&quot;</span><span class="p">,</span> <span class="s2">&quot;edisp&quot;</span><span class="p">,</span> <span class="s2">&quot;psf&quot;</span><span class="p">,</span> <span class="s2">&quot;bkg&quot;</span><span class="p">]</span>
@@ -494,18 +472,18 @@ function checkPageExistsAndRedirect(event) {
 
 <span class="k">class</span> <span class="nc">LogConfig</span><span class="p">(</span><span class="n">GammapyBaseConfig</span><span class="p">):</span>
     <span class="n">level</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;info&quot;</span>
-    <span class="n">filename</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">filemode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="nb">format</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">datefmt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">filename</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">PathType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">filemode</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="nb">format</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">datefmt</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
 
 <span class="k">class</span> <span class="nc">GeneralConfig</span><span class="p">(</span><span class="n">GammapyBaseConfig</span><span class="p">):</span>
     <span class="n">log</span><span class="p">:</span> <span class="n">LogConfig</span> <span class="o">=</span> <span class="n">LogConfig</span><span class="p">()</span>
     <span class="n">outdir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;.&quot;</span>
     <span class="n">n_jobs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
-    <span class="n">datasets_file</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">models_file</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">datasets_file</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">PathType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">models_file</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">PathType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
 
 <div class="viewcode-block" id="AnalysisConfig"><a class="viewcode-back" href="../../../api/gammapy.analysis.AnalysisConfig.html#gammapy.analysis.AnalysisConfig">[docs]</a><span class="k">class</span> <span class="nc">AnalysisConfig</span><span class="p">(</span><span class="n">GammapyBaseConfig</span><span class="p">):</span>
@@ -542,18 +520,17 @@ function checkPageExistsAndRedirect(event) {
 <div class="viewcode-block" id="AnalysisConfig.write"><a class="viewcode-back" href="../../../api/gammapy.analysis.AnalysisConfig.html#gammapy.analysis.AnalysisConfig.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Write to YAML file.&quot;&quot;&quot;</span>
         <span class="n">path</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
         <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">overwrite</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;File exists already: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
         <span class="n">path</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">to_yaml</span><span class="p">())</span></div>
 
 <div class="viewcode-block" id="AnalysisConfig.to_yaml"><a class="viewcode-back" href="../../../api/gammapy.analysis.AnalysisConfig.html#gammapy.analysis.AnalysisConfig.to_yaml">[docs]</a>    <span class="k">def</span> <span class="nf">to_yaml</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert to YAML string.&quot;&quot;&quot;</span>
-        <span class="c1"># Here using `dict()` instead of `json()` would be more natural.</span>
-        <span class="c1"># We should change this once pydantic adds support for custom encoders</span>
-        <span class="c1"># to `dict()`. See https://github.com/samuelcolvin/pydantic/issues/1043</span>
-        <span class="n">config</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">json</span><span class="p">())</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_dump_json</span><span class="p">())</span>
         <span class="k">return</span> <span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span>
-            <span class="n">config</span><span class="p">,</span> <span class="n">sort_keys</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">80</span><span class="p">,</span> <span class="n">default_flow_style</span><span class="o">=</span><span class="kc">None</span>
+            <span class="n">data</span><span class="p">,</span> <span class="n">sort_keys</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">80</span><span class="p">,</span> <span class="n">default_flow_style</span><span class="o">=</span><span class="kc">None</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="AnalysisConfig.set_logging"><a class="viewcode-back" href="../../../api/gammapy.analysis.AnalysisConfig.html#gammapy.analysis.AnalysisConfig.set_logging">[docs]</a>    <span class="k">def</span> <span class="nf">set_logging</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -562,8 +539,8 @@ function checkPageExistsAndRedirect(event) {
 <span class="sd">        Calls ``logging.basicConfig``, i.e. adjusts global logging state.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">general</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">level</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">general</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">level</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
-        <span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">general</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">dict</span><span class="p">())</span>
-        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Setting logging config: </span><span class="si">{!r}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">general</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">dict</span><span class="p">()))</span></div>
+        <span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">general</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">model_dump</span><span class="p">())</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Setting logging config: </span><span class="si">{!r}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">general</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">model_dump</span><span class="p">()))</span></div>
 
 <div class="viewcode-block" id="AnalysisConfig.update"><a class="viewcode-back" href="../../../api/gammapy.analysis.AnalysisConfig.html#gammapy.analysis.AnalysisConfig.update">[docs]</a>    <span class="k">def</span> <span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Update config with provided settings.</span>
@@ -581,7 +558,8 @@ function checkPageExistsAndRedirect(event) {
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid type: </span><span class="si">{</span><span class="n">config</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
         <span class="n">config_new</span> <span class="o">=</span> <span class="n">deep_update</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">dict</span><span class="p">(</span><span class="n">exclude_defaults</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">other</span><span class="o">.</span><span class="n">dict</span><span class="p">(</span><span class="n">exclude_defaults</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">exclude_defaults</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="n">other</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">exclude_defaults</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">AnalysisConfig</span><span class="p">(</span><span class="o">**</span><span class="n">config_new</span><span class="p">)</span></div>
 
