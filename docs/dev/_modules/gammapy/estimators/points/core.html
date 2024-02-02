@@ -188,7 +188,7 @@ function checkPageExistsAndRedirect(event) {
 
             $("#version_switcher_menu").append(node);
             // replace dropdown button text with the preferred display name of
-            // this version, rather than using sphinx's 1.2.dev1871+g011d93fa5 variable.
+            // this version, rather than using sphinx's 1.2.dev1896+gbae65899b variable.
             // also highlight the dropdown entry for the currently-viewed
             // version's entry
             if (entry.version == "dev") {
@@ -267,6 +267,8 @@ function checkPageExistsAndRedirect(event) {
 <span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">deepcopy</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">from</span> <span class="nn">scipy</span> <span class="kn">import</span> <span class="n">stats</span>
+<span class="kn">from</span> <span class="nn">scipy.interpolate</span> <span class="kn">import</span> <span class="n">interp1d</span>
+<span class="kn">from</span> <span class="nn">scipy.optimize</span> <span class="kn">import</span> <span class="n">minimize</span>
 <span class="kn">from</span> <span class="nn">astropy.io</span> <span class="kn">import</span> <span class="n">fits</span>
 <span class="kn">from</span> <span class="nn">astropy.io.registry</span> <span class="kn">import</span> <span class="n">IORegistryError</span>
 <span class="kn">from</span> <span class="nn">astropy.table</span> <span class="kn">import</span> <span class="n">Table</span><span class="p">,</span> <span class="n">vstack</span>
@@ -274,11 +276,12 @@ function checkPageExistsAndRedirect(event) {
 <span class="kn">from</span> <span class="nn">astropy.visualization</span> <span class="kn">import</span> <span class="n">quantity_support</span>
 <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
 <span class="kn">from</span> <span class="nn">gammapy.data</span> <span class="kn">import</span> <span class="n">GTI</span>
-<span class="kn">from</span> <span class="nn">gammapy.maps</span> <span class="kn">import</span> <span class="n">MapAxis</span><span class="p">,</span> <span class="n">Maps</span><span class="p">,</span> <span class="n">RegionNDMap</span><span class="p">,</span> <span class="n">TimeMapAxis</span>
+<span class="kn">from</span> <span class="nn">gammapy.maps</span> <span class="kn">import</span> <span class="n">Map</span><span class="p">,</span> <span class="n">MapAxis</span><span class="p">,</span> <span class="n">Maps</span><span class="p">,</span> <span class="n">RegionNDMap</span><span class="p">,</span> <span class="n">TimeMapAxis</span>
 <span class="kn">from</span> <span class="nn">gammapy.maps.axes</span> <span class="kn">import</span> <span class="n">UNIT_STRING_FORMAT</span><span class="p">,</span> <span class="n">flat_if_equal</span>
 <span class="kn">from</span> <span class="nn">gammapy.modeling.models</span> <span class="kn">import</span> <span class="n">TemplateSpectralModel</span>
 <span class="kn">from</span> <span class="nn">gammapy.modeling.models.spectral</span> <span class="kn">import</span> <span class="n">scale_plot_flux</span>
 <span class="kn">from</span> <span class="nn">gammapy.modeling.scipy</span> <span class="kn">import</span> <span class="n">stat_profile_ul_scipy</span>
+<span class="kn">from</span> <span class="nn">gammapy.utils.interpolation</span> <span class="kn">import</span> <span class="n">interpolate_profile</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.scripts</span> <span class="kn">import</span> <span class="n">make_path</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.table</span> <span class="kn">import</span> <span class="n">table_standardise_units_copy</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.time</span> <span class="kn">import</span> <span class="n">time_ref_to_dict</span>
@@ -287,6 +290,66 @@ function checkPageExistsAndRedirect(event) {
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;FluxPoints&quot;</span><span class="p">]</span>
 
 <span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">squash_fluxpoints</span><span class="p">(</span><span class="n">flux_point</span><span class="p">,</span> <span class="n">axis</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Squash a FluxPoints object into one point.</span>
+<span class="sd">    The log-likelihoods profiles in each bin are summed</span>
+<span class="sd">    to compute the resultant quantities. Stat profiles</span>
+<span class="sd">    must be present on the fluxpoints object for</span>
+<span class="sd">    this method to work.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">value_scan</span> <span class="o">=</span> <span class="n">flux_point</span><span class="o">.</span><span class="n">stat_scan</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;norm&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">center</span>
+    <span class="n">stat_scan</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">flux_point</span><span class="o">.</span><span class="n">stat_scan</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
+    <span class="n">f</span> <span class="o">=</span> <span class="n">interp1d</span><span class="p">(</span><span class="n">value_scan</span><span class="p">,</span> <span class="n">stat_scan</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;quadratic&quot;</span><span class="p">,</span> <span class="n">bounds_error</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">f</span> <span class="o">=</span> <span class="n">interpolate_profile</span><span class="p">(</span><span class="n">value_scan</span><span class="p">,</span> <span class="n">stat_scan</span><span class="p">)</span>
+    <span class="n">minimizer</span> <span class="o">=</span> <span class="n">minimize</span><span class="p">(</span>
+        <span class="n">f</span><span class="p">,</span>
+        <span class="n">x0</span><span class="o">=</span><span class="n">value_scan</span><span class="p">[</span>
+            <span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">value_scan</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">bounds</span><span class="o">=</span><span class="p">[(</span><span class="n">value_scan</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">value_scan</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])],</span>
+        <span class="n">method</span><span class="o">=</span><span class="s2">&quot;L-BFGS-B&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">maps</span> <span class="o">=</span> <span class="n">Maps</span><span class="p">()</span>
+    <span class="n">geom</span> <span class="o">=</span> <span class="n">flux_point</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">axis</span><span class="o">.</span><span class="n">name</span> <span class="o">!=</span> <span class="s2">&quot;energy&quot;</span><span class="p">:</span>
+        <span class="n">geom</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">to_cube</span><span class="p">([</span><span class="n">flux_point</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]])</span>
+
+    <span class="n">maps</span><span class="p">[</span><span class="s2">&quot;norm&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">minimizer</span><span class="o">.</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">maps</span><span class="p">[</span><span class="s2">&quot;norm_err&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">minimizer</span><span class="o">.</span><span class="n">hess_inv</span><span class="o">.</span><span class="n">todense</span><span class="p">()))</span>
+    <span class="n">maps</span><span class="p">[</span><span class="s2">&quot;n_dof&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">flux_point</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="n">axis</span><span class="o">.</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">nbin</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="s2">&quot;norm_ul&quot;</span> <span class="ow">in</span> <span class="n">flux_point</span><span class="o">.</span><span class="n">available_quantities</span><span class="p">:</span>
+        <span class="n">delta_ts</span> <span class="o">=</span> <span class="n">flux_point</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;n_sigma_ul&quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+        <span class="n">ul</span> <span class="o">=</span> <span class="n">stat_profile_ul_scipy</span><span class="p">(</span><span class="n">value_scan</span><span class="p">,</span> <span class="n">stat_scan</span><span class="p">,</span> <span class="n">delta_ts</span><span class="o">=</span><span class="n">delta_ts</span><span class="p">)</span>
+        <span class="n">maps</span><span class="p">[</span><span class="s2">&quot;norm_ul&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">ul</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+
+    <span class="n">maps</span><span class="p">[</span><span class="s2">&quot;stat&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">f</span><span class="p">(</span><span class="n">minimizer</span><span class="o">.</span><span class="n">x</span><span class="p">))</span>
+
+    <span class="n">maps</span><span class="p">[</span><span class="s2">&quot;stat_scan&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span>
+        <span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="o">.</span><span class="n">to_cube</span><span class="p">([</span><span class="n">MapAxis</span><span class="o">.</span><span class="n">from_nodes</span><span class="p">(</span><span class="n">value_scan</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;norm&quot;</span><span class="p">)]),</span> <span class="n">data</span><span class="o">=</span><span class="n">stat_scan</span>
+    <span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">maps</span><span class="p">[</span><span class="s2">&quot;stat_null&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">flux_point</span><span class="o">.</span><span class="n">stat_null</span><span class="o">.</span><span class="n">data</span><span class="p">))</span>
+        <span class="n">maps</span><span class="p">[</span><span class="s2">&quot;ts&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">maps</span><span class="p">[</span><span class="s2">&quot;stat_null&quot;</span><span class="p">]</span> <span class="o">-</span> <span class="n">maps</span><span class="p">[</span><span class="s2">&quot;stat&quot;</span><span class="p">]</span>
+    <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;Stat null info not present on original FluxPoints object. TS not computed&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">maps</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">minimizer</span><span class="o">.</span><span class="n">success</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+
+    <span class="n">combined_fp</span> <span class="o">=</span> <span class="n">FluxPoints</span><span class="o">.</span><span class="n">from_maps</span><span class="p">(</span>
+        <span class="n">maps</span><span class="o">=</span><span class="n">maps</span><span class="p">,</span>
+        <span class="n">sed_type</span><span class="o">=</span><span class="n">flux_point</span><span class="o">.</span><span class="n">sed_type_init</span><span class="p">,</span>
+        <span class="n">reference_model</span><span class="o">=</span><span class="n">flux_point</span><span class="o">.</span><span class="n">reference_model</span><span class="p">,</span>
+        <span class="n">gti</span><span class="o">=</span><span class="n">flux_point</span><span class="o">.</span><span class="n">gti</span><span class="p">,</span>
+        <span class="n">meta</span><span class="o">=</span><span class="n">flux_point</span><span class="o">.</span><span class="n">meta</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">combined_fp</span>
 
 
 <div class="viewcode-block" id="FluxPoints"><a class="viewcode-back" href="../../../../api/gammapy.estimators.FluxPoints.html#gammapy.estimators.FluxPoints">[docs]</a><span class="k">class</span> <span class="nc">FluxPoints</span><span class="p">(</span><span class="n">FluxMaps</span><span class="p">):</span>
@@ -1003,7 +1066,41 @@ function checkPageExistsAndRedirect(event) {
                 <span class="n">value_scan</span><span class="p">,</span> <span class="n">stat_scan</span><span class="p">,</span> <span class="n">delta_ts</span><span class="o">=</span><span class="n">delta_ts</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
             <span class="p">)</span>
         <span class="n">flux_points</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s2">&quot;n_sigma_ul&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">n_sigma_ul</span>
-        <span class="k">return</span> <span class="n">flux_points</span></div></div>
+        <span class="k">return</span> <span class="n">flux_points</span></div>
+
+<div class="viewcode-block" id="FluxPoints.resample_axis"><a class="viewcode-back" href="../../../../api/gammapy.estimators.FluxPoints.html#gammapy.estimators.FluxPoints.resample_axis">[docs]</a>    <span class="k">def</span> <span class="nf">resample_axis</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">axis_new</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Rebin the flux point object along the new axis.</span>
+<span class="sd">        The log-likelihoods profiles in each bin are summed</span>
+<span class="sd">        to compute the resultant quantities.</span>
+<span class="sd">        Stat profiles must be present on the fluxpoints object for</span>
+<span class="sd">        this method to work.</span>
+
+<span class="sd">        For now, works only for flat fluxpoints.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        axis_new : `MapAxis` or `TimeMapAxis`</span>
+<span class="sd">            The new axis to resample along</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        flux_points : `~gammapy.estimators.FluxPoints`</span>
+<span class="sd">            A new FluxPoints object with modified axis.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_stat_profiles</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Stat profiles not present, rebinning is not possible&quot;</span><span class="p">)</span>
+
+        <span class="n">fluxpoints</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">edge_min</span><span class="p">,</span> <span class="n">edge_max</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">axis_new</span><span class="o">.</span><span class="n">edges_min</span><span class="p">,</span> <span class="n">axis_new</span><span class="o">.</span><span class="n">edges_max</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">axis_new</span><span class="p">,</span> <span class="n">TimeMapAxis</span><span class="p">):</span>
+                <span class="n">edge_min</span> <span class="o">=</span> <span class="n">edge_min</span> <span class="o">+</span> <span class="n">axis_new</span><span class="o">.</span><span class="n">reference_time</span>
+                <span class="n">edge_max</span> <span class="o">=</span> <span class="n">edge_max</span> <span class="o">+</span> <span class="n">axis_new</span><span class="o">.</span><span class="n">reference_time</span>
+            <span class="n">fp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">slice_by_coord</span><span class="p">({</span><span class="n">axis_new</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="nb">slice</span><span class="p">(</span><span class="n">edge_min</span><span class="p">,</span> <span class="n">edge_max</span><span class="p">)})</span>
+            <span class="n">fp_new</span> <span class="o">=</span> <span class="n">squash_fluxpoints</span><span class="p">(</span><span class="n">fp</span><span class="p">,</span> <span class="n">axis_new</span><span class="p">)</span>
+            <span class="n">fluxpoints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fp_new</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">from_stack</span><span class="p">(</span><span class="n">fluxpoints</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="n">axis_new</span><span class="p">)</span></div></div>
 </pre></div>
 
               </div>
