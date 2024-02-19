@@ -1,0 +1,101 @@
+PSFKing
+=======
+
+.. currentmodule:: gammapy.irf
+
+.. autoclass:: PSFKing
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~PSFKing.axes
+      ~PSFKing.data
+      ~PSFKing.default_interp_kwargs
+      ~PSFKing.fov_alignment
+      ~PSFKing.has_offset_axis
+      ~PSFKing.is_pointlike
+      ~PSFKing.quantity
+      ~PSFKing.required_axes
+      ~PSFKing.required_parameters
+      ~PSFKing.tag
+      ~PSFKing.unit
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~PSFKing.containment
+      ~PSFKing.containment_radius
+      ~PSFKing.cumsum
+      ~PSFKing.evaluate
+      ~PSFKing.evaluate_containment
+      ~PSFKing.evaluate_direct
+      ~PSFKing.evaluate_parameters
+      ~PSFKing.from_hdulist
+      ~PSFKing.from_table
+      ~PSFKing.info
+      ~PSFKing.integral
+      ~PSFKing.integrate_log_log
+      ~PSFKing.interp_missing_data
+      ~PSFKing.is_allclose
+      ~PSFKing.normalize
+      ~PSFKing.pad
+      ~PSFKing.peek
+      ~PSFKing.plot_containment_radius
+      ~PSFKing.plot_containment_radius_vs_energy
+      ~PSFKing.plot_psf_vs_rad
+      ~PSFKing.read
+      ~PSFKing.slice_by_idx
+      ~PSFKing.to_hdulist
+      ~PSFKing.to_psf3d
+      ~PSFKing.to_table
+      ~PSFKing.to_table_hdu
+      ~PSFKing.to_unit
+      ~PSFKing.write
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: axes
+   .. autoattribute:: data
+   .. autoattribute:: default_interp_kwargs
+   .. autoattribute:: fov_alignment
+   .. autoattribute:: has_offset_axis
+   .. autoattribute:: is_pointlike
+   .. autoattribute:: quantity
+   .. autoattribute:: required_axes
+   .. autoattribute:: required_parameters
+   .. autoattribute:: tag
+   .. autoattribute:: unit
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: containment
+   .. automethod:: containment_radius
+   .. automethod:: cumsum
+   .. automethod:: evaluate
+   .. automethod:: evaluate_containment
+   .. automethod:: evaluate_direct
+   .. automethod:: evaluate_parameters
+   .. automethod:: from_hdulist
+   .. automethod:: from_table
+   .. automethod:: info
+   .. automethod:: integral
+   .. automethod:: integrate_log_log
+   .. automethod:: interp_missing_data
+   .. automethod:: is_allclose
+   .. automethod:: normalize
+   .. automethod:: pad
+   .. automethod:: peek
+   .. automethod:: plot_containment_radius
+   .. automethod:: plot_containment_radius_vs_energy
+   .. automethod:: plot_psf_vs_rad
+   .. automethod:: read
+   .. automethod:: slice_by_idx
+   .. automethod:: to_hdulist
+   .. automethod:: to_psf3d
+   .. automethod:: to_table
+   .. automethod:: to_table_hdu
+   .. automethod:: to_unit
+   .. automethod:: write
