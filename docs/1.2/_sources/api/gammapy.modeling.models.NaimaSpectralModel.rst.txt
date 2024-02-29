@@ -1,0 +1,87 @@
+NaimaSpectralModel
+==================
+
+.. currentmodule:: gammapy.modeling.models
+
+.. autoclass:: NaimaSpectralModel
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~NaimaSpectralModel.covariance
+      ~NaimaSpectralModel.default_parameters
+      ~NaimaSpectralModel.frozen
+      ~NaimaSpectralModel.include_ssc
+      ~NaimaSpectralModel.is_norm_spectral_model
+      ~NaimaSpectralModel.parameters
+      ~NaimaSpectralModel.particle_distribution
+      ~NaimaSpectralModel.pivot_energy
+      ~NaimaSpectralModel.ssc_model
+      ~NaimaSpectralModel.tag
+      ~NaimaSpectralModel.type
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~NaimaSpectralModel.__call__
+      ~NaimaSpectralModel.copy
+      ~NaimaSpectralModel.energy_flux
+      ~NaimaSpectralModel.energy_flux_error
+      ~NaimaSpectralModel.evaluate
+      ~NaimaSpectralModel.evaluate_error
+      ~NaimaSpectralModel.freeze
+      ~NaimaSpectralModel.from_dict
+      ~NaimaSpectralModel.from_parameters
+      ~NaimaSpectralModel.integral
+      ~NaimaSpectralModel.integral_error
+      ~NaimaSpectralModel.inverse
+      ~NaimaSpectralModel.inverse_all
+      ~NaimaSpectralModel.plot
+      ~NaimaSpectralModel.plot_error
+      ~NaimaSpectralModel.reassign
+      ~NaimaSpectralModel.reference_fluxes
+      ~NaimaSpectralModel.spectral_index
+      ~NaimaSpectralModel.spectral_index_error
+      ~NaimaSpectralModel.to_dict
+      ~NaimaSpectralModel.unfreeze
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: covariance
+   .. autoattribute:: default_parameters
+   .. autoattribute:: frozen
+   .. autoattribute:: include_ssc
+   .. autoattribute:: is_norm_spectral_model
+   .. autoattribute:: parameters
+   .. autoattribute:: particle_distribution
+   .. autoattribute:: pivot_energy
+   .. autoattribute:: ssc_model
+   .. autoattribute:: tag
+   .. autoattribute:: type
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: __call__
+   .. automethod:: copy
+   .. automethod:: energy_flux
+   .. automethod:: energy_flux_error
+   .. automethod:: evaluate
+   .. automethod:: evaluate_error
+   .. automethod:: freeze
+   .. automethod:: from_dict
+   .. automethod:: from_parameters
+   .. automethod:: integral
+   .. automethod:: integral_error
+   .. automethod:: inverse
+   .. automethod:: inverse_all
+   .. automethod:: plot
+   .. automethod:: plot_error
+   .. automethod:: reassign
+   .. automethod:: reference_fluxes
+   .. automethod:: spectral_index
+   .. automethod:: spectral_index_error
+   .. automethod:: to_dict
+   .. automethod:: unfreeze

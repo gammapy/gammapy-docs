@@ -1,0 +1,83 @@
+Observation
+===========
+
+.. currentmodule:: gammapy.data
+
+.. autoclass:: Observation
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~Observation.aeff
+      ~Observation.available_hdus
+      ~Observation.available_irfs
+      ~Observation.bkg
+      ~Observation.edisp
+      ~Observation.events
+      ~Observation.gti
+      ~Observation.meta
+      ~Observation.muoneff
+      ~Observation.obs_info
+      ~Observation.observation_dead_time_fraction
+      ~Observation.observation_live_time_duration
+      ~Observation.observation_time_duration
+      ~Observation.observatory_earth_location
+      ~Observation.pointing
+      ~Observation.psf
+      ~Observation.rad_max
+      ~Observation.target_radec
+      ~Observation.tmid
+      ~Observation.tstart
+      ~Observation.tstop
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~Observation.check
+      ~Observation.copy
+      ~Observation.create
+      ~Observation.get_pointing_altaz
+      ~Observation.get_pointing_icrs
+      ~Observation.peek
+      ~Observation.read
+      ~Observation.select_time
+      ~Observation.write
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: aeff
+   .. autoattribute:: available_hdus
+   .. autoattribute:: available_irfs
+   .. autoattribute:: bkg
+   .. autoattribute:: edisp
+   .. autoattribute:: events
+   .. autoattribute:: gti
+   .. autoattribute:: meta
+   .. autoattribute:: muoneff
+   .. autoattribute:: obs_info
+   .. autoattribute:: observation_dead_time_fraction
+   .. autoattribute:: observation_live_time_duration
+   .. autoattribute:: observation_time_duration
+   .. autoattribute:: observatory_earth_location
+   .. autoattribute:: pointing
+   .. autoattribute:: psf
+   .. autoattribute:: rad_max
+   .. autoattribute:: target_radec
+   .. autoattribute:: tmid
+   .. autoattribute:: tstart
+   .. autoattribute:: tstop
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: check
+   .. automethod:: copy
+   .. automethod:: create
+   .. automethod:: get_pointing_altaz
+   .. automethod:: get_pointing_icrs
+   .. automethod:: peek
+   .. automethod:: read
+   .. automethod:: select_time
+   .. automethod:: write

@@ -1,0 +1,91 @@
+PowerLawNormSpectralModel
+=========================
+
+.. currentmodule:: gammapy.modeling.models
+
+.. autoclass:: PowerLawNormSpectralModel
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~PowerLawNormSpectralModel.covariance
+      ~PowerLawNormSpectralModel.default_parameters
+      ~PowerLawNormSpectralModel.frozen
+      ~PowerLawNormSpectralModel.is_norm_spectral_model
+      ~PowerLawNormSpectralModel.norm
+      ~PowerLawNormSpectralModel.parameters
+      ~PowerLawNormSpectralModel.pivot_energy
+      ~PowerLawNormSpectralModel.reference
+      ~PowerLawNormSpectralModel.tag
+      ~PowerLawNormSpectralModel.tilt
+      ~PowerLawNormSpectralModel.type
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~PowerLawNormSpectralModel.__call__
+      ~PowerLawNormSpectralModel.copy
+      ~PowerLawNormSpectralModel.energy_flux
+      ~PowerLawNormSpectralModel.energy_flux_error
+      ~PowerLawNormSpectralModel.evaluate
+      ~PowerLawNormSpectralModel.evaluate_energy_flux
+      ~PowerLawNormSpectralModel.evaluate_error
+      ~PowerLawNormSpectralModel.evaluate_integral
+      ~PowerLawNormSpectralModel.freeze
+      ~PowerLawNormSpectralModel.from_dict
+      ~PowerLawNormSpectralModel.from_parameters
+      ~PowerLawNormSpectralModel.integral
+      ~PowerLawNormSpectralModel.integral_error
+      ~PowerLawNormSpectralModel.inverse
+      ~PowerLawNormSpectralModel.inverse_all
+      ~PowerLawNormSpectralModel.plot
+      ~PowerLawNormSpectralModel.plot_error
+      ~PowerLawNormSpectralModel.reassign
+      ~PowerLawNormSpectralModel.reference_fluxes
+      ~PowerLawNormSpectralModel.spectral_index
+      ~PowerLawNormSpectralModel.spectral_index_error
+      ~PowerLawNormSpectralModel.to_dict
+      ~PowerLawNormSpectralModel.unfreeze
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: covariance
+   .. autoattribute:: default_parameters
+   .. autoattribute:: frozen
+   .. autoattribute:: is_norm_spectral_model
+   .. autoattribute:: norm
+   .. autoattribute:: parameters
+   .. autoattribute:: pivot_energy
+   .. autoattribute:: reference
+   .. autoattribute:: tag
+   .. autoattribute:: tilt
+   .. autoattribute:: type
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: __call__
+   .. automethod:: copy
+   .. automethod:: energy_flux
+   .. automethod:: energy_flux_error
+   .. automethod:: evaluate
+   .. automethod:: evaluate_energy_flux
+   .. automethod:: evaluate_error
+   .. automethod:: evaluate_integral
+   .. automethod:: freeze
+   .. automethod:: from_dict
+   .. automethod:: from_parameters
+   .. automethod:: integral
+   .. automethod:: integral_error
+   .. automethod:: inverse
+   .. automethod:: inverse_all
+   .. automethod:: plot
+   .. automethod:: plot_error
+   .. automethod:: reassign
+   .. automethod:: reference_fluxes
+   .. automethod:: spectral_index
+   .. automethod:: spectral_index_error
+   .. automethod:: to_dict
+   .. automethod:: unfreeze

@@ -1,0 +1,87 @@
+GaussianSpectralModel
+=====================
+
+.. currentmodule:: gammapy.modeling.models
+
+.. autoclass:: GaussianSpectralModel
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~GaussianSpectralModel.amplitude
+      ~GaussianSpectralModel.covariance
+      ~GaussianSpectralModel.default_parameters
+      ~GaussianSpectralModel.frozen
+      ~GaussianSpectralModel.is_norm_spectral_model
+      ~GaussianSpectralModel.mean
+      ~GaussianSpectralModel.parameters
+      ~GaussianSpectralModel.pivot_energy
+      ~GaussianSpectralModel.sigma
+      ~GaussianSpectralModel.tag
+      ~GaussianSpectralModel.type
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~GaussianSpectralModel.__call__
+      ~GaussianSpectralModel.copy
+      ~GaussianSpectralModel.energy_flux
+      ~GaussianSpectralModel.energy_flux_error
+      ~GaussianSpectralModel.evaluate
+      ~GaussianSpectralModel.evaluate_error
+      ~GaussianSpectralModel.freeze
+      ~GaussianSpectralModel.from_dict
+      ~GaussianSpectralModel.from_parameters
+      ~GaussianSpectralModel.integral
+      ~GaussianSpectralModel.integral_error
+      ~GaussianSpectralModel.inverse
+      ~GaussianSpectralModel.inverse_all
+      ~GaussianSpectralModel.plot
+      ~GaussianSpectralModel.plot_error
+      ~GaussianSpectralModel.reassign
+      ~GaussianSpectralModel.reference_fluxes
+      ~GaussianSpectralModel.spectral_index
+      ~GaussianSpectralModel.spectral_index_error
+      ~GaussianSpectralModel.to_dict
+      ~GaussianSpectralModel.unfreeze
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: amplitude
+   .. autoattribute:: covariance
+   .. autoattribute:: default_parameters
+   .. autoattribute:: frozen
+   .. autoattribute:: is_norm_spectral_model
+   .. autoattribute:: mean
+   .. autoattribute:: parameters
+   .. autoattribute:: pivot_energy
+   .. autoattribute:: sigma
+   .. autoattribute:: tag
+   .. autoattribute:: type
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: __call__
+   .. automethod:: copy
+   .. automethod:: energy_flux
+   .. automethod:: energy_flux_error
+   .. automethod:: evaluate
+   .. automethod:: evaluate_error
+   .. automethod:: freeze
+   .. automethod:: from_dict
+   .. automethod:: from_parameters
+   .. automethod:: integral
+   .. automethod:: integral_error
+   .. automethod:: inverse
+   .. automethod:: inverse_all
+   .. automethod:: plot
+   .. automethod:: plot_error
+   .. automethod:: reassign
+   .. automethod:: reference_fluxes
+   .. automethod:: spectral_index
+   .. automethod:: spectral_index_error
+   .. automethod:: to_dict
+   .. automethod:: unfreeze

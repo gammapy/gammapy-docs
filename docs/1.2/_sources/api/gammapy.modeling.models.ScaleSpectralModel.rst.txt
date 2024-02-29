@@ -1,0 +1,83 @@
+ScaleSpectralModel
+==================
+
+.. currentmodule:: gammapy.modeling.models
+
+.. autoclass:: ScaleSpectralModel
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~ScaleSpectralModel.covariance
+      ~ScaleSpectralModel.default_parameters
+      ~ScaleSpectralModel.frozen
+      ~ScaleSpectralModel.is_norm_spectral_model
+      ~ScaleSpectralModel.norm
+      ~ScaleSpectralModel.parameters
+      ~ScaleSpectralModel.pivot_energy
+      ~ScaleSpectralModel.tag
+      ~ScaleSpectralModel.type
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~ScaleSpectralModel.__call__
+      ~ScaleSpectralModel.copy
+      ~ScaleSpectralModel.energy_flux
+      ~ScaleSpectralModel.energy_flux_error
+      ~ScaleSpectralModel.evaluate
+      ~ScaleSpectralModel.evaluate_error
+      ~ScaleSpectralModel.freeze
+      ~ScaleSpectralModel.from_dict
+      ~ScaleSpectralModel.from_parameters
+      ~ScaleSpectralModel.integral
+      ~ScaleSpectralModel.integral_error
+      ~ScaleSpectralModel.inverse
+      ~ScaleSpectralModel.inverse_all
+      ~ScaleSpectralModel.plot
+      ~ScaleSpectralModel.plot_error
+      ~ScaleSpectralModel.reassign
+      ~ScaleSpectralModel.reference_fluxes
+      ~ScaleSpectralModel.spectral_index
+      ~ScaleSpectralModel.spectral_index_error
+      ~ScaleSpectralModel.to_dict
+      ~ScaleSpectralModel.unfreeze
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: covariance
+   .. autoattribute:: default_parameters
+   .. autoattribute:: frozen
+   .. autoattribute:: is_norm_spectral_model
+   .. autoattribute:: norm
+   .. autoattribute:: parameters
+   .. autoattribute:: pivot_energy
+   .. autoattribute:: tag
+   .. autoattribute:: type
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: __call__
+   .. automethod:: copy
+   .. automethod:: energy_flux
+   .. automethod:: energy_flux_error
+   .. automethod:: evaluate
+   .. automethod:: evaluate_error
+   .. automethod:: freeze
+   .. automethod:: from_dict
+   .. automethod:: from_parameters
+   .. automethod:: integral
+   .. automethod:: integral_error
+   .. automethod:: inverse
+   .. automethod:: inverse_all
+   .. automethod:: plot
+   .. automethod:: plot_error
+   .. automethod:: reassign
+   .. automethod:: reference_fluxes
+   .. automethod:: spectral_index
+   .. automethod:: spectral_index_error
+   .. automethod:: to_dict
+   .. automethod:: unfreeze
