@@ -63,7 +63,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-    <meta name="docbuild:last-update" content="29 Apr 2024"/>
+    <meta name="docbuild:last-update" content="30 Apr 2024"/>
   </head>
   
   
@@ -544,16 +544,18 @@ document.write(`
 <span class="kn">from</span> <span class="nn">astropy.table</span> <span class="kn">import</span> <span class="n">Table</span>
 <span class="kn">from</span> <span class="nn">gammapy.datasets</span> <span class="kn">import</span> <span class="n">SpectrumDataset</span><span class="p">,</span> <span class="n">SpectrumDatasetOnOff</span>
 <span class="kn">from</span> <span class="nn">gammapy.datasets.map</span> <span class="kn">import</span> <span class="n">MapEvaluator</span>
-<span class="kn">from</span> <span class="nn">gammapy.maps</span> <span class="kn">import</span> <span class="n">MapAxis</span><span class="p">,</span> <span class="n">TimeMapAxis</span><span class="p">,</span> <span class="n">WcsNDMap</span>
+<span class="kn">from</span> <span class="nn">gammapy.maps</span> <span class="kn">import</span> <span class="n">Map</span><span class="p">,</span> <span class="n">MapAxis</span><span class="p">,</span> <span class="n">TimeMapAxis</span><span class="p">,</span> <span class="n">WcsNDMap</span>
 <span class="kn">from</span> <span class="nn">gammapy.modeling.models</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">ConstantFluxSpatialModel</span><span class="p">,</span>
     <span class="n">PowerLawSpectralModel</span><span class="p">,</span>
     <span class="n">SkyModel</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">gammapy.stats</span> <span class="kn">import</span> <span class="n">compute_flux_doubling</span><span class="p">,</span> <span class="n">compute_fpp</span><span class="p">,</span> <span class="n">compute_fvar</span>
+<span class="kn">from</span> <span class="nn">gammapy.stats.utils</span> <span class="kn">import</span> <span class="n">ts_to_sigma</span>
 <span class="kn">from</span> <span class="nn">.map.core</span> <span class="kn">import</span> <span class="n">FluxMaps</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;get_combined_significance_maps&quot;</span><span class="p">,</span>
     <span class="s2">&quot;estimate_exposure_reco_energy&quot;</span><span class="p">,</span>
     <span class="s2">&quot;find_peaks&quot;</span><span class="p">,</span>
     <span class="s2">&quot;find_peaks_in_flux_map&quot;</span><span class="p">,</span>
@@ -1247,6 +1249,74 @@ document.write(`
         <span class="n">edges</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">edges_min</span><span class="p">,</span> <span class="n">edges_max</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
         <span class="n">axis_new</span> <span class="o">=</span> <span class="n">MapAxis</span><span class="o">.</span><span class="n">from_edges</span><span class="p">(</span><span class="n">edges</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">axis_name</span><span class="p">,</span> <span class="n">interp</span><span class="o">=</span><span class="n">ax</span><span class="o">.</span><span class="n">interp</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">axis_new</span></div>
+
+
+
+<div class="viewcode-block" id="get_combined_significance_maps">
+<a class="viewcode-back" href="../../../api/gammapy.estimators.utils.get_combined_significance_maps.html#gammapy.estimators.utils.get_combined_significance_maps">[docs]</a>
+<span class="k">def</span> <span class="nf">get_combined_significance_maps</span><span class="p">(</span><span class="n">estimator</span><span class="p">,</span> <span class="n">datasets</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Computes excess and significance for a set of datasets.</span>
+<span class="sd">    The significance computation assumes that the model contains</span>
+<span class="sd">    one degree of freedom per valid energy bin in each dataset.</span>
+<span class="sd">    This method implemented here is valid under the assumption</span>
+<span class="sd">    that the TS in each independent bin follows a Chi2 distribution,</span>
+<span class="sd">    then the sum of the TS also follows a Chi2 distribution (with the sum of degree of freedom).</span>
+
+<span class="sd">    See, Zhen (2014): https://www.sciencedirect.com/science/article/abs/pii/S0167947313003204,</span>
+<span class="sd">    Lancaster (1961): https://onlinelibrary.wiley.com/doi/10.1111/j.1467-842X.1961.tb00058.x</span>
+
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    estimator : `~gammapy.estimator.ExcessMapEstimator` or `~gammapy.estimator.TSMapEstimator`</span>
+<span class="sd">        Excess Map Estimator or TS Map Estimator</span>
+<span class="sd">    dataset : `~gammapy.datasets.Datasets`</span>
+<span class="sd">        Datasets containing only `~gammapy.maps.MapDataset`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    results : dict</span>
+<span class="sd">        Dictionary with keys :</span>
+<span class="sd">        - &quot;significance&quot; : joint significance map.</span>
+<span class="sd">        - &quot;df&quot; : degree of freedom map (one norm per valid bin).</span>
+<span class="sd">        - &quot;npred_excess&quot; : summed excess map.</span>
+<span class="sd">        - &quot;estimator_results&quot; : dictionary containing the estimator results for each dataset.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">.map.excess</span> <span class="kn">import</span> <span class="n">ExcessMapEstimator</span>
+    <span class="kn">from</span> <span class="nn">.map.ts</span> <span class="kn">import</span> <span class="n">TSMapEstimator</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">estimator</span><span class="p">,</span> <span class="p">(</span><span class="n">ExcessMapEstimator</span><span class="p">,</span> <span class="n">TSMapEstimator</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;estimator type should be ExcessMapEstimator or TSMapEstimator), got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">estimator</span><span class="p">)</span><span class="si">}</span><span class="s2"> instead.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">geom</span> <span class="o">=</span> <span class="n">datasets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span>
+    <span class="n">ts_sum</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">)</span>
+    <span class="n">ts_sum_sign</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">)</span>
+    <span class="n">npred_excess_sum</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">)</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">)</span>
+
+    <span class="n">results</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">kd</span><span class="p">,</span> <span class="n">d</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">datasets</span><span class="p">):</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">estimator</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+        <span class="n">results</span><span class="p">[</span><span class="n">d</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span>
+
+        <span class="n">df</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;ts&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">data</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># one dof (norm) per valid bin</span>
+        <span class="n">ts_sum</span> <span class="o">+=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;ts&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">reduce_over_axes</span><span class="p">()</span>
+        <span class="n">ts_sum_sign</span> <span class="o">+=</span> <span class="p">(</span>
+            <span class="n">result</span><span class="p">[</span><span class="s2">&quot;ts&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;npred_excess&quot;</span><span class="p">])</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">reduce_over_axes</span><span class="p">()</span>
+        <span class="n">npred_excess_sum</span> <span class="o">+=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;npred_excess&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">reduce_over_axes</span><span class="p">()</span>
+
+    <span class="n">significance</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">)</span>
+    <span class="n">significance</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">ts_to_sigma</span><span class="p">(</span><span class="n">ts_sum</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">df</span><span class="o">.</span><span class="n">data</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="n">ts_sum_sign</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
+        <span class="n">significance</span><span class="o">=</span><span class="n">significance</span><span class="p">,</span>
+        <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span>
+        <span class="n">npred_excess</span><span class="o">=</span><span class="n">npred_excess_sum</span><span class="p">,</span>
+        <span class="n">estimator_results</span><span class="o">=</span><span class="n">results</span><span class="p">,</span>
+    <span class="p">)</span></div>
 
 </pre></div>
 
