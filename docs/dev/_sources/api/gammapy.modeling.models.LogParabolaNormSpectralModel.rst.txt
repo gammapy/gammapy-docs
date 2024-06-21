@@ -18,6 +18,7 @@ LogParabolaNormSpectralModel
       ~LogParabolaNormSpectralModel.is_norm_spectral_model
       ~LogParabolaNormSpectralModel.norm
       ~LogParabolaNormSpectralModel.parameters
+      ~LogParabolaNormSpectralModel.parameters_unique_names
       ~LogParabolaNormSpectralModel.pivot_energy
       ~LogParabolaNormSpectralModel.reference
       ~LogParabolaNormSpectralModel.tag
@@ -60,6 +61,7 @@ LogParabolaNormSpectralModel
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: norm
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: reference
    .. autoattribute:: tag

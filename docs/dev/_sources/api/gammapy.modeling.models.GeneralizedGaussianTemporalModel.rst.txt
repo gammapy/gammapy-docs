@@ -16,6 +16,7 @@ GeneralizedGaussianTemporalModel
       ~GeneralizedGaussianTemporalModel.frozen
       ~GeneralizedGaussianTemporalModel.is_energy_dependent
       ~GeneralizedGaussianTemporalModel.parameters
+      ~GeneralizedGaussianTemporalModel.parameters_unique_names
       ~GeneralizedGaussianTemporalModel.reference_time
       ~GeneralizedGaussianTemporalModel.t_decay
       ~GeneralizedGaussianTemporalModel.t_ref
@@ -49,6 +50,7 @@ GeneralizedGaussianTemporalModel
    .. autoattribute:: frozen
    .. autoattribute:: is_energy_dependent
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: reference_time
    .. autoattribute:: t_decay
    .. autoattribute:: t_ref

@@ -21,6 +21,7 @@ Shell2SpatialModel
       ~Shell2SpatialModel.lat_0
       ~Shell2SpatialModel.lon_0
       ~Shell2SpatialModel.parameters
+      ~Shell2SpatialModel.parameters_unique_names
       ~Shell2SpatialModel.phi_0
       ~Shell2SpatialModel.position
       ~Shell2SpatialModel.position_error
@@ -66,6 +67,7 @@ Shell2SpatialModel
    .. autoattribute:: lat_0
    .. autoattribute:: lon_0
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: phi_0
    .. autoattribute:: position
    .. autoattribute:: position_error

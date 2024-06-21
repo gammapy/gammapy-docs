@@ -22,6 +22,7 @@ GeneralizedGaussianSpatialModel
       ~GeneralizedGaussianSpatialModel.lat_0
       ~GeneralizedGaussianSpatialModel.lon_0
       ~GeneralizedGaussianSpatialModel.parameters
+      ~GeneralizedGaussianSpatialModel.parameters_unique_names
       ~GeneralizedGaussianSpatialModel.phi
       ~GeneralizedGaussianSpatialModel.phi_0
       ~GeneralizedGaussianSpatialModel.position
@@ -68,6 +69,7 @@ GeneralizedGaussianSpatialModel
    .. autoattribute:: lat_0
    .. autoattribute:: lon_0
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: phi
    .. autoattribute:: phi_0
    .. autoattribute:: position

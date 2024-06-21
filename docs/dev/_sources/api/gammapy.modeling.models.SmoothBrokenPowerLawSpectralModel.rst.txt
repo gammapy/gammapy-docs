@@ -20,6 +20,7 @@ SmoothBrokenPowerLawSpectralModel
       ~SmoothBrokenPowerLawSpectralModel.index2
       ~SmoothBrokenPowerLawSpectralModel.is_norm_spectral_model
       ~SmoothBrokenPowerLawSpectralModel.parameters
+      ~SmoothBrokenPowerLawSpectralModel.parameters_unique_names
       ~SmoothBrokenPowerLawSpectralModel.pivot_energy
       ~SmoothBrokenPowerLawSpectralModel.reference
       ~SmoothBrokenPowerLawSpectralModel.tag
@@ -63,6 +64,7 @@ SmoothBrokenPowerLawSpectralModel
    .. autoattribute:: index2
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: reference
    .. autoattribute:: tag

@@ -21,6 +21,7 @@ GaussianSpatialModel
       ~GaussianSpatialModel.lat_0
       ~GaussianSpatialModel.lon_0
       ~GaussianSpatialModel.parameters
+      ~GaussianSpatialModel.parameters_unique_names
       ~GaussianSpatialModel.phi
       ~GaussianSpatialModel.phi_0
       ~GaussianSpatialModel.position
@@ -66,6 +67,7 @@ GaussianSpatialModel
    .. autoattribute:: lat_0
    .. autoattribute:: lon_0
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: phi
    .. autoattribute:: phi_0
    .. autoattribute:: position

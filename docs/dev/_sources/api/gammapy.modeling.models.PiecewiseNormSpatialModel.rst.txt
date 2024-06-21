@@ -20,6 +20,7 @@ PiecewiseNormSpatialModel
       ~PiecewiseNormSpatialModel.is_energy_dependent
       ~PiecewiseNormSpatialModel.norms
       ~PiecewiseNormSpatialModel.parameters
+      ~PiecewiseNormSpatialModel.parameters_unique_names
       ~PiecewiseNormSpatialModel.phi_0
       ~PiecewiseNormSpatialModel.position
       ~PiecewiseNormSpatialModel.position_error
@@ -61,6 +62,7 @@ PiecewiseNormSpatialModel
    .. autoattribute:: is_energy_dependent
    .. autoattribute:: norms
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: phi_0
    .. autoattribute:: position
    .. autoattribute:: position_error

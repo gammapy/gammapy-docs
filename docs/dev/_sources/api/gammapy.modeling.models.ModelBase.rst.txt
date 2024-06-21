@@ -13,6 +13,7 @@ ModelBase
       ~ModelBase.covariance
       ~ModelBase.frozen
       ~ModelBase.parameters
+      ~ModelBase.parameters_unique_names
       ~ModelBase.type
 
    .. rubric:: Methods Summary
@@ -32,6 +33,7 @@ ModelBase
    .. autoattribute:: covariance
    .. autoattribute:: frozen
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: type
 
    .. rubric:: Methods Documentation

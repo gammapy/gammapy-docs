@@ -16,6 +16,7 @@ DarkMatterDecaySpectralModel
       ~DarkMatterDecaySpectralModel.frozen
       ~DarkMatterDecaySpectralModel.is_norm_spectral_model
       ~DarkMatterDecaySpectralModel.parameters
+      ~DarkMatterDecaySpectralModel.parameters_unique_names
       ~DarkMatterDecaySpectralModel.pivot_energy
       ~DarkMatterDecaySpectralModel.scale
       ~DarkMatterDecaySpectralModel.tag
@@ -55,6 +56,7 @@ DarkMatterDecaySpectralModel
    .. autoattribute:: frozen
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: scale
    .. autoattribute:: tag

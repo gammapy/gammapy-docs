@@ -19,6 +19,7 @@ PowerLaw2SpectralModel
       ~PowerLaw2SpectralModel.index
       ~PowerLaw2SpectralModel.is_norm_spectral_model
       ~PowerLaw2SpectralModel.parameters
+      ~PowerLaw2SpectralModel.parameters_unique_names
       ~PowerLaw2SpectralModel.pivot_energy
       ~PowerLaw2SpectralModel.tag
       ~PowerLaw2SpectralModel.type
@@ -61,6 +62,7 @@ PowerLaw2SpectralModel
    .. autoattribute:: index
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: tag
    .. autoattribute:: type

@@ -19,6 +19,7 @@ BrokenPowerLawSpectralModel
       ~BrokenPowerLawSpectralModel.index2
       ~BrokenPowerLawSpectralModel.is_norm_spectral_model
       ~BrokenPowerLawSpectralModel.parameters
+      ~BrokenPowerLawSpectralModel.parameters_unique_names
       ~BrokenPowerLawSpectralModel.pivot_energy
       ~BrokenPowerLawSpectralModel.tag
       ~BrokenPowerLawSpectralModel.type
@@ -60,6 +61,7 @@ BrokenPowerLawSpectralModel
    .. autoattribute:: index2
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: tag
    .. autoattribute:: type

@@ -16,6 +16,7 @@ ScaleSpectralModel
       ~ScaleSpectralModel.is_norm_spectral_model
       ~ScaleSpectralModel.norm
       ~ScaleSpectralModel.parameters
+      ~ScaleSpectralModel.parameters_unique_names
       ~ScaleSpectralModel.pivot_energy
       ~ScaleSpectralModel.tag
       ~ScaleSpectralModel.type
@@ -54,6 +55,7 @@ ScaleSpectralModel
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: norm
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: tag
    .. autoattribute:: type

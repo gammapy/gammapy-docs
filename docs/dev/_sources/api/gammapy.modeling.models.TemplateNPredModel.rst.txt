@@ -18,6 +18,7 @@ TemplateNPredModel
       ~TemplateNPredModel.map
       ~TemplateNPredModel.name
       ~TemplateNPredModel.parameters
+      ~TemplateNPredModel.parameters_unique_names
       ~TemplateNPredModel.position
       ~TemplateNPredModel.spectral_model
       ~TemplateNPredModel.tag
@@ -50,6 +51,7 @@ TemplateNPredModel
    .. autoattribute:: map
    .. autoattribute:: name
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: position
    .. autoattribute:: spectral_model
    .. autoattribute:: tag

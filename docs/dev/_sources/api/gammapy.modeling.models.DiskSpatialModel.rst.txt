@@ -22,6 +22,7 @@ DiskSpatialModel
       ~DiskSpatialModel.lat_0
       ~DiskSpatialModel.lon_0
       ~DiskSpatialModel.parameters
+      ~DiskSpatialModel.parameters_unique_names
       ~DiskSpatialModel.phi
       ~DiskSpatialModel.phi_0
       ~DiskSpatialModel.position
@@ -69,6 +70,7 @@ DiskSpatialModel
    .. autoattribute:: lat_0
    .. autoattribute:: lon_0
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: phi
    .. autoattribute:: phi_0
    .. autoattribute:: position

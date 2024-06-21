@@ -19,6 +19,7 @@ ConstantSpatialModel
       ~ConstantSpatialModel.frozen
       ~ConstantSpatialModel.is_energy_dependent
       ~ConstantSpatialModel.parameters
+      ~ConstantSpatialModel.parameters_unique_names
       ~ConstantSpatialModel.phi_0
       ~ConstantSpatialModel.position
       ~ConstantSpatialModel.position_error
@@ -61,6 +62,7 @@ ConstantSpatialModel
    .. autoattribute:: frozen
    .. autoattribute:: is_energy_dependent
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: phi_0
    .. autoattribute:: position
    .. autoattribute:: position_error

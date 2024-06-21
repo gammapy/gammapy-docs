@@ -17,6 +17,7 @@ PiecewiseNormSpectralModel
       ~PiecewiseNormSpectralModel.is_norm_spectral_model
       ~PiecewiseNormSpectralModel.norms
       ~PiecewiseNormSpectralModel.parameters
+      ~PiecewiseNormSpectralModel.parameters_unique_names
       ~PiecewiseNormSpectralModel.pivot_energy
       ~PiecewiseNormSpectralModel.tag
       ~PiecewiseNormSpectralModel.type
@@ -56,6 +57,7 @@ PiecewiseNormSpectralModel
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: norms
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: tag
    .. autoattribute:: type

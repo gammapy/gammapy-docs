@@ -15,6 +15,7 @@ TemplateSpectralModel
       ~TemplateSpectralModel.frozen
       ~TemplateSpectralModel.is_norm_spectral_model
       ~TemplateSpectralModel.parameters
+      ~TemplateSpectralModel.parameters_unique_names
       ~TemplateSpectralModel.pivot_energy
       ~TemplateSpectralModel.tag
       ~TemplateSpectralModel.type
@@ -54,6 +55,7 @@ TemplateSpectralModel
    .. autoattribute:: frozen
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: tag
    .. autoattribute:: type

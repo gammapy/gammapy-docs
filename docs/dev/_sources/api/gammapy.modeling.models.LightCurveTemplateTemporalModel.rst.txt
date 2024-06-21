@@ -15,6 +15,7 @@ LightCurveTemplateTemporalModel
       ~LightCurveTemplateTemporalModel.frozen
       ~LightCurveTemplateTemporalModel.is_energy_dependent
       ~LightCurveTemplateTemporalModel.parameters
+      ~LightCurveTemplateTemporalModel.parameters_unique_names
       ~LightCurveTemplateTemporalModel.reference_time
       ~LightCurveTemplateTemporalModel.t_ref
       ~LightCurveTemplateTemporalModel.tag
@@ -49,6 +50,7 @@ LightCurveTemplateTemporalModel
    .. autoattribute:: frozen
    .. autoattribute:: is_energy_dependent
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: reference_time
    .. autoattribute:: t_ref
    .. autoattribute:: tag

@@ -16,6 +16,7 @@ NaimaSpectralModel
       ~NaimaSpectralModel.include_ssc
       ~NaimaSpectralModel.is_norm_spectral_model
       ~NaimaSpectralModel.parameters
+      ~NaimaSpectralModel.parameters_unique_names
       ~NaimaSpectralModel.particle_distribution
       ~NaimaSpectralModel.pivot_energy
       ~NaimaSpectralModel.ssc_model
@@ -56,6 +57,7 @@ NaimaSpectralModel
    .. autoattribute:: include_ssc
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: particle_distribution
    .. autoattribute:: pivot_energy
    .. autoattribute:: ssc_model

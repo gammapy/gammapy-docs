@@ -22,6 +22,7 @@ TemplateSpatialModel
       ~TemplateSpatialModel.map
       ~TemplateSpatialModel.map_center
       ~TemplateSpatialModel.parameters
+      ~TemplateSpatialModel.parameters_unique_names
       ~TemplateSpatialModel.phi_0
       ~TemplateSpatialModel.position
       ~TemplateSpatialModel.position_error
@@ -68,6 +69,7 @@ TemplateSpatialModel
    .. autoattribute:: map
    .. autoattribute:: map_center
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: phi_0
    .. autoattribute:: position
    .. autoattribute:: position_error

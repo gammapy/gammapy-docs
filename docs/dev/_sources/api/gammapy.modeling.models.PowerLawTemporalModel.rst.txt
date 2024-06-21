@@ -16,6 +16,7 @@ PowerLawTemporalModel
       ~PowerLawTemporalModel.frozen
       ~PowerLawTemporalModel.is_energy_dependent
       ~PowerLawTemporalModel.parameters
+      ~PowerLawTemporalModel.parameters_unique_names
       ~PowerLawTemporalModel.reference_time
       ~PowerLawTemporalModel.t0
       ~PowerLawTemporalModel.t_ref
@@ -48,6 +49,7 @@ PowerLawTemporalModel
    .. autoattribute:: frozen
    .. autoattribute:: is_energy_dependent
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: reference_time
    .. autoattribute:: t0
    .. autoattribute:: t_ref

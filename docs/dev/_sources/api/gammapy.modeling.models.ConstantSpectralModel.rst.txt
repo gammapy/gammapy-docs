@@ -16,6 +16,7 @@ ConstantSpectralModel
       ~ConstantSpectralModel.frozen
       ~ConstantSpectralModel.is_norm_spectral_model
       ~ConstantSpectralModel.parameters
+      ~ConstantSpectralModel.parameters_unique_names
       ~ConstantSpectralModel.pivot_energy
       ~ConstantSpectralModel.tag
       ~ConstantSpectralModel.type
@@ -54,6 +55,7 @@ ConstantSpectralModel
    .. autoattribute:: frozen
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: tag
    .. autoattribute:: type

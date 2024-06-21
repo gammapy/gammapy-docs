@@ -20,6 +20,7 @@ PointSpatialModel
       ~PointSpatialModel.lat_0
       ~PointSpatialModel.lon_0
       ~PointSpatialModel.parameters
+      ~PointSpatialModel.parameters_unique_names
       ~PointSpatialModel.phi_0
       ~PointSpatialModel.position
       ~PointSpatialModel.position_error
@@ -61,6 +62,7 @@ PointSpatialModel
    .. autoattribute:: lat_0
    .. autoattribute:: lon_0
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: phi_0
    .. autoattribute:: position
    .. autoattribute:: position_error

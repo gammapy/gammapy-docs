@@ -15,6 +15,7 @@ GaussianTemporalModel
       ~GaussianTemporalModel.frozen
       ~GaussianTemporalModel.is_energy_dependent
       ~GaussianTemporalModel.parameters
+      ~GaussianTemporalModel.parameters_unique_names
       ~GaussianTemporalModel.reference_time
       ~GaussianTemporalModel.sigma
       ~GaussianTemporalModel.t_ref
@@ -46,6 +47,7 @@ GaussianTemporalModel
    .. autoattribute:: frozen
    .. autoattribute:: is_energy_dependent
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: reference_time
    .. autoattribute:: sigma
    .. autoattribute:: t_ref

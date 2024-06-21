@@ -18,6 +18,7 @@ SpatialModel
       ~SpatialModel.frozen
       ~SpatialModel.is_energy_dependent
       ~SpatialModel.parameters
+      ~SpatialModel.parameters_unique_names
       ~SpatialModel.phi_0
       ~SpatialModel.position
       ~SpatialModel.position_error
@@ -55,6 +56,7 @@ SpatialModel
    .. autoattribute:: frozen
    .. autoattribute:: is_energy_dependent
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: phi_0
    .. autoattribute:: position
    .. autoattribute:: position_error

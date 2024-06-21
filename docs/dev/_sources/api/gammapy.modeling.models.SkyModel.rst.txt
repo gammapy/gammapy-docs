@@ -19,6 +19,7 @@ SkyModel
       ~SkyModel.frozen
       ~SkyModel.name
       ~SkyModel.parameters
+      ~SkyModel.parameters_unique_names
       ~SkyModel.position
       ~SkyModel.position_lonlat
       ~SkyModel.spatial_model
@@ -56,6 +57,7 @@ SkyModel
    .. autoattribute:: frozen
    .. autoattribute:: name
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: position
    .. autoattribute:: position_lonlat
    .. autoattribute:: spatial_model

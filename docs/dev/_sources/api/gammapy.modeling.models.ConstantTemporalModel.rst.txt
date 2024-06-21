@@ -15,6 +15,7 @@ ConstantTemporalModel
       ~ConstantTemporalModel.frozen
       ~ConstantTemporalModel.is_energy_dependent
       ~ConstantTemporalModel.parameters
+      ~ConstantTemporalModel.parameters_unique_names
       ~ConstantTemporalModel.reference_time
       ~ConstantTemporalModel.tag
       ~ConstantTemporalModel.type
@@ -44,6 +45,7 @@ ConstantTemporalModel
    .. autoattribute:: frozen
    .. autoattribute:: is_energy_dependent
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: reference_time
    .. autoattribute:: tag
    .. autoattribute:: type

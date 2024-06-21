@@ -16,6 +16,7 @@ PowerLawNormSpectralModel
       ~PowerLawNormSpectralModel.is_norm_spectral_model
       ~PowerLawNormSpectralModel.norm
       ~PowerLawNormSpectralModel.parameters
+      ~PowerLawNormSpectralModel.parameters_unique_names
       ~PowerLawNormSpectralModel.pivot_energy
       ~PowerLawNormSpectralModel.reference
       ~PowerLawNormSpectralModel.tag
@@ -58,6 +59,7 @@ PowerLawNormSpectralModel
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: norm
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: reference
    .. autoattribute:: tag

@@ -19,6 +19,7 @@ TemplateNDSpatialModel
       ~TemplateNDSpatialModel.is_energy_dependent
       ~TemplateNDSpatialModel.map
       ~TemplateNDSpatialModel.parameters
+      ~TemplateNDSpatialModel.parameters_unique_names
       ~TemplateNDSpatialModel.phi_0
       ~TemplateNDSpatialModel.position
       ~TemplateNDSpatialModel.position_error
@@ -60,6 +61,7 @@ TemplateNDSpatialModel
    .. autoattribute:: is_energy_dependent
    .. autoattribute:: map
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: phi_0
    .. autoattribute:: position
    .. autoattribute:: position_error

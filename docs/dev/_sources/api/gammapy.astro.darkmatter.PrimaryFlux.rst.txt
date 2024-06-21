@@ -20,6 +20,7 @@ PrimaryFlux
       ~PrimaryFlux.mDM
       ~PrimaryFlux.map
       ~PrimaryFlux.parameters
+      ~PrimaryFlux.parameters_unique_names
       ~PrimaryFlux.pivot_energy
       ~PrimaryFlux.table_filename
       ~PrimaryFlux.tag
@@ -64,6 +65,7 @@ PrimaryFlux
    .. autoattribute:: mDM
    .. autoattribute:: map
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: table_filename
    .. autoattribute:: tag

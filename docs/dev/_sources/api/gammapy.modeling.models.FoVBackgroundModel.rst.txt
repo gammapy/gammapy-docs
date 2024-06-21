@@ -15,6 +15,7 @@ FoVBackgroundModel
       ~FoVBackgroundModel.frozen
       ~FoVBackgroundModel.name
       ~FoVBackgroundModel.parameters
+      ~FoVBackgroundModel.parameters_unique_names
       ~FoVBackgroundModel.spatial_model
       ~FoVBackgroundModel.spectral_model
       ~FoVBackgroundModel.tag
@@ -43,6 +44,7 @@ FoVBackgroundModel
    .. autoattribute:: frozen
    .. autoattribute:: name
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: spatial_model
    .. autoattribute:: spectral_model
    .. autoattribute:: tag

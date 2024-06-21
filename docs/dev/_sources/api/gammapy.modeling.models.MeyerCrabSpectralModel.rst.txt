@@ -17,6 +17,7 @@ MeyerCrabSpectralModel
       ~MeyerCrabSpectralModel.is_norm_spectral_model
       ~MeyerCrabSpectralModel.norm
       ~MeyerCrabSpectralModel.parameters
+      ~MeyerCrabSpectralModel.parameters_unique_names
       ~MeyerCrabSpectralModel.pivot_energy
       ~MeyerCrabSpectralModel.type
 
@@ -55,6 +56,7 @@ MeyerCrabSpectralModel
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: norm
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: type
 

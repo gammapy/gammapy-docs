@@ -19,6 +19,7 @@ ExpCutoffPowerLawNormSpectralModel
       ~ExpCutoffPowerLawNormSpectralModel.lambda_
       ~ExpCutoffPowerLawNormSpectralModel.norm
       ~ExpCutoffPowerLawNormSpectralModel.parameters
+      ~ExpCutoffPowerLawNormSpectralModel.parameters_unique_names
       ~ExpCutoffPowerLawNormSpectralModel.pivot_energy
       ~ExpCutoffPowerLawNormSpectralModel.reference
       ~ExpCutoffPowerLawNormSpectralModel.tag
@@ -61,6 +62,7 @@ ExpCutoffPowerLawNormSpectralModel
    .. autoattribute:: lambda_
    .. autoattribute:: norm
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: reference
    .. autoattribute:: tag

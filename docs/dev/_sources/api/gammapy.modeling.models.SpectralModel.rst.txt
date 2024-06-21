@@ -15,6 +15,7 @@ SpectralModel
       ~SpectralModel.frozen
       ~SpectralModel.is_norm_spectral_model
       ~SpectralModel.parameters
+      ~SpectralModel.parameters_unique_names
       ~SpectralModel.pivot_energy
       ~SpectralModel.type
 
@@ -50,6 +51,7 @@ SpectralModel
    .. autoattribute:: frozen
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: type
 

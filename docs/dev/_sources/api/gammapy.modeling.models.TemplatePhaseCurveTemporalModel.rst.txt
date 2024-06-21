@@ -18,6 +18,7 @@ TemplatePhaseCurveTemporalModel
       ~TemplatePhaseCurveTemporalModel.frozen
       ~TemplatePhaseCurveTemporalModel.is_energy_dependent
       ~TemplatePhaseCurveTemporalModel.parameters
+      ~TemplatePhaseCurveTemporalModel.parameters_unique_names
       ~TemplatePhaseCurveTemporalModel.phi_ref
       ~TemplatePhaseCurveTemporalModel.reference_time
       ~TemplatePhaseCurveTemporalModel.t_ref
@@ -55,6 +56,7 @@ TemplatePhaseCurveTemporalModel
    .. autoattribute:: frozen
    .. autoattribute:: is_energy_dependent
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: phi_ref
    .. autoattribute:: reference_time
    .. autoattribute:: t_ref

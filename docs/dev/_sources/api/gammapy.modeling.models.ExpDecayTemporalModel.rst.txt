@@ -15,6 +15,7 @@ ExpDecayTemporalModel
       ~ExpDecayTemporalModel.frozen
       ~ExpDecayTemporalModel.is_energy_dependent
       ~ExpDecayTemporalModel.parameters
+      ~ExpDecayTemporalModel.parameters_unique_names
       ~ExpDecayTemporalModel.reference_time
       ~ExpDecayTemporalModel.t0
       ~ExpDecayTemporalModel.t_ref
@@ -46,6 +47,7 @@ ExpDecayTemporalModel
    .. autoattribute:: frozen
    .. autoattribute:: is_energy_dependent
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: reference_time
    .. autoattribute:: t0
    .. autoattribute:: t_ref

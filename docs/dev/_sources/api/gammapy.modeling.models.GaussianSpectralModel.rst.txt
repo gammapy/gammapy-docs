@@ -17,6 +17,7 @@ GaussianSpectralModel
       ~GaussianSpectralModel.is_norm_spectral_model
       ~GaussianSpectralModel.mean
       ~GaussianSpectralModel.parameters
+      ~GaussianSpectralModel.parameters_unique_names
       ~GaussianSpectralModel.pivot_energy
       ~GaussianSpectralModel.sigma
       ~GaussianSpectralModel.tag
@@ -57,6 +58,7 @@ GaussianSpectralModel
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: mean
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: sigma
    .. autoattribute:: tag

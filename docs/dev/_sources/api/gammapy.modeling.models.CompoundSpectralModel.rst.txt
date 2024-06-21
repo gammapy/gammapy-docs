@@ -15,6 +15,7 @@ CompoundSpectralModel
       ~CompoundSpectralModel.frozen
       ~CompoundSpectralModel.is_norm_spectral_model
       ~CompoundSpectralModel.parameters
+      ~CompoundSpectralModel.parameters_unique_names
       ~CompoundSpectralModel.pivot_energy
       ~CompoundSpectralModel.tag
       ~CompoundSpectralModel.type
@@ -52,6 +53,7 @@ CompoundSpectralModel
    .. autoattribute:: frozen
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: tag
    .. autoattribute:: type

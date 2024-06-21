@@ -20,6 +20,7 @@ ShellSpatialModel
       ~ShellSpatialModel.lat_0
       ~ShellSpatialModel.lon_0
       ~ShellSpatialModel.parameters
+      ~ShellSpatialModel.parameters_unique_names
       ~ShellSpatialModel.phi_0
       ~ShellSpatialModel.position
       ~ShellSpatialModel.position_error
@@ -64,6 +65,7 @@ ShellSpatialModel
    .. autoattribute:: lat_0
    .. autoattribute:: lon_0
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: phi_0
    .. autoattribute:: position
    .. autoattribute:: position_error

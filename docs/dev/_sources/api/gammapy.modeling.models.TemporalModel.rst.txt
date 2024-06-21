@@ -15,6 +15,7 @@ TemporalModel
       ~TemporalModel.frozen
       ~TemporalModel.is_energy_dependent
       ~TemporalModel.parameters
+      ~TemporalModel.parameters_unique_names
       ~TemporalModel.reference_time
       ~TemporalModel.type
 
@@ -42,6 +43,7 @@ TemporalModel
    .. autoattribute:: frozen
    .. autoattribute:: is_energy_dependent
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: reference_time
    .. autoattribute:: type
 

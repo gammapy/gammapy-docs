@@ -16,6 +16,7 @@ TemplateNDSpectralModel
       ~TemplateNDSpectralModel.is_norm_spectral_model
       ~TemplateNDSpectralModel.map
       ~TemplateNDSpectralModel.parameters
+      ~TemplateNDSpectralModel.parameters_unique_names
       ~TemplateNDSpectralModel.pivot_energy
       ~TemplateNDSpectralModel.tag
       ~TemplateNDSpectralModel.type
@@ -55,6 +56,7 @@ TemplateNDSpectralModel
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: map
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: tag
    .. autoattribute:: type

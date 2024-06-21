@@ -17,6 +17,7 @@ SineTemporalModel
       ~SineTemporalModel.is_energy_dependent
       ~SineTemporalModel.omega
       ~SineTemporalModel.parameters
+      ~SineTemporalModel.parameters_unique_names
       ~SineTemporalModel.reference_time
       ~SineTemporalModel.t_ref
       ~SineTemporalModel.tag
@@ -49,6 +50,7 @@ SineTemporalModel
    .. autoattribute:: is_energy_dependent
    .. autoattribute:: omega
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: reference_time
    .. autoattribute:: t_ref
    .. autoattribute:: tag

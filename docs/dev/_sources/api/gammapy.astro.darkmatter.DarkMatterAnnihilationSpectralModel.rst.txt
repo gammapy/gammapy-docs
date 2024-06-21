@@ -16,6 +16,7 @@ DarkMatterAnnihilationSpectralModel
       ~DarkMatterAnnihilationSpectralModel.frozen
       ~DarkMatterAnnihilationSpectralModel.is_norm_spectral_model
       ~DarkMatterAnnihilationSpectralModel.parameters
+      ~DarkMatterAnnihilationSpectralModel.parameters_unique_names
       ~DarkMatterAnnihilationSpectralModel.pivot_energy
       ~DarkMatterAnnihilationSpectralModel.scale
       ~DarkMatterAnnihilationSpectralModel.tag
@@ -55,6 +56,7 @@ DarkMatterAnnihilationSpectralModel
    .. autoattribute:: frozen
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: scale
    .. autoattribute:: tag

@@ -17,6 +17,7 @@ LinearTemporalModel
       ~LinearTemporalModel.frozen
       ~LinearTemporalModel.is_energy_dependent
       ~LinearTemporalModel.parameters
+      ~LinearTemporalModel.parameters_unique_names
       ~LinearTemporalModel.reference_time
       ~LinearTemporalModel.t_ref
       ~LinearTemporalModel.tag
@@ -49,6 +50,7 @@ LinearTemporalModel
    .. autoattribute:: frozen
    .. autoattribute:: is_energy_dependent
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: reference_time
    .. autoattribute:: t_ref
    .. autoattribute:: tag

@@ -16,6 +16,7 @@ EBLAbsorptionNormSpectralModel
       ~EBLAbsorptionNormSpectralModel.frozen
       ~EBLAbsorptionNormSpectralModel.is_norm_spectral_model
       ~EBLAbsorptionNormSpectralModel.parameters
+      ~EBLAbsorptionNormSpectralModel.parameters_unique_names
       ~EBLAbsorptionNormSpectralModel.pivot_energy
       ~EBLAbsorptionNormSpectralModel.redshift
       ~EBLAbsorptionNormSpectralModel.tag
@@ -57,6 +58,7 @@ EBLAbsorptionNormSpectralModel
    .. autoattribute:: frozen
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: redshift
    .. autoattribute:: tag

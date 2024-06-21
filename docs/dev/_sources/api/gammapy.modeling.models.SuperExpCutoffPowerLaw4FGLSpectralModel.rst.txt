@@ -19,6 +19,7 @@ SuperExpCutoffPowerLaw4FGLSpectralModel
       ~SuperExpCutoffPowerLaw4FGLSpectralModel.index_2
       ~SuperExpCutoffPowerLaw4FGLSpectralModel.is_norm_spectral_model
       ~SuperExpCutoffPowerLaw4FGLSpectralModel.parameters
+      ~SuperExpCutoffPowerLaw4FGLSpectralModel.parameters_unique_names
       ~SuperExpCutoffPowerLaw4FGLSpectralModel.pivot_energy
       ~SuperExpCutoffPowerLaw4FGLSpectralModel.reference
       ~SuperExpCutoffPowerLaw4FGLSpectralModel.tag
@@ -61,6 +62,7 @@ SuperExpCutoffPowerLaw4FGLSpectralModel
    .. autoattribute:: index_2
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: reference
    .. autoattribute:: tag

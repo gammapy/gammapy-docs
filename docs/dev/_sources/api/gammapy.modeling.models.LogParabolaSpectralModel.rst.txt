@@ -19,6 +19,7 @@ LogParabolaSpectralModel
       ~LogParabolaSpectralModel.frozen
       ~LogParabolaSpectralModel.is_norm_spectral_model
       ~LogParabolaSpectralModel.parameters
+      ~LogParabolaSpectralModel.parameters_unique_names
       ~LogParabolaSpectralModel.pivot_energy
       ~LogParabolaSpectralModel.reference
       ~LogParabolaSpectralModel.tag
@@ -62,6 +63,7 @@ LogParabolaSpectralModel
    .. autoattribute:: frozen
    .. autoattribute:: is_norm_spectral_model
    .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
    .. autoattribute:: pivot_energy
    .. autoattribute:: reference
    .. autoattribute:: tag
