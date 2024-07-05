@@ -537,6 +537,7 @@ document.write(`
 <span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">scipy.stats</span> <span class="k">as</span> <span class="nn">stats</span>
+<span class="kn">import</span> <span class="nn">astropy.units</span> <span class="k">as</span> <span class="nn">u</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.random</span> <span class="kn">import</span> <span class="n">get_random_state</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
@@ -842,9 +843,12 @@ document.write(`
     <span class="n">power_spectrum</span><span class="p">,</span>
     <span class="n">npoints</span><span class="p">,</span>
     <span class="n">spacing</span><span class="p">,</span>
-    <span class="n">leakage_protection</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">nchunks</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
     <span class="n">random_state</span><span class="o">=</span><span class="s2">&quot;random-seed&quot;</span><span class="p">,</span>
     <span class="n">power_spectrum_params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">mean</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+    <span class="n">std</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">poisson</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Implementation of the Timmer-Koenig algorithm to simulate a time series from a power spectrum.</span>
 
@@ -857,13 +861,20 @@ document.write(`
 <span class="sd">        Number of points in the output time series.</span>
 <span class="sd">    spacing : `~astropy.units.Quantity`</span>
 <span class="sd">        Sample spacing, inverse of the sampling rate. The units are inherited by the resulting time axis.</span>
-<span class="sd">    leakage_protection : float, optional</span>
-<span class="sd">        Factor by which to multiply the length of the time series to avoid red noise leakage. Default is 1.0.</span>
-<span class="sd">    random_state : {int, &#39;random-seed&#39;, &#39;global-rng&#39;, `~numpy.random.RandomState`}</span>
+<span class="sd">    nchunks : int, optional</span>
+<span class="sd">        Factor by which to multiply the length of the time series to avoid red noise leakage. Default is 10.</span>
+<span class="sd">    random_state : {int, &#39;random-seed&#39;, &#39;global-rng&#39;, `~numpy.random.RandomState`}, optional</span>
 <span class="sd">        Defines random number generator initialisation.</span>
 <span class="sd">        Passed to `~gammapy.utils.random.get_random_state`. Default is &quot;random-seed&quot;.</span>
 <span class="sd">    power_spectrum_params : dict, optional</span>
 <span class="sd">        Dictionary of parameters to be provided to the power spectrum function.</span>
+<span class="sd">    mean : float, `~astropy.units.Quantity`, optional</span>
+<span class="sd">        Desired mean of the final series. Default is 0.</span>
+<span class="sd">    std : float, `~astropy.units.Quantity`, optional</span>
+<span class="sd">        Desired standard deviation of the final series. Default is 1.</span>
+<span class="sd">    poisson : bool, optional</span>
+<span class="sd">        Whether to apply poissonian noise to the final time series. Default is False.</span>
+
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -900,18 +911,24 @@ document.write(`
             <span class="s2">&quot;The power spectrum has to be provided as a callable function.&quot;</span>
         <span class="p">)</span>
 
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">npoints</span> <span class="o">*</span> <span class="n">nchunks</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;npoints and nchunks must be integers&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">poisson</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">mean</span><span class="p">,</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">):</span>
+            <span class="n">wmean</span> <span class="o">=</span> <span class="n">mean</span><span class="o">.</span><span class="n">value</span> <span class="o">*</span> <span class="n">spacing</span><span class="o">.</span><span class="n">value</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">wmean</span> <span class="o">=</span> <span class="n">mean</span> <span class="o">*</span> <span class="n">spacing</span><span class="o">.</span><span class="n">value</span>
+        <span class="k">if</span> <span class="n">wmean</span> <span class="o">&lt;</span> <span class="mf">1.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Warning</span><span class="p">(</span>
+                <span class="s2">&quot;Poisson noise was requested but the target mean is too low - resulting counts will likely be 0.&quot;</span>
+            <span class="p">)</span>
+
     <span class="n">random_state</span> <span class="o">=</span> <span class="n">get_random_state</span><span class="p">(</span><span class="n">random_state</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="n">leakage_protection</span> <span class="o">&lt;</span> <span class="mf">1.0</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The leakage protection factor must be at least 1.0.&quot;</span><span class="p">)</span>
+    <span class="n">npoints_ext</span> <span class="o">=</span> <span class="n">npoints</span> <span class="o">*</span> <span class="n">nchunks</span>
 
-    <span class="n">npoints_extended</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">npoints</span> <span class="o">*</span> <span class="n">leakage_protection</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">leakage_protection</span> <span class="o">&gt;</span> <span class="mf">1.0</span> <span class="ow">and</span> <span class="n">npoints_extended</span> <span class="o">==</span> <span class="n">npoints</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">Warning</span><span class="p">(</span>
-            <span class="s2">&quot;The extended time series is the same length as the final desired time series.&quot;</span>
-            <span class="s2">&quot;To have an effective protection from noise leakage and avoid aliasing, increase the leakage_protection option.&quot;</span>
-        <span class="p">)</span>
-    <span class="n">frequencies</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fft</span><span class="o">.</span><span class="n">fftfreq</span><span class="p">(</span><span class="n">npoints_extended</span><span class="p">,</span> <span class="n">spacing</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+    <span class="n">frequencies</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fft</span><span class="o">.</span><span class="n">fftfreq</span><span class="p">(</span><span class="n">npoints_ext</span><span class="p">,</span> <span class="n">spacing</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
 
     <span class="c1"># To obtain real data only the positive or negative part of the frequency is necessary.</span>
     <span class="n">real_frequencies</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">frequencies</span><span class="p">[</span><span class="n">frequencies</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">]))</span>
@@ -925,7 +942,7 @@ document.write(`
     <span class="n">imaginary_part</span> <span class="o">=</span> <span class="n">random_state</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">periodogram</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
 
     <span class="c1"># Nyquist frequency component handling</span>
-    <span class="k">if</span> <span class="n">npoints</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">npoints_ext</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         <span class="n">idx0</span> <span class="o">=</span> <span class="o">-</span><span class="mi">2</span>
         <span class="n">random_factor</span> <span class="o">=</span> <span class="n">random_state</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
@@ -945,15 +962,23 @@ document.write(`
     <span class="n">fourier_coeffs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">fourier_coeffs</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
     <span class="n">time_series</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fft</span><span class="o">.</span><span class="n">ifft</span><span class="p">(</span><span class="n">fourier_coeffs</span><span class="p">)</span><span class="o">.</span><span class="n">real</span>
 
-    <span class="k">if</span> <span class="n">npoints_extended</span> <span class="o">&gt;</span> <span class="n">npoints</span><span class="p">:</span>
-        <span class="n">extract</span> <span class="o">=</span> <span class="n">random_state</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">npoints_extended</span> <span class="o">-</span> <span class="n">npoints</span><span class="p">)</span>
-        <span class="n">time_series</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">time_series</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="n">extract</span><span class="p">,</span> <span class="n">extract</span> <span class="o">+</span> <span class="n">npoints</span><span class="p">))</span>
+    <span class="n">ndiv</span> <span class="o">=</span> <span class="n">npoints_ext</span> <span class="o">//</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">nchunks</span><span class="p">)</span>
+    <span class="n">setstart</span> <span class="o">=</span> <span class="n">npoints_ext</span> <span class="o">//</span> <span class="mi">2</span> <span class="o">-</span> <span class="n">ndiv</span>
+    <span class="n">setend</span> <span class="o">=</span> <span class="n">npoints_ext</span> <span class="o">//</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">ndiv</span>
+    <span class="k">if</span> <span class="n">npoints</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">setend</span> <span class="o">=</span> <span class="n">setend</span> <span class="o">+</span> <span class="mi">1</span>
+    <span class="n">time_series</span> <span class="o">=</span> <span class="n">time_series</span><span class="p">[</span><span class="n">setstart</span><span class="p">:</span><span class="n">setend</span><span class="p">]</span>
 
-    <span class="n">tmax</span> <span class="o">=</span> <span class="n">time_series</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
-    <span class="k">if</span> <span class="n">tmax</span> <span class="o">&lt;</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">time_series</span><span class="o">.</span><span class="n">min</span><span class="p">()):</span>
-        <span class="n">time_series</span> <span class="o">=</span> <span class="o">-</span><span class="n">time_series</span>
+    <span class="n">time_series</span> <span class="o">=</span> <span class="p">(</span><span class="n">time_series</span> <span class="o">-</span> <span class="n">time_series</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span> <span class="o">/</span> <span class="n">time_series</span><span class="o">.</span><span class="n">std</span><span class="p">()</span>
+    <span class="n">time_series</span> <span class="o">=</span> <span class="n">time_series</span> <span class="o">*</span> <span class="n">std</span> <span class="o">+</span> <span class="n">mean</span>
 
-    <span class="n">time_series</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">time_series</span> <span class="o">/</span> <span class="n">tmax</span>
+    <span class="k">if</span> <span class="n">poisson</span><span class="p">:</span>
+        <span class="n">time_series</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">random_state</span><span class="o">.</span><span class="n">poisson</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">time_series</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">time_series</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">*</span> <span class="n">spacing</span><span class="o">.</span><span class="n">value</span>
+            <span class="p">)</span>
+            <span class="o">/</span> <span class="n">spacing</span><span class="o">.</span><span class="n">value</span>
+        <span class="p">)</span>
 
     <span class="n">time_axis</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">npoints</span> <span class="o">*</span> <span class="n">spacing</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">npoints</span><span class="p">)</span> <span class="o">*</span> <span class="n">spacing</span><span class="o">.</span><span class="n">unit</span>
 
