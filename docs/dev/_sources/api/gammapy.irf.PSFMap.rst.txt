@@ -11,6 +11,7 @@ PSFMap
    .. autosummary::
 
       ~PSFMap.energy_name
+      ~PSFMap.has_single_spatial_bin
       ~PSFMap.mask_safe_image
       ~PSFMap.psf_map
       ~PSFMap.required_axes
@@ -46,6 +47,7 @@ PSFMap
    .. rubric:: Attributes Documentation
 
    .. autoattribute:: energy_name
+   .. autoattribute:: has_single_spatial_bin
    .. autoattribute:: mask_safe_image
    .. autoattribute:: psf_map
    .. autoattribute:: required_axes

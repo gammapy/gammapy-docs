@@ -11,6 +11,7 @@ RecoPSFMap
    .. autosummary::
 
       ~RecoPSFMap.energy_name
+      ~RecoPSFMap.has_single_spatial_bin
       ~RecoPSFMap.mask_safe_image
       ~RecoPSFMap.psf_map
       ~RecoPSFMap.required_axes
@@ -46,6 +47,7 @@ RecoPSFMap
    .. rubric:: Attributes Documentation
 
    .. autoattribute:: energy_name
+   .. autoattribute:: has_single_spatial_bin
    .. autoattribute:: mask_safe_image
    .. autoattribute:: psf_map
    .. autoattribute:: required_axes

@@ -11,6 +11,7 @@ EDispMap
    .. autosummary::
 
       ~EDispMap.edisp_map
+      ~EDispMap.has_single_spatial_bin
       ~EDispMap.mask_safe_image
       ~EDispMap.required_axes
       ~EDispMap.tag
@@ -40,6 +41,7 @@ EDispMap
    .. rubric:: Attributes Documentation
 
    .. autoattribute:: edisp_map
+   .. autoattribute:: has_single_spatial_bin
    .. autoattribute:: mask_safe_image
    .. autoattribute:: required_axes
    .. autoattribute:: tag

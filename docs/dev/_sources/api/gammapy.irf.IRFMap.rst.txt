@@ -10,6 +10,7 @@ IRFMap
 
    .. autosummary::
 
+      ~IRFMap.has_single_spatial_bin
       ~IRFMap.mask_safe_image
       ~IRFMap.required_axes
       ~IRFMap.tag
@@ -31,6 +32,7 @@ IRFMap
 
    .. rubric:: Attributes Documentation
 
+   .. autoattribute:: has_single_spatial_bin
    .. autoattribute:: mask_safe_image
    .. autoattribute:: required_axes
    .. autoattribute:: tag

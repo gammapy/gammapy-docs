@@ -11,6 +11,7 @@ EDispKernelMap
    .. autosummary::
 
       ~EDispKernelMap.edisp_map
+      ~EDispKernelMap.has_single_spatial_bin
       ~EDispKernelMap.mask_safe_image
       ~EDispKernelMap.required_axes
       ~EDispKernelMap.tag
@@ -41,6 +42,7 @@ EDispKernelMap
    .. rubric:: Attributes Documentation
 
    .. autoattribute:: edisp_map
+   .. autoattribute:: has_single_spatial_bin
    .. autoattribute:: mask_safe_image
    .. autoattribute:: required_axes
    .. autoattribute:: tag
