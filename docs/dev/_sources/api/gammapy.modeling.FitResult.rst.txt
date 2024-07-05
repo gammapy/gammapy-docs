@@ -27,8 +27,6 @@ FitResult
 
    .. autosummary::
 
-      ~FitResult.to_dict
-      ~FitResult.to_yaml
       ~FitResult.write
 
    .. rubric:: Attributes Documentation
@@ -48,6 +46,4 @@ FitResult
 
    .. rubric:: Methods Documentation
 
-   .. automethod:: to_dict
-   .. automethod:: to_yaml
    .. automethod:: write

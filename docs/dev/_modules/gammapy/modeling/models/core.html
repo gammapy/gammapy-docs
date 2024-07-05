@@ -539,20 +539,16 @@ document.write(`
 <span class="kn">import</span> <span class="nn">copy</span>
 <span class="kn">import</span> <span class="nn">html</span>
 <span class="kn">import</span> <span class="nn">logging</span>
-<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">os.path</span> <span class="kn">import</span> <span class="n">split</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">astropy.units</span> <span class="k">as</span> <span class="nn">u</span>
 <span class="kn">from</span> <span class="nn">astropy.coordinates</span> <span class="kn">import</span> <span class="n">SkyCoord</span>
 <span class="kn">from</span> <span class="nn">astropy.table</span> <span class="kn">import</span> <span class="n">Table</span>
 <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
-<span class="kn">import</span> <span class="nn">yaml</span>
 <span class="kn">from</span> <span class="nn">gammapy.maps</span> <span class="kn">import</span> <span class="n">Map</span><span class="p">,</span> <span class="n">RegionGeom</span>
 <span class="kn">from</span> <span class="nn">gammapy.modeling</span> <span class="kn">import</span> <span class="n">Covariance</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">,</span> <span class="n">Parameters</span>
 <span class="kn">from</span> <span class="nn">gammapy.modeling.covariance</span> <span class="kn">import</span> <span class="n">CovarianceMixin</span>
-<span class="kn">from</span> <span class="nn">gammapy.utils.check</span> <span class="kn">import</span> <span class="n">add_checksum</span><span class="p">,</span> <span class="n">verify_checksum</span>
-<span class="kn">from</span> <span class="nn">gammapy.utils.metadata</span> <span class="kn">import</span> <span class="n">CreatorMetaData</span>
-<span class="kn">from</span> <span class="nn">gammapy.utils.scripts</span> <span class="kn">import</span> <span class="n">make_name</span><span class="p">,</span> <span class="n">make_path</span>
+<span class="kn">from</span> <span class="nn">gammapy.utils.scripts</span> <span class="kn">import</span> <span class="n">from_yaml</span><span class="p">,</span> <span class="n">make_name</span><span class="p">,</span> <span class="n">make_path</span><span class="p">,</span> <span class="n">to_yaml</span><span class="p">,</span> <span class="n">write_yaml</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Model&quot;</span><span class="p">,</span> <span class="s2">&quot;Models&quot;</span><span class="p">,</span> <span class="s2">&quot;DatasetModels&quot;</span><span class="p">,</span> <span class="s2">&quot;ModelBase&quot;</span><span class="p">]</span>
 
@@ -626,6 +622,43 @@ document.write(`
             <span class="p">)</span>
         <span class="p">)</span>
     <span class="k">return</span>
+
+
+<span class="k">def</span> <span class="nf">_write_models</span><span class="p">(</span>
+    <span class="n">models</span><span class="p">,</span>
+    <span class="n">path</span><span class="p">,</span>
+    <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">full_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">overwrite_templates</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">write_covariance</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">checksum</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">extra_dict</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Write models to YAML file with additionnal informations using an `extra_dict`&quot;&quot;&quot;</span>
+
+    <span class="n">base_path</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">split</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="n">base_path</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">base_path</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">overwrite</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;File exists already: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="n">write_covariance</span>
+        <span class="ow">and</span> <span class="n">models</span><span class="o">.</span><span class="n">covariance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">parameters</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span>
+    <span class="p">):</span>
+        <span class="n">filecovar</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">stem</span> <span class="o">+</span> <span class="s2">&quot;_covariance.dat&quot;</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">&quot;ascii.fixed_width&quot;</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="s2">&quot;|&quot;</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="n">overwrite</span><span class="p">)</span>
+        <span class="n">models</span><span class="o">.</span><span class="n">write_covariance</span><span class="p">(</span><span class="n">base_path</span> <span class="o">/</span> <span class="n">filecovar</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">models</span><span class="o">.</span><span class="n">_covar_file</span> <span class="o">=</span> <span class="n">filecovar</span>
+
+    <span class="n">yaml_str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">extra_dict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">yaml_str</span> <span class="o">+=</span> <span class="n">to_yaml</span><span class="p">(</span><span class="n">extra_dict</span><span class="p">)</span>
+    <span class="n">yaml_str</span> <span class="o">+=</span> <span class="n">models</span><span class="o">.</span><span class="n">to_yaml</span><span class="p">(</span><span class="n">full_output</span><span class="p">,</span> <span class="n">overwrite_templates</span><span class="p">)</span>
+
+    <span class="n">write_yaml</span><span class="p">(</span><span class="n">yaml_str</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="n">overwrite</span><span class="p">,</span> <span class="n">checksum</span><span class="o">=</span><span class="n">checksum</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="ModelBase">
@@ -983,7 +1016,7 @@ document.write(`
 <span class="sd">        ----------</span>
 <span class="sd">        filename : str</span>
 <span class="sd">            input filename</span>
-<span class="sd">        checksum : bool</span>
+<span class="sd">        checksum : bool, optional</span>
 <span class="sd">            Whether to perform checksum verification. Default is False.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">yaml_str</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">()</span>
@@ -995,16 +1028,20 @@ document.write(`
 <a class="viewcode-back" href="../../../../api/gammapy.modeling.models.DatasetModels.html#gammapy.modeling.models.DatasetModels.from_yaml">[docs]</a>
     <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_yaml</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">yaml_str</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">checksum</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create from YAML string.&quot;&quot;&quot;</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">yaml_str</span><span class="p">)</span>
-        <span class="n">checksum_str</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;checksum&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">checksum</span><span class="p">:</span>
-            <span class="n">yaml_str</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span>
-                <span class="n">data</span><span class="p">,</span> <span class="n">sort_keys</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">80</span><span class="p">,</span> <span class="n">default_flow_style</span><span class="o">=</span><span class="kc">False</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">verify_checksum</span><span class="p">(</span><span class="n">yaml_str</span><span class="p">,</span> <span class="n">checksum_str</span><span class="p">):</span>
-                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Checksum verification failed.&quot;</span><span class="p">,</span> <span class="ne">UserWarning</span><span class="p">)</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create from YAML string.</span>
 
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        yaml_str : str</span>
+<span class="sd">            yaml str</span>
+<span class="sd">        path : str</span>
+<span class="sd">            base path of model files</span>
+<span class="sd">        checksum : bool, optional</span>
+<span class="sd">            Whether to perform checksum verification. Default is False.</span>
+
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">from_yaml</span><span class="p">(</span><span class="n">yaml_str</span><span class="p">,</span> <span class="n">checksum</span><span class="o">=</span><span class="n">checksum</span><span class="p">)</span>
         <span class="c1"># TODO : for now metadata are not kept. Add proper metadata creation.</span>
         <span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">)</span></div>
@@ -1075,45 +1112,35 @@ document.write(`
 <span class="sd">            Overwrite templates FITS files. Default is False.</span>
 <span class="sd">        write_covariance : bool, optional</span>
 <span class="sd">            Whether to save the covariance. Default is True.</span>
-<span class="sd">        checksum : bool</span>
+<span class="sd">        checksum : bool, optional</span>
 <span class="sd">            When True adds a CHECKSUM entry to the file.</span>
 <span class="sd">            Default is False.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">base_path</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">split</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
-        <span class="n">path</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
-        <span class="n">base_path</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">base_path</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">overwrite</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;File exists already: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="n">write_covariance</span>
-            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">covariance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span>
-        <span class="p">):</span>
-            <span class="n">filecovar</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">stem</span> <span class="o">+</span> <span class="s2">&quot;_covariance.dat&quot;</span>
-            <span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
-                <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;ascii.fixed_width&quot;</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="s2">&quot;|&quot;</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="n">overwrite</span>
-            <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">write_covariance</span><span class="p">(</span><span class="n">base_path</span> <span class="o">/</span> <span class="n">filecovar</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_covar_file</span> <span class="o">=</span> <span class="n">filecovar</span>
-
-        <span class="n">yaml_str</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_yaml</span><span class="p">(</span><span class="n">full_output</span><span class="p">,</span> <span class="n">overwrite_templates</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">checksum</span><span class="p">:</span>
-            <span class="n">yaml_str</span> <span class="o">=</span> <span class="n">add_checksum</span><span class="p">(</span><span class="n">yaml_str</span><span class="p">)</span>
-        <span class="n">path</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">yaml_str</span><span class="p">)</span></div>
+        <span class="n">_write_models</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">path</span><span class="p">,</span>
+            <span class="n">overwrite</span><span class="p">,</span>
+            <span class="n">full_output</span><span class="p">,</span>
+            <span class="n">overwrite_templates</span><span class="p">,</span>
+            <span class="n">write_covariance</span><span class="p">,</span>
+            <span class="n">checksum</span><span class="p">,</span>
+        <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="DatasetModels.to_yaml">
 <a class="viewcode-back" href="../../../../api/gammapy.modeling.models.DatasetModels.html#gammapy.modeling.models.DatasetModels.to_yaml">[docs]</a>
     <span class="k">def</span> <span class="nf">to_yaml</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">full_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">overwrite_templates</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert to YAML string.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert to YAML string.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">         full_output : bool, optional</span>
+<span class="sd">            Store full parameter output. Default is False.</span>
+<span class="sd">        overwrite_templates : bool, optional</span>
+<span class="sd">            Overwrite templates FITS files. Default is False.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(</span><span class="n">full_output</span><span class="p">,</span> <span class="n">overwrite_templates</span><span class="p">)</span>
-        <span class="n">text</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span>
-            <span class="n">data</span><span class="p">,</span> <span class="n">sort_keys</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">80</span><span class="p">,</span> <span class="n">default_flow_style</span><span class="o">=</span><span class="kc">False</span>
-        <span class="p">)</span>
-        <span class="n">creation</span> <span class="o">=</span> <span class="n">CreatorMetaData</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">text</span> <span class="o">+</span> <span class="n">creation</span><span class="o">.</span><span class="n">to_yaml</span><span class="p">()</span></div>
+        <span class="k">return</span> <span class="n">to_yaml</span><span class="p">(</span><span class="n">data</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="DatasetModels.update_link_label">
