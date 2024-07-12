@@ -63,7 +63,7 @@
     <link rel="search" title="Search" href="../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-    <meta name="docbuild:last-update" content="11 Jul 2024"/>
+    <meta name="docbuild:last-update" content="12 Jul 2024"/>
   </head>
   
   
@@ -540,19 +540,25 @@ document.write(`
 <span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">repeat</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">scipy.optimize</span>
+<span class="kn">from</span> <span class="nn">scipy.interpolate</span> <span class="kn">import</span> <span class="n">InterpolatedUnivariateSpline</span>
 <span class="kn">from</span> <span class="nn">astropy.coordinates</span> <span class="kn">import</span> <span class="n">Angle</span>
 <span class="kn">from</span> <span class="nn">astropy.utils</span> <span class="kn">import</span> <span class="n">lazyproperty</span>
 <span class="kn">import</span> <span class="nn">gammapy.utils.parallel</span> <span class="k">as</span> <span class="nn">parallel</span>
 <span class="kn">from</span> <span class="nn">gammapy.datasets.map</span> <span class="kn">import</span> <span class="n">MapEvaluator</span>
 <span class="kn">from</span> <span class="nn">gammapy.datasets.utils</span> <span class="kn">import</span> <span class="n">get_nearest_valid_exposure_position</span>
-<span class="kn">from</span> <span class="nn">gammapy.maps</span> <span class="kn">import</span> <span class="n">Map</span><span class="p">,</span> <span class="n">Maps</span>
+<span class="kn">from</span> <span class="nn">gammapy.maps</span> <span class="kn">import</span> <span class="n">Map</span><span class="p">,</span> <span class="n">MapAxis</span><span class="p">,</span> <span class="n">Maps</span>
 <span class="kn">from</span> <span class="nn">gammapy.modeling.models</span> <span class="kn">import</span> <span class="n">PointSpatialModel</span><span class="p">,</span> <span class="n">PowerLawSpectralModel</span><span class="p">,</span> <span class="n">SkyModel</span>
-<span class="kn">from</span> <span class="nn">gammapy.stats</span> <span class="kn">import</span> <span class="n">cash_sum_cython</span><span class="p">,</span> <span class="n">f_cash_root_cython</span><span class="p">,</span> <span class="n">norm_bounds_cython</span>
+<span class="kn">from</span> <span class="nn">gammapy.stats</span> <span class="kn">import</span> <span class="n">cash</span><span class="p">,</span> <span class="n">cash_sum_cython</span><span class="p">,</span> <span class="n">f_cash_root_cython</span><span class="p">,</span> <span class="n">norm_bounds_cython</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.array</span> <span class="kn">import</span> <span class="n">shape_2N</span><span class="p">,</span> <span class="n">symmetric_crop_pad_width</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.pbar</span> <span class="kn">import</span> <span class="n">progress_bar</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.roots</span> <span class="kn">import</span> <span class="n">find_roots</span>
 <span class="kn">from</span> <span class="nn">..core</span> <span class="kn">import</span> <span class="n">Estimator</span>
-<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">estimate_exposure_reco_energy</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_generate_scan_values</span><span class="p">,</span>
+    <span class="n">_get_default_norm</span><span class="p">,</span>
+    <span class="n">_get_norm_scan_values</span><span class="p">,</span>
+    <span class="n">estimate_exposure_reco_energy</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">.core</span> <span class="kn">import</span> <span class="n">FluxMaps</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;TSMapEstimator&quot;</span><span class="p">]</span>
@@ -622,6 +628,7 @@ document.write(`
 <span class="sd">            * &quot;all&quot;: all the optional steps are executed</span>
 <span class="sd">            * &quot;errn-errp&quot;: estimate asymmetric error on flux.</span>
 <span class="sd">            * &quot;ul&quot;: estimate upper limits on flux.</span>
+<span class="sd">            * &quot;stat_scan&quot;: estimate likelihood profile</span>
 
 <span class="sd">        Default is None so the optional steps are not executed.</span>
 <span class="sd">    energy_edges : list of `~astropy.units.Quantity`, optional</span>
@@ -632,6 +639,14 @@ document.write(`
 <span class="sd">    sum_over_energy_groups : bool</span>
 <span class="sd">        Whether to sum over the energy groups or fit the norm on the full energy</span>
 <span class="sd">        cube.</span>
+<span class="sd">    norm : `~gammapy.modeling.Parameter` or dict</span>
+<span class="sd">        Norm parameter used for the likelihood profile computation on a fixed norm range.</span>
+<span class="sd">        Only used for &quot;stat_scan&quot; in `selection_optional`.</span>
+<span class="sd">        Default is None and a new parameter is created automatically,</span>
+<span class="sd">        with value=1, name=&quot;norm&quot;, scan_min=-100, scan_max=100,</span>
+<span class="sd">        and values sampled such as we can probe a 0.1% relative error on the norm.</span>
+<span class="sd">        If a dict is given the entries should be a subset of</span>
+<span class="sd">        `~gammapy.modeling.Parameter` arguments.</span>
 <span class="sd">    n_jobs : int</span>
 <span class="sd">        Number of processes used in parallel for the computation. Default is one,</span>
 <span class="sd">        unless `~gammapy.utils.parallel.N_JOBS_DEFAULT` was modified. The number</span>
@@ -688,7 +703,7 @@ document.write(`
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">tag</span> <span class="o">=</span> <span class="s2">&quot;TSMapEstimator&quot;</span>
-    <span class="n">_available_selection_optional</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;errn-errp&quot;</span><span class="p">,</span> <span class="s2">&quot;ul&quot;</span><span class="p">]</span>
+    <span class="n">_available_selection_optional</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;errn-errp&quot;</span><span class="p">,</span> <span class="s2">&quot;ul&quot;</span><span class="p">,</span> <span class="s2">&quot;stat_scan&quot;</span><span class="p">]</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -704,11 +719,14 @@ document.write(`
         <span class="n">sum_over_energy_groups</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">n_jobs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">parallel_backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">norm</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="n">kernel_width</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">kernel_width</span> <span class="o">=</span> <span class="n">Angle</span><span class="p">(</span><span class="n">kernel_width</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">kernel_width</span> <span class="o">=</span> <span class="n">kernel_width</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">norm</span> <span class="o">=</span> <span class="n">_get_default_norm</span><span class="p">(</span><span class="n">norm</span><span class="p">,</span> <span class="n">scan_values</span><span class="o">=</span><span class="n">_generate_scan_values</span><span class="p">())</span>
 
         <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">model</span> <span class="o">=</span> <span class="n">SkyModel</span><span class="p">(</span>
@@ -735,6 +753,7 @@ document.write(`
             <span class="n">n_sigma_ul</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_sigma_ul</span><span class="p">,</span>
             <span class="n">selection_optional</span><span class="o">=</span><span class="n">selection_optional</span><span class="p">,</span>
             <span class="n">ts_threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">,</span>
+            <span class="n">norm</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">norm</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="nd">@property</span>
@@ -752,11 +771,19 @@ document.write(`
             <span class="s2">&quot;success&quot;</span><span class="p">,</span>
         <span class="p">]</span>
 
-        <span class="k">if</span> <span class="s2">&quot;errn-errp&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">selection_optional</span><span class="p">:</span>
-            <span class="n">selection</span> <span class="o">+=</span> <span class="p">[</span><span class="s2">&quot;norm_errp&quot;</span><span class="p">,</span> <span class="s2">&quot;norm_errn&quot;</span><span class="p">]</span>
-
-        <span class="k">if</span> <span class="s2">&quot;ul&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">selection_optional</span><span class="p">:</span>
-            <span class="n">selection</span> <span class="o">+=</span> <span class="p">[</span><span class="s2">&quot;norm_ul&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="s2">&quot;stat_scan&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">selection_optional</span><span class="p">:</span>
+            <span class="n">selection</span> <span class="o">+=</span> <span class="p">[</span>
+                <span class="s2">&quot;dnde_scan_values&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;stat_scan&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;norm_errp&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;norm_errn&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;norm_ul&quot;</span><span class="p">,</span>
+            <span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;errn-errp&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">selection_optional</span><span class="p">:</span>
+                <span class="n">selection</span> <span class="o">+=</span> <span class="p">[</span><span class="s2">&quot;norm_errp&quot;</span><span class="p">,</span> <span class="s2">&quot;norm_errn&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="s2">&quot;ul&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">selection_optional</span><span class="p">:</span>
+                <span class="n">selection</span> <span class="o">+=</span> <span class="p">[</span><span class="s2">&quot;norm_ul&quot;</span><span class="p">]</span>
 
         <span class="k">return</span> <span class="n">selection</span>
 
@@ -998,10 +1025,34 @@ document.write(`
         <span class="n">j</span><span class="p">,</span> <span class="n">i</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">positions</span><span class="p">)</span>
 
         <span class="n">geom</span> <span class="o">=</span> <span class="n">maps</span><span class="p">[</span><span class="s2">&quot;counts&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">squash</span><span class="p">(</span><span class="n">axis_name</span><span class="o">=</span><span class="s2">&quot;energy&quot;</span><span class="p">)</span>
+        <span class="n">energy_axis</span> <span class="o">=</span> <span class="n">maps</span><span class="p">[</span><span class="s2">&quot;counts&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span>
+        <span class="n">dnde_ref</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">spectral_model</span><span class="p">(</span><span class="n">energy_axis</span><span class="o">.</span><span class="n">center</span><span class="p">)</span>
 
         <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">selection_all</span><span class="p">:</span>
-            <span class="n">m</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
-            <span class="n">m</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">j</span><span class="p">,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">_</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">results</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;dnde_scan_values&quot;</span><span class="p">,</span> <span class="s2">&quot;stat_scan&quot;</span><span class="p">]:</span>
+                <span class="n">norm_bin_axis</span> <span class="o">=</span> <span class="n">MapAxis</span><span class="p">(</span>
+                    <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;dnde_scan_values&quot;</span><span class="p">])),</span>
+                    <span class="n">interp</span><span class="o">=</span><span class="s2">&quot;lin&quot;</span><span class="p">,</span>
+                    <span class="n">node_type</span><span class="o">=</span><span class="s2">&quot;center&quot;</span><span class="p">,</span>
+                    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;dnde_bin&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+
+                <span class="n">axes</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">axes</span> <span class="o">+</span> <span class="p">[</span><span class="n">norm_bin_axis</span><span class="p">]</span>
+                <span class="n">geom_scan</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span><span class="o">.</span><span class="n">to_cube</span><span class="p">(</span><span class="n">axes</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;dnde_scan_values&quot;</span><span class="p">:</span>
+                    <span class="n">unit</span> <span class="o">=</span> <span class="n">dnde_ref</span><span class="o">.</span><span class="n">unit</span>
+                    <span class="n">factor</span> <span class="o">=</span> <span class="n">dnde_ref</span><span class="o">.</span><span class="n">value</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">unit</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+                    <span class="n">factor</span> <span class="o">=</span> <span class="mi">1</span>
+
+                <span class="n">m</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom_scan</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="n">unit</span><span class="p">)</span>
+                <span class="n">m</span><span class="o">.</span><span class="n">data</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">j</span><span class="p">,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">_</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">results</span><span class="p">])</span><span class="o">.</span><span class="n">T</span> <span class="o">*</span> <span class="n">factor</span>
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">m</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+                <span class="n">m</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">j</span><span class="p">,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">_</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">results</span><span class="p">]</span>
             <span class="n">result</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">m</span>
 
         <span class="k">return</span> <span class="n">result</span></div>
@@ -1162,7 +1213,7 @@ document.write(`
 <span class="k">class</span> <span class="nc">BrentqFluxEstimator</span><span class="p">(</span><span class="n">Estimator</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Single parameter flux estimator.&quot;&quot;&quot;</span>
 
-    <span class="n">_available_selection_optional</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;errn-errp&quot;</span><span class="p">,</span> <span class="s2">&quot;ul&quot;</span><span class="p">]</span>
+    <span class="n">_available_selection_optional</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;errn-errp&quot;</span><span class="p">,</span> <span class="s2">&quot;ul&quot;</span><span class="p">,</span> <span class="s2">&quot;stat_scan&quot;</span><span class="p">]</span>
     <span class="n">tag</span> <span class="o">=</span> <span class="s2">&quot;BrentqFluxEstimator&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
@@ -1173,6 +1224,7 @@ document.write(`
         <span class="n">selection_optional</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">max_niter</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
         <span class="n">ts_threshold</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">norm</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">rtol</span> <span class="o">=</span> <span class="n">rtol</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_sigma</span> <span class="o">=</span> <span class="n">n_sigma</span>
@@ -1180,6 +1232,7 @@ document.write(`
         <span class="bp">self</span><span class="o">.</span><span class="n">selection_optional</span> <span class="o">=</span> <span class="n">selection_optional</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">max_niter</span> <span class="o">=</span> <span class="n">max_niter</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">ts_threshold</span> <span class="o">=</span> <span class="n">ts_threshold</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">norm</span> <span class="o">=</span> <span class="n">norm</span>
 
     <span class="k">def</span> <span class="nf">estimate_best_fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Estimate best fit norm parameter.</span>
@@ -1305,6 +1358,63 @@ document.write(`
         <span class="p">)</span>
         <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;norm_errn&quot;</span><span class="p">:</span> <span class="n">flux_errn</span><span class="p">,</span> <span class="s2">&quot;norm_errp&quot;</span><span class="p">:</span> <span class="n">flux_errp</span><span class="p">}</span>
 
+    <span class="k">def</span> <span class="nf">estimate_scan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">result</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute likelihood profile.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dataset : `SimpleMapDataset`</span>
+<span class="sd">            Simple map dataset.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        result : dict</span>
+<span class="sd">            Result dictionary including &#39;stat_scan&#39;.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">sparse_norms</span> <span class="o">=</span> <span class="n">_get_norm_scan_values</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">norm</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+
+        <span class="n">scale</span> <span class="o">=</span> <span class="n">sparse_norms</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:]</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">ravel</span><span class="p">()[:,</span> <span class="kc">None</span><span class="p">]</span>
+        <span class="n">background</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">background</span><span class="o">.</span><span class="n">ravel</span><span class="p">()[:,</span> <span class="kc">None</span><span class="p">]</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">ravel</span><span class="p">()[:,</span> <span class="kc">None</span><span class="p">]</span>
+        <span class="n">stat_scan</span> <span class="o">=</span> <span class="n">cash</span><span class="p">(</span><span class="n">counts</span><span class="p">,</span> <span class="n">model</span> <span class="o">*</span> <span class="n">scale</span> <span class="o">+</span> <span class="n">background</span><span class="p">)</span>
+
+        <span class="n">stat_scan_local</span> <span class="o">=</span> <span class="n">stat_scan</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">-</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;stat_null&quot;</span><span class="p">]</span>
+
+        <span class="n">spline</span> <span class="o">=</span> <span class="n">InterpolatedUnivariateSpline</span><span class="p">(</span>
+            <span class="n">sparse_norms</span><span class="p">,</span> <span class="n">stat_scan_local</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ext</span><span class="o">=</span><span class="s2">&quot;raise&quot;</span><span class="p">,</span> <span class="n">check_finite</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="n">stat_scan</span> <span class="o">=</span> <span class="n">spline</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">norm</span><span class="o">.</span><span class="n">scan_values</span><span class="p">)</span>
+
+        <span class="n">ts</span> <span class="o">=</span> <span class="o">-</span><span class="n">stat_scan</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+        <span class="n">ind</span> <span class="o">=</span> <span class="n">stat_scan</span><span class="o">.</span><span class="n">argmin</span><span class="p">()</span>
+        <span class="n">norm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">norm</span><span class="o">.</span><span class="n">scan_values</span><span class="p">[</span><span class="n">ind</span><span class="p">]</span>
+
+        <span class="n">maskp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">norm</span><span class="o">.</span><span class="n">scan_values</span> <span class="o">&gt;</span> <span class="n">norm</span>
+        <span class="n">stat_diff</span> <span class="o">=</span> <span class="n">stat_scan</span> <span class="o">-</span> <span class="n">stat_scan</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+        <span class="n">ind</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">stat_diff</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_sigma</span><span class="o">**</span><span class="mi">2</span><span class="p">)[</span><span class="n">maskp</span><span class="p">]</span><span class="o">.</span><span class="n">argmin</span><span class="p">()</span>
+        <span class="n">norm_errn</span> <span class="o">=</span> <span class="n">norm</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">norm</span><span class="o">.</span><span class="n">scan_values</span><span class="p">[</span><span class="n">maskp</span><span class="p">][</span><span class="n">ind</span><span class="p">]</span>
+
+        <span class="n">ind</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">stat_diff</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_sigma</span><span class="o">**</span><span class="mi">2</span><span class="p">)[</span><span class="o">~</span><span class="n">maskp</span><span class="p">]</span><span class="o">.</span><span class="n">argmin</span><span class="p">()</span>
+        <span class="n">norm_errp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">norm</span><span class="o">.</span><span class="n">scan_values</span><span class="p">[</span><span class="o">~</span><span class="n">maskp</span><span class="p">][</span><span class="n">ind</span><span class="p">]</span> <span class="o">-</span> <span class="n">norm</span>
+
+        <span class="n">ind</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">stat_diff</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_sigma_ul</span><span class="o">**</span><span class="mi">2</span><span class="p">)[</span><span class="o">~</span><span class="n">maskp</span><span class="p">]</span><span class="o">.</span><span class="n">argmin</span><span class="p">()</span>
+        <span class="n">norm_ul</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">norm</span><span class="o">.</span><span class="n">scan_values</span><span class="p">[</span><span class="o">~</span><span class="n">maskp</span><span class="p">][</span><span class="n">ind</span><span class="p">]</span>
+
+        <span class="n">norm_err</span> <span class="o">=</span> <span class="p">(</span><span class="n">norm_errn</span> <span class="o">+</span> <span class="n">norm_errp</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
+
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">ts</span><span class="o">=</span><span class="n">ts</span><span class="p">,</span>
+            <span class="n">norm</span><span class="o">=</span><span class="n">norm</span><span class="p">,</span>
+            <span class="n">norm_err</span><span class="o">=</span><span class="n">norm_err</span><span class="p">,</span>
+            <span class="n">norm_errn</span><span class="o">=</span><span class="n">norm_errn</span><span class="p">,</span>
+            <span class="n">norm_errp</span><span class="o">=</span><span class="n">norm_errp</span><span class="p">,</span>
+            <span class="n">norm_ul</span><span class="o">=</span><span class="n">norm_ul</span><span class="p">,</span>
+            <span class="n">stat_scan</span><span class="o">=</span><span class="n">stat_scan_local</span><span class="p">,</span>
+            <span class="n">dnde_scan_values</span><span class="o">=</span><span class="n">sparse_norms</span><span class="p">,</span>
+        <span class="p">)</span>
+
     <span class="k">def</span> <span class="nf">estimate_default</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Estimate default norm.</span>
 
@@ -1356,15 +1466,19 @@ document.write(`
         <span class="k">else</span><span class="p">:</span>
             <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">estimate_best_fit</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
 
-        <span class="n">norm</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;norm&quot;</span><span class="p">]</span>
-        <span class="n">result</span><span class="p">[</span><span class="s2">&quot;npred&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">npred</span><span class="p">(</span><span class="n">norm</span><span class="o">=</span><span class="n">norm</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
-        <span class="n">result</span><span class="p">[</span><span class="s2">&quot;npred_excess&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;npred&quot;</span><span class="p">]</span> <span class="o">-</span> <span class="n">dataset</span><span class="o">.</span><span class="n">npred</span><span class="p">(</span><span class="n">norm</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
-
         <span class="k">if</span> <span class="s2">&quot;ul&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">selection_optional</span><span class="p">:</span>
             <span class="n">result</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">estimate_ul</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">result</span><span class="p">))</span>
 
         <span class="k">if</span> <span class="s2">&quot;errn-errp&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">selection_optional</span><span class="p">:</span>
             <span class="n">result</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">estimate_errn_errp</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">result</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="s2">&quot;stat_scan&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">selection_optional</span><span class="p">:</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">estimate_scan</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">result</span><span class="p">))</span>
+
+        <span class="n">norm</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;norm&quot;</span><span class="p">]</span>
+        <span class="n">result</span><span class="p">[</span><span class="s2">&quot;npred&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">npred</span><span class="p">(</span><span class="n">norm</span><span class="o">=</span><span class="n">norm</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">result</span><span class="p">[</span><span class="s2">&quot;npred_excess&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;npred&quot;</span><span class="p">]</span> <span class="o">-</span> <span class="n">dataset</span><span class="o">.</span><span class="n">npred</span><span class="p">(</span><span class="n">norm</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">result</span><span class="p">[</span><span class="s2">&quot;stat&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">stat_sum</span><span class="p">(</span><span class="n">norm</span><span class="o">=</span><span class="n">norm</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">result</span>
 
