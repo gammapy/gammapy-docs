@@ -84,6 +84,10 @@ dataset.
 
       :download:`Download Python source code: survey_map.py <survey_map.py>`
 
+    .. container:: sphx-glr-download sphx-glr-download-zip
+
+      :download:`Download zipped: survey_map.zip <survey_map.zip>`
+
 
 .. only:: html
 

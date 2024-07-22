@@ -1167,6 +1167,10 @@ will evolve depending on feedback.
 
       :download:`Download Python source code: irfs.py <irfs.py>`
 
+    .. container:: sphx-glr-download sphx-glr-download-zip
+
+      :download:`Download zipped: irfs.zip <irfs.zip>`
+
 
 .. only:: html
 
