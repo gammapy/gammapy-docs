@@ -551,7 +551,12 @@ document.write(`
     <span class="n">PowerLawSpectralModel</span><span class="p">,</span>
     <span class="n">SkyModel</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">gammapy.stats</span> <span class="kn">import</span> <span class="n">compute_flux_doubling</span><span class="p">,</span> <span class="n">compute_fpp</span><span class="p">,</span> <span class="n">compute_fvar</span>
+<span class="kn">from</span> <span class="nn">gammapy.stats</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">compute_flux_doubling</span><span class="p">,</span>
+    <span class="n">compute_fpp</span><span class="p">,</span>
+    <span class="n">compute_fvar</span><span class="p">,</span>
+    <span class="n">discrete_correlation</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">gammapy.stats.utils</span> <span class="kn">import</span> <span class="n">ts_to_sigma</span>
 <span class="kn">from</span> <span class="nn">.map.core</span> <span class="kn">import</span> <span class="n">FluxMaps</span>
 
@@ -565,6 +570,7 @@ document.write(`
     <span class="s2">&quot;compute_lightcurve_fvar&quot;</span><span class="p">,</span>
     <span class="s2">&quot;compute_lightcurve_fpp&quot;</span><span class="p">,</span>
     <span class="s2">&quot;compute_lightcurve_doublingtime&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;compute_lightcurve_discrete_correlation&quot;</span><span class="p">,</span>
 <span class="p">]</span>
 
 
@@ -1093,6 +1099,91 @@ document.write(`
 
 
 
+<div class="viewcode-block" id="compute_lightcurve_discrete_correlation">
+<a class="viewcode-back" href="../../../api/gammapy.estimators.utils.compute_lightcurve_discrete_correlation.html#gammapy.estimators.utils.compute_lightcurve_discrete_correlation">[docs]</a>
+<span class="k">def</span> <span class="nf">compute_lightcurve_discrete_correlation</span><span class="p">(</span>
+    <span class="n">lightcurve1</span><span class="p">,</span> <span class="n">lightcurve2</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">flux_quantity</span><span class="o">=</span><span class="s2">&quot;flux&quot;</span><span class="p">,</span> <span class="n">tau</span><span class="o">=</span><span class="kc">None</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Compute the discrete correlation function for two lightcurves, or the discrete autocorrelation if only one lightcurve is provided.</span>
+<span class="sd">    NaN values will be ignored in the computation in order to account for possible gaps in the data.</span>
+
+<span class="sd">    Internally calls the `~gammapy.stats.discrete_correlation` function</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    lightcurve1 : `~gammapy.estimators.FluxPoints`</span>
+<span class="sd">        The first lightcurve object.</span>
+<span class="sd">    lightcurve2 : `~gammapy.estimators.FluxPoints`, optional</span>
+<span class="sd">        The second lightcurve object. If not provided, the autocorrelation for the first lightcurve will be computed.</span>
+<span class="sd">        Default is None.</span>
+<span class="sd">    flux_quantity : str</span>
+<span class="sd">        Flux quantity to use for calculation. Should be &#39;dnde&#39;, &#39;flux&#39;, &#39;e2dnde&#39; or &#39;eflux&#39;.</span>
+<span class="sd">        The choice does not affect the computation. Default is &#39;flux&#39;.</span>
+<span class="sd">    tau : `~astropy.units.Quantity`, optional</span>
+<span class="sd">        Size of the bins to compute the discrete correlation.</span>
+<span class="sd">        If None, the bin size will be double the bins of the first lightcurve. Default is None.</span>
+
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    discrete_correlation_dict : dict</span>
+<span class="sd">        Dictionary containing:</span>
+<span class="sd">            &quot;bins&quot; : the array of discrete time bins</span>
+<span class="sd">            &quot;discrete_correlation&quot; : discrete correlation function values</span>
+<span class="sd">            &quot;discrete_correlation_err&quot; : associated error</span>
+
+<span class="sd">    References</span>
+<span class="sd">    ----------</span>
+<span class="sd">    .. [Edelson1988] &quot;THE DISCRETE CORRELATION FUNCTION: A NEW METHOD FOR ANALYZING</span>
+<span class="sd">    UNEVENLY SAMPLED VARIABILITY DATA&quot;, Edelson et al. (1988)</span>
+<span class="sd">    https://ui.adsabs.harvard.edu/abs/1988ApJ...333..646E/abstract</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">flux1</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">lightcurve1</span><span class="p">,</span> <span class="n">flux_quantity</span><span class="p">)</span>
+    <span class="n">flux_err1</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">lightcurve1</span><span class="p">,</span> <span class="n">flux_quantity</span> <span class="o">+</span> <span class="s2">&quot;_err&quot;</span><span class="p">)</span>
+    <span class="n">coords1</span> <span class="o">=</span> <span class="n">lightcurve1</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;time&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">center</span>
+    <span class="n">axis</span> <span class="o">=</span> <span class="n">flux1</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="o">.</span><span class="n">index_data</span><span class="p">(</span><span class="s2">&quot;time&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">tau</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">tau</span> <span class="o">=</span> <span class="p">(</span><span class="n">coords1</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">coords1</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">/</span> <span class="p">(</span><span class="mf">0.5</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords1</span><span class="p">))</span>
+
+    <span class="k">if</span> <span class="n">lightcurve2</span><span class="p">:</span>
+        <span class="n">flux2</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">lightcurve2</span><span class="p">,</span> <span class="n">flux_quantity</span><span class="p">)</span>
+        <span class="n">flux_err2</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">lightcurve2</span><span class="p">,</span> <span class="n">flux_quantity</span> <span class="o">+</span> <span class="s2">&quot;_err&quot;</span><span class="p">)</span>
+        <span class="n">coords2</span> <span class="o">=</span> <span class="n">lightcurve2</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;time&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">center</span>
+        <span class="n">bins</span><span class="p">,</span> <span class="n">dcf</span><span class="p">,</span> <span class="n">dcf_err</span> <span class="o">=</span> <span class="n">discrete_correlation</span><span class="p">(</span>
+            <span class="n">flux1</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">flux_err1</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">flux2</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">flux_err2</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">coords1</span><span class="p">,</span>
+            <span class="n">coords2</span><span class="p">,</span>
+            <span class="n">tau</span><span class="p">,</span>
+            <span class="n">axis</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">bins</span><span class="p">,</span> <span class="n">dcf</span><span class="p">,</span> <span class="n">dcf_err</span> <span class="o">=</span> <span class="n">discrete_correlation</span><span class="p">(</span>
+            <span class="n">flux1</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">flux_err1</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">flux1</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">flux_err1</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">coords1</span><span class="p">,</span>
+            <span class="n">coords1</span><span class="p">,</span>
+            <span class="n">tau</span><span class="p">,</span>
+            <span class="n">axis</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">discrete_correlation_dict</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;bins&quot;</span><span class="p">:</span> <span class="n">bins</span><span class="p">,</span>
+        <span class="s2">&quot;discrete_correlation&quot;</span><span class="p">:</span> <span class="n">dcf</span><span class="p">,</span>
+        <span class="s2">&quot;discrete_correlation_err&quot;</span><span class="p">:</span> <span class="n">dcf_err</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="n">discrete_correlation_dict</span></div>
+
+
+
 <span class="k">def</span> <span class="nf">get_edges_fixed_bins</span><span class="p">(</span><span class="n">fluxpoint</span><span class="p">,</span> <span class="n">group_size</span><span class="p">,</span> <span class="n">axis_name</span><span class="o">=</span><span class="s2">&quot;energy&quot;</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Rebin the flux point to combine value adjacent bins.</span>
 
@@ -1380,7 +1471,6 @@ document.write(`
         <span class="n">reference_model</span> <span class="o">=</span> <span class="n">maps</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">reference_model</span>
 
     <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;gaussian_errors&quot;</span><span class="p">:</span>
-
         <span class="n">means</span> <span class="o">=</span> <span class="p">[</span><span class="n">map_</span><span class="o">.</span><span class="n">dnde</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span> <span class="k">for</span> <span class="n">map_</span> <span class="ow">in</span> <span class="n">maps</span><span class="p">]</span>
         <span class="n">sigmas</span> <span class="o">=</span> <span class="p">[</span><span class="n">map_</span><span class="o">.</span><span class="n">dnde_err</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span> <span class="k">for</span> <span class="n">map_</span> <span class="ow">in</span> <span class="n">maps</span><span class="p">]</span>
         <span class="c1"># compensate for the ts deviation from gaussian approximation expectation in each map</span>
@@ -1396,7 +1486,6 @@ document.write(`
         <span class="n">sigma</span> <span class="o">=</span> <span class="n">sigmas</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
         <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">means</span><span class="p">)):</span>
-
             <span class="n">mean_k</span> <span class="o">=</span> <span class="n">means</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="n">mean</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span>
             <span class="n">sigma_k</span> <span class="o">=</span> <span class="n">sigmas</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">quantity</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="n">sigma</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span>
 
