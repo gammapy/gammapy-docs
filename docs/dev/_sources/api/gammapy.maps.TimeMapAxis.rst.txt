@@ -61,6 +61,7 @@ TimeMapAxis
       ~TimeMapAxis.to_contiguous
       ~TimeMapAxis.to_gti
       ~TimeMapAxis.to_header
+      ~TimeMapAxis.to_table
       ~TimeMapAxis.upsample
 
    .. rubric:: Attributes Documentation
@@ -114,4 +115,5 @@ TimeMapAxis
    .. automethod:: to_contiguous
    .. automethod:: to_gti
    .. automethod:: to_header
+   .. automethod:: to_table
    .. automethod:: upsample
