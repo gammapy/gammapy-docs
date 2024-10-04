@@ -18,8 +18,6 @@ Observation
       ~Observation.events
       ~Observation.gti
       ~Observation.meta
-      ~Observation.muoneff
-      ~Observation.obs_info
       ~Observation.observation_dead_time_fraction
       ~Observation.observation_live_time_duration
       ~Observation.observation_time_duration
@@ -56,8 +54,6 @@ Observation
    .. autoattribute:: events
    .. autoattribute:: gti
    .. autoattribute:: meta
-   .. autoattribute:: muoneff
-   .. autoattribute:: obs_info
    .. autoattribute:: observation_dead_time_fraction
    .. autoattribute:: observation_live_time_duration
    .. autoattribute:: observation_time_duration

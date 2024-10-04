@@ -17,11 +17,9 @@ PriorParameter
       ~PriorParameter.factor_max
       ~PriorParameter.factor_min
       ~PriorParameter.frozen
-      ~PriorParameter.is_norm
       ~PriorParameter.max
       ~PriorParameter.min
       ~PriorParameter.name
-      ~PriorParameter.norm_parameters
       ~PriorParameter.prior
       ~PriorParameter.quantity
       ~PriorParameter.scale
@@ -54,11 +52,9 @@ PriorParameter
    .. autoattribute:: factor_max
    .. autoattribute:: factor_min
    .. autoattribute:: frozen
-   .. autoattribute:: is_norm
    .. autoattribute:: max
    .. autoattribute:: min
    .. autoattribute:: name
-   .. autoattribute:: norm_parameters
    .. autoattribute:: prior
    .. autoattribute:: quantity
    .. autoattribute:: scale

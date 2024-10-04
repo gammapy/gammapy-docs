@@ -14,7 +14,6 @@ Parameters
       ~Parameters.max
       ~Parameters.min
       ~Parameters.names
-      ~Parameters.norm_parameters
       ~Parameters.prior
       ~Parameters.types
       ~Parameters.unique_parameters
@@ -46,7 +45,6 @@ Parameters
    .. autoattribute:: max
    .. autoattribute:: min
    .. autoattribute:: names
-   .. autoattribute:: norm_parameters
    .. autoattribute:: prior
    .. autoattribute:: types
    .. autoattribute:: unique_parameters

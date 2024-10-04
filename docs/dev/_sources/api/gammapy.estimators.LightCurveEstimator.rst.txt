@@ -12,10 +12,6 @@ LightCurveEstimator
 
       ~LightCurveEstimator.config_parameters
       ~LightCurveEstimator.n_jobs
-      ~LightCurveEstimator.norm_max
-      ~LightCurveEstimator.norm_min
-      ~LightCurveEstimator.norm_n_values
-      ~LightCurveEstimator.norm_values
       ~LightCurveEstimator.parallel_backend
       ~LightCurveEstimator.selection_optional
       ~LightCurveEstimator.tag
@@ -43,10 +39,6 @@ LightCurveEstimator
 
    .. autoattribute:: config_parameters
    .. autoattribute:: n_jobs
-   .. autoattribute:: norm_max
-   .. autoattribute:: norm_min
-   .. autoattribute:: norm_n_values
-   .. autoattribute:: norm_values
    .. autoattribute:: parallel_backend
    .. autoattribute:: selection_optional
    .. autoattribute:: tag

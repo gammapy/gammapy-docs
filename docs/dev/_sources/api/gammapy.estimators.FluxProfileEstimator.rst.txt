@@ -12,10 +12,6 @@ FluxProfileEstimator
 
       ~FluxProfileEstimator.config_parameters
       ~FluxProfileEstimator.n_jobs
-      ~FluxProfileEstimator.norm_max
-      ~FluxProfileEstimator.norm_min
-      ~FluxProfileEstimator.norm_n_values
-      ~FluxProfileEstimator.norm_values
       ~FluxProfileEstimator.parallel_backend
       ~FluxProfileEstimator.projected_distance_axis
       ~FluxProfileEstimator.selection_optional
@@ -42,10 +38,6 @@ FluxProfileEstimator
 
    .. autoattribute:: config_parameters
    .. autoattribute:: n_jobs
-   .. autoattribute:: norm_max
-   .. autoattribute:: norm_min
-   .. autoattribute:: norm_n_values
-   .. autoattribute:: norm_values
    .. autoattribute:: parallel_backend
    .. autoattribute:: projected_distance_axis
    .. autoattribute:: selection_optional

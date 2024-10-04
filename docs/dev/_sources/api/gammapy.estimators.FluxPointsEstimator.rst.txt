@@ -12,10 +12,6 @@ FluxPointsEstimator
 
       ~FluxPointsEstimator.config_parameters
       ~FluxPointsEstimator.n_jobs
-      ~FluxPointsEstimator.norm_max
-      ~FluxPointsEstimator.norm_min
-      ~FluxPointsEstimator.norm_n_values
-      ~FluxPointsEstimator.norm_values
       ~FluxPointsEstimator.parallel_backend
       ~FluxPointsEstimator.selection_optional
       ~FluxPointsEstimator.tag
@@ -41,10 +37,6 @@ FluxPointsEstimator
 
    .. autoattribute:: config_parameters
    .. autoattribute:: n_jobs
-   .. autoattribute:: norm_max
-   .. autoattribute:: norm_min
-   .. autoattribute:: norm_n_values
-   .. autoattribute:: norm_values
    .. autoattribute:: parallel_backend
    .. autoattribute:: selection_optional
    .. autoattribute:: tag

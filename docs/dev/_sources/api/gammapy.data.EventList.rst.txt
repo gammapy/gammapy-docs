@@ -55,7 +55,6 @@ EventList
       ~EventList.select_time
       ~EventList.stack
       ~EventList.to_table_hdu
-      ~EventList.write
 
    .. rubric:: Attributes Documentation
 
@@ -102,4 +101,3 @@ EventList
    .. automethod:: select_time
    .. automethod:: stack
    .. automethod:: to_table_hdu
-   .. automethod:: write
