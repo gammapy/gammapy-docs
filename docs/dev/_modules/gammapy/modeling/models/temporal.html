@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="1.3.dev1282+gcff9ae2c5" />
+  <meta name="docsearch:version" content="1.3.dev1341+g619dad01b" />
     <meta name="docbuild:last-update" content="29 Oct 2024"/>
   </head>
   
@@ -488,6 +488,7 @@
   <h1>Source code for gammapy.modeling.models.temporal</h1><div class="highlight"><pre>
 <span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
 <span class="sd">&quot;&quot;&quot;Time-dependent models.&quot;&quot;&quot;</span>
+
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">scipy.interpolate</span>
@@ -495,8 +496,8 @@
 <span class="kn">from</span> <span class="nn">astropy.io</span> <span class="kn">import</span> <span class="n">fits</span>
 <span class="kn">from</span> <span class="nn">astropy.table</span> <span class="kn">import</span> <span class="n">Table</span>
 <span class="kn">from</span> <span class="nn">astropy.time</span> <span class="kn">import</span> <span class="n">Time</span>
-<span class="kn">from</span> <span class="nn">astropy.utils</span> <span class="kn">import</span> <span class="n">lazyproperty</span>
 <span class="kn">from</span> <span class="nn">gammapy.maps</span> <span class="kn">import</span> <span class="n">MapAxis</span><span class="p">,</span> <span class="n">RegionNDMap</span><span class="p">,</span> <span class="n">TimeMapAxis</span>
+<span class="kn">from</span> <span class="nn">astropy.utils</span> <span class="kn">import</span> <span class="n">lazyproperty</span>
 <span class="kn">from</span> <span class="nn">gammapy.modeling</span> <span class="kn">import</span> <span class="n">Parameter</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.compat</span> <span class="kn">import</span> <span class="n">COPY_IF_NEEDED</span>
 <span class="kn">from</span> <span class="nn">gammapy.utils.random</span> <span class="kn">import</span> <span class="n">InverseCDFSampler</span><span class="p">,</span> <span class="n">get_random_state</span>
@@ -1587,11 +1588,25 @@
     <span class="n">f2</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="s2">&quot;f2&quot;</span><span class="p">,</span> <span class="n">_f2_default</span><span class="p">,</span> <span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">table</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">table</span> <span class="o">=</span> <span class="n">table</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">table</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_normalise_table</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">filename</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">filename</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">make_path</span><span class="p">(</span><span class="n">filename</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">filename</span> <span class="o">=</span> <span class="n">filename</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_normalise_table</span><span class="p">(</span><span class="n">table</span><span class="p">):</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s2">&quot;PHASE&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">data</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s2">&quot;NORM&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">data</span>
+
+        <span class="n">interpolator</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">interpolate</span><span class="o">.</span><span class="n">InterpolatedUnivariateSpline</span><span class="p">(</span>
+            <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ext</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">bbox</span><span class="o">=</span><span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]</span>
+        <span class="p">)</span>
+
+        <span class="n">integral</span> <span class="o">=</span> <span class="n">interpolator</span><span class="o">.</span><span class="n">integral</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">table</span><span class="p">[</span><span class="s2">&quot;NORM&quot;</span><span class="p">]</span> <span class="o">*=</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">integral</span>
+        <span class="k">return</span> <span class="n">table</span>
 
 <div class="viewcode-block" id="TemplatePhaseCurveTemporalModel.read">
 <a class="viewcode-back" href="../../../../api/gammapy.modeling.models.TemplatePhaseCurveTemporalModel.html#gammapy.modeling.models.TemplatePhaseCurveTemporalModel.read">[docs]</a>
@@ -1616,6 +1631,7 @@
 <span class="sd">            Filename with path.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">filename</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">make_path</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
             <span class="n">Table</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span>
             <span class="n">filename</span><span class="o">=</span><span class="n">filename</span><span class="p">,</span>
@@ -1733,11 +1749,15 @@
         <span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_interpolator</span><span class="o">.</span><span class="n">antiderivative</span><span class="p">()(</span><span class="n">ph_min</span><span class="p">)</span>
 
         <span class="c1"># Divide by Jacobian (here we neglect variations of frequency during the integration period)</span>
-        <span class="n">total</span> <span class="o">=</span> <span class="p">(</span><span class="n">phase_integral</span> <span class="o">+</span> <span class="n">start_integral</span> <span class="o">+</span> <span class="n">end_integral</span><span class="p">)</span> <span class="o">/</span> <span class="n">frequency</span>
+        <span class="n">total</span> <span class="o">=</span> <span class="n">phase_integral</span> <span class="o">+</span> <span class="n">start_integral</span> <span class="o">+</span> <span class="n">end_integral</span>
         <span class="c1"># Normalize by total integration time</span>
-        <span class="n">integral_norm</span> <span class="o">=</span> <span class="n">total</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_sum</span><span class="p">(</span><span class="n">t_min</span><span class="p">,</span> <span class="n">t_max</span><span class="p">)</span>
+        <span class="n">n_period</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">time_sum</span><span class="p">(</span><span class="n">t_min</span><span class="p">,</span> <span class="n">t_max</span><span class="p">)</span> <span class="o">*</span> <span class="n">frequency</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_period</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">n_period</span> <span class="o">=</span> <span class="mi">1</span>
 
-        <span class="k">return</span> <span class="n">integral_norm</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span></div>
+        <span class="n">integral_norm</span> <span class="o">=</span> <span class="n">total</span> <span class="o">/</span> <span class="n">n_period</span>
+
+        <span class="k">return</span> <span class="n">integral_norm</span></div>
 
 
 <div class="viewcode-block" id="TemplatePhaseCurveTemporalModel.from_dict">
@@ -1876,6 +1896,11 @@
       <br/>
     
   </p>
+</div>
+      
+        <div class="footer-item">
+    
+     <a href="https://gammapy.org/DataPrivacy.html">Data Privacy.</a>
 </div>
       
     </div>

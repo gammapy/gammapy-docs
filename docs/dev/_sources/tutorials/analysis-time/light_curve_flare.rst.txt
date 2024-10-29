@@ -80,7 +80,7 @@ Setup
 
 As usual, we’ll start with some general imports…
 
-.. GENERATED FROM PYTHON SOURCE LINES 65-90
+.. GENERATED FROM PYTHON SOURCE LINES 65-91
 
 .. code-block:: Python
 
@@ -108,6 +108,7 @@ As usual, we’ll start with some general imports…
     )
     from gammapy.maps import MapAxis, RegionGeom
     from gammapy.modeling.models import PowerLawSpectralModel, SkyModel
+    from gammapy.modeling import Fit
 
 
 
@@ -116,12 +117,12 @@ As usual, we’ll start with some general imports…
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 91-93
+.. GENERATED FROM PYTHON SOURCE LINES 92-94
 
 Check setup
 -----------
 
-.. GENERATED FROM PYTHON SOURCE LINES 93-98
+.. GENERATED FROM PYTHON SOURCE LINES 94-99
 
 .. code-block:: Python
 
@@ -149,7 +150,7 @@ Check setup
 
     Gammapy package:
 
-            version                : 1.3.dev1282+gcff9ae2c5 
+            version                : 1.3.dev1341+g619dad01b 
             path                   : /home/runner/work/gammapy-docs/gammapy-docs/gammapy/.tox/build_docs/lib/python3.9/site-packages/gammapy 
 
 
@@ -182,7 +183,7 @@ Check setup
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 99-104
+.. GENERATED FROM PYTHON SOURCE LINES 100-105
 
 Select the data
 ---------------
@@ -190,7 +191,7 @@ Select the data
 We first set the datastore.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 104-108
+.. GENERATED FROM PYTHON SOURCE LINES 105-109
 
 .. code-block:: Python
 
@@ -205,12 +206,12 @@ We first set the datastore.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 109-111
+.. GENERATED FROM PYTHON SOURCE LINES 110-112
 
 Now we select observations within 2 degrees of PKS 2155-304.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 111-125
+.. GENERATED FROM PYTHON SOURCE LINES 112-126
 
 .. code-block:: Python
 
@@ -241,14 +242,13 @@ Now we select observations within 2 degrees of PKS 2155-304.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 126-132
+.. GENERATED FROM PYTHON SOURCE LINES 127-132
 
 Define time intervals
 ---------------------
 
-We create the list of time intervals. Each time interval is an
+We create the list of time intervals, each of duration 10 minutes. Each time interval is an
 `astropy.time.Time` object, containing a start and stop time.
-
 
 .. GENERATED FROM PYTHON SOURCE LINES 132-141
 
@@ -440,28 +440,24 @@ Now we perform the actual data reduction in the ``time_intervals``.
 
 .. GENERATED FROM PYTHON SOURCE LINES 239-250
 
-Define the Model
-----------------
+Define underlying model
+-----------------------
 
-The actual flux will depend on the spectral shape assumed. For
-simplicity, we use the power law spectral model of index 3.4 used in the
+Since we use forward folding to obtain the flux points in each bin, exact values will depend on the underlying model. In this example, we use a power law as used in the
 `reference
 paper <https://ui.adsabs.harvard.edu/abs/2009A%26A...502..749A/abstract>`__.
 
-Here we use only a spectral model in the
-`~gammapy.modeling.models.SkyModel` object.
+As we have are only using spectral datasets, we do not need any spatial models.
 
+**Note** : All time bins must have the same spectral model. To see how to investigate spectral variability,
+see :doc:`time resolved spectroscopy notebook </tutorials/analysis-time/time_resolved_spectroscopy>`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 250-259
+.. GENERATED FROM PYTHON SOURCE LINES 250-254
 
 .. code-block:: Python
 
 
-    spectral_model = PowerLawSpectralModel(
-        index=3.4, amplitude=2e-11 * u.Unit("1 / (cm2 s TeV)"), reference=1 * u.TeV
-    )
-    spectral_model.parameters["index"].frozen = False
-
+    spectral_model = PowerLawSpectralModel(amplitude=1e-10 * u.Unit("1 / (cm2 s TeV)"))
     sky_model = SkyModel(spatial_model=None, spectral_model=spectral_model, name="pks2155")
 
 
@@ -471,8 +467,7 @@ Here we use only a spectral model in the
 
 
 
-
-.. GENERATED FROM PYTHON SOURCE LINES 260-265
+.. GENERATED FROM PYTHON SOURCE LINES 255-260
 
 Assign to model to all datasets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -480,7 +475,7 @@ Assign to model to all datasets
 We assign each dataset its spectral model
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 265-269
+.. GENERATED FROM PYTHON SOURCE LINES 260-264
 
 .. code-block:: Python
 
@@ -495,28 +490,56 @@ We assign each dataset its spectral model
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 270-279
+.. GENERATED FROM PYTHON SOURCE LINES 265-269
+
+.. code-block:: Python
+
+    fit = Fit()
+    result = fit.run(datasets)
+    print(result.models.to_parameters_table())
+
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+     model  type    name     value         unit      ... min max frozen link prior
+    ------- ---- --------- ---------- -------------- ... --- --- ------ ---- -----
+    pks2155          index 3.5392e+00                ... nan nan  False           
+    pks2155      amplitude 9.4675e-11 cm-2 s-1 TeV-1 ... nan nan  False           
+    pks2155      reference 1.0000e+00            TeV ... nan nan   True           
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 270-281
 
 Extract the light curve
 -----------------------
 
 We first create the `~gammapy.estimators.LightCurveEstimator` for the
 list of datasets we just produced. We give the estimator the name of the
-source component to be fitted.
+source component to be fitted. We can directly compute the light curve in multiple energy
+bins by supplying a list of `energy_edges`.
+
 By default the likelihood scan is computed from 0.2 to 5.0.
 Here, we increase the max value to 10.0, because we are
 dealing with a large flare.
 
-.. GENERATED FROM PYTHON SOURCE LINES 279-289
+.. GENERATED FROM PYTHON SOURCE LINES 281-292
 
 .. code-block:: Python
 
 
     lc_maker_1d = LightCurveEstimator(
-        energy_edges=[0.7, 20] * u.TeV,
+        energy_edges=[0.7, 1, 20] * u.TeV,
         source="pks2155",
         time_intervals=time_intervals,
         selection_optional="all",
+        n_jobs=4,
     )
     lc_maker_1d.norm.scan_max = 10
 
@@ -528,7 +551,7 @@ dealing with a large flare.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 290-295
+.. GENERATED FROM PYTHON SOURCE LINES 293-298
 
 We can now perform the light curve extraction itself. To compare with
 the `reference
@@ -536,7 +559,7 @@ paper <https://ui.adsabs.harvard.edu/abs/2009A%26A...502..749A/abstract>`__,
 we select the 0.7-20 TeV range.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 297-300
+.. GENERATED FROM PYTHON SOURCE LINES 300-303
 
 .. code-block:: Python
 
@@ -550,17 +573,19 @@ we select the 0.7-20 TeV range.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 301-303
+.. GENERATED FROM PYTHON SOURCE LINES 304-306
 
 Finally we plot the result for the 1D lightcurve:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 303-308
+.. GENERATED FROM PYTHON SOURCE LINES 306-313
 
 .. code-block:: Python
 
     plt.figure(figsize=(8, 6))
-    lc_1d.plot(marker="o")
+    plt.tight_layout()
+    plt.subplots_adjust(bottom=0.3)
+    lc_1d.plot(marker="o", axis_name="time", sed_type="flux")
     plt.show()
 
 
@@ -576,26 +601,38 @@ Finally we plot the result for the 1D lightcurve:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 309-312
+.. GENERATED FROM PYTHON SOURCE LINES 314-319
 
-Light curves once obtained can be rebinned.
-Here, we rebin 4 adjacent bins together, to get 30 min bins
+Light curves once obtained can be rebinned using the likelihood profiles.
+Here, we rebin 3 adjacent bins together, to get 30 minute bins.
+
+We will first slice `lc_1d` to obtain the lightcurve in the first energy bin
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 312-321
+.. GENERATED FROM PYTHON SOURCE LINES 319-338
 
 .. code-block:: Python
 
 
-    axis_new = get_rebinned_axis(lc_1d, method="fixed-bins", group_size=3, axis_name="time")
+    slices = {"energy": slice(0, 1)}
+    sliced_lc = lc_1d.slice_by_idx(slices)
+    print(sliced_lc)
+
+    axis_new = get_rebinned_axis(
+        sliced_lc, method="fixed-bins", group_size=3, axis_name="time"
+    )
     print(axis_new)
 
-    lc_new = lc_1d.resample_axis(axis_new)
+    lc_new = sliced_lc.resample_axis(axis_new)
     plt.figure(figsize=(8, 6))
-    ax = lc_1d.plot(label="original")
+    plt.tight_layout()
+    plt.subplots_adjust(bottom=0.3)
+    ax = sliced_lc.plot(label="original")
     lc_new.plot(ax=ax, label="rebinned")
     plt.legend()
     plt.show()
+
+
 
 
 .. image-sg:: /tutorials/analysis-time/images/sphx_glr_light_curve_flare_002.png
@@ -607,6 +644,19 @@ Here, we rebin 4 adjacent bins together, to get 30 min bins
 .. rst-class:: sphx-glr-script-out
 
  .. code-block:: none
+
+    FluxPoints
+    ----------
+
+      geom                   : RegionGeom
+      axes                   : ['lon', 'lat', 'energy', 'time']
+      shape                  : (1, 1, 1, 34)
+      quantities             : ['norm', 'norm_err', 'norm_errn', 'norm_errp', 'norm_ul', 'ts', 'npred', 'npred_excess', 'stat', 'stat_null', 'stat_scan', 'counts', 'success']
+      ref. model             : pl
+      n_sigma                : 1
+      n_sigma_ul             : 2
+      sqrt_ts_threshold_ul   : 2
+      sed type init          : likelihood
 
     TimeMapAxis
     -----------
@@ -623,10 +673,15 @@ Here, we rebin 4 adjacent bins together, to get 30 min bins
 
 
 
+.. GENERATED FROM PYTHON SOURCE LINES 339-341
+
+We can use the sliced lightcurve to understand the variability,
+as shown in the doc:`/tutorials/analysis-time/variability_estimation` tutorial.
+
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 33.606 seconds)
+   **Total running time of the script:** (0 minutes 34.482 seconds)
 
 
 .. _sphx_glr_download_tutorials_analysis-time_light_curve_flare.py:
