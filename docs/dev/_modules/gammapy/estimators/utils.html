@@ -67,8 +67,8 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="1.3.dev1345+g83ad6ac61" />
-    <meta name="docbuild:last-update" content="02 Nov 2024"/>
+  <meta name="docsearch:version" content="1.3.dev1365+gcf6f6bde4" />
+    <meta name="docbuild:last-update" content="05 Nov 2024"/>
   </head>
   
   
@@ -513,12 +513,15 @@
 <span class="kn">from</span> <span class="nn">.map.core</span> <span class="kn">import</span> <span class="n">FluxMaps</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="s2">&quot;get_combined_significance_maps&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;combine_flux_maps&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;combine_significance_maps&quot;</span><span class="p">,</span>
     <span class="s2">&quot;estimate_exposure_reco_energy&quot;</span><span class="p">,</span>
     <span class="s2">&quot;find_peaks&quot;</span><span class="p">,</span>
     <span class="s2">&quot;find_peaks_in_flux_map&quot;</span><span class="p">,</span>
     <span class="s2">&quot;resample_energy_edges&quot;</span><span class="p">,</span>
     <span class="s2">&quot;get_rebinned_axis&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;get_combined_flux_maps&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;get_combined_significance_maps&quot;</span><span class="p">,</span>
     <span class="s2">&quot;compute_lightcurve_fvar&quot;</span><span class="p">,</span>
     <span class="s2">&quot;compute_lightcurve_fpp&quot;</span><span class="p">,</span>
     <span class="s2">&quot;compute_lightcurve_doublingtime&quot;</span><span class="p">,</span>
@@ -1294,6 +1297,66 @@
 
 
 
+<div class="viewcode-block" id="combine_significance_maps">
+<a class="viewcode-back" href="../../../api/gammapy.estimators.utils.combine_significance_maps.html#gammapy.estimators.utils.combine_significance_maps">[docs]</a>
+<span class="k">def</span> <span class="nf">combine_significance_maps</span><span class="p">(</span><span class="n">maps</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Computes excess and significance for a set of datasets.</span>
+<span class="sd">    The significance computation assumes that the model contains</span>
+<span class="sd">    one degree of freedom per valid energy bin in each dataset.</span>
+<span class="sd">    The method implemented here is valid under the assumption</span>
+<span class="sd">    that the TS in each independent bin follows a Chi2 distribution,</span>
+<span class="sd">    then the sum of the TS also follows a Chi2 distribution (with the sum of the degrees of freedom).</span>
+
+<span class="sd">    See, Zhen (2014): https://www.sciencedirect.com/science/article/abs/pii/S0167947313003204,</span>
+<span class="sd">    Lancaster (1961): https://onlinelibrary.wiley.com/doi/10.1111/j.1467-842X.1961.tb00058.x</span>
+
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    maps : list of `~gammapy.estimators.FluxMaps`</span>
+<span class="sd">        List of maps with the same geometry.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    results : dict</span>
+<span class="sd">        Dictionary with entries:</span>
+
+<span class="sd">                * &quot;significance&quot; : joint significance map.</span>
+<span class="sd">                * &quot;df&quot; : degree of freedom map (one norm per valid bin).</span>
+<span class="sd">                * &quot;npred_excess&quot; : summed excess map.</span>
+<span class="sd">                * &quot;estimator_results&quot; : dictionary containing the flux maps computed for each dataset.</span>
+
+<span class="sd">    See also</span>
+<span class="sd">    --------</span>
+<span class="sd">    get_combined_significance_maps : same method but computing the significance maps from estimators and datasets.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">geom</span> <span class="o">=</span> <span class="n">maps</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">ts</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span>
+    <span class="n">ts_sum</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">)</span>
+    <span class="n">ts_sum_sign</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">)</span>
+    <span class="n">npred_excess_sum</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">)</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">maps</span><span class="p">:</span>
+        <span class="n">df</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;ts&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">data</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># one dof (norm) per valid bin</span>
+        <span class="n">ts_sum</span> <span class="o">+=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;ts&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">reduce_over_axes</span><span class="p">()</span>
+        <span class="n">ts_sum_sign</span> <span class="o">+=</span> <span class="p">(</span>
+            <span class="n">result</span><span class="p">[</span><span class="s2">&quot;ts&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;npred_excess&quot;</span><span class="p">])</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">reduce_over_axes</span><span class="p">()</span>
+        <span class="n">npred_excess_sum</span> <span class="o">+=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;npred_excess&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">reduce_over_axes</span><span class="p">()</span>
+
+    <span class="n">significance</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">)</span>
+    <span class="n">significance</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">ts_to_sigma</span><span class="p">(</span><span class="n">ts_sum</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">df</span><span class="o">.</span><span class="n">data</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="n">ts_sum_sign</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
+        <span class="n">significance</span><span class="o">=</span><span class="n">significance</span><span class="p">,</span>
+        <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span>
+        <span class="n">npred_excess</span><span class="o">=</span><span class="n">npred_excess_sum</span><span class="p">,</span>
+        <span class="n">estimator_results</span><span class="o">=</span><span class="n">maps</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
 <div class="viewcode-block" id="get_combined_significance_maps">
 <a class="viewcode-back" href="../../../api/gammapy.estimators.utils.get_combined_significance_maps.html#gammapy.estimators.utils.get_combined_significance_maps">[docs]</a>
 <span class="k">def</span> <span class="nf">get_combined_significance_maps</span><span class="p">(</span><span class="n">estimator</span><span class="p">,</span> <span class="n">datasets</span><span class="p">):</span>
@@ -1324,7 +1387,12 @@
 <span class="sd">                * &quot;significance&quot; : joint significance map.</span>
 <span class="sd">                * &quot;df&quot; : degree of freedom map (one norm per valid bin).</span>
 <span class="sd">                * &quot;npred_excess&quot; : summed excess map.</span>
-<span class="sd">                * &quot;estimator_results&quot; : dictionary containing the estimator results for each dataset.</span>
+<span class="sd">                * &quot;estimator_results&quot; : dictionary containing the flux maps computed for each dataset.</span>
+
+<span class="sd">    See also</span>
+<span class="sd">    --------</span>
+<span class="sd">    combine_significance_maps : same method but using directly the significance maps from estimators</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="kn">from</span> <span class="nn">.map.excess</span> <span class="kn">import</span> <span class="n">ExcessMapEstimator</span>
     <span class="kn">from</span> <span class="nn">.map.ts</span> <span class="kn">import</span> <span class="n">TSMapEstimator</span>
@@ -1334,35 +1402,15 @@
             <span class="sa">f</span><span class="s2">&quot;estimator type should be ExcessMapEstimator or TSMapEstimator), got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">estimator</span><span class="p">)</span><span class="si">}</span><span class="s2"> instead.&quot;</span>
         <span class="p">)</span>
 
-    <span class="n">geom</span> <span class="o">=</span> <span class="n">datasets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span>
-    <span class="n">ts_sum</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">)</span>
-    <span class="n">ts_sum_sign</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">)</span>
-    <span class="n">npred_excess_sum</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">)</span>
-    <span class="n">df</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">)</span>
-
-    <span class="n">results</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
-    <span class="k">for</span> <span class="n">kd</span><span class="p">,</span> <span class="n">d</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">datasets</span><span class="p">):</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="n">estimator</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
-        <span class="n">results</span><span class="p">[</span><span class="n">d</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span>
-
-        <span class="n">df</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;ts&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">data</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># one dof (norm) per valid bin</span>
-        <span class="n">ts_sum</span> <span class="o">+=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;ts&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">reduce_over_axes</span><span class="p">()</span>
-        <span class="n">ts_sum_sign</span> <span class="o">+=</span> <span class="p">(</span>
-            <span class="n">result</span><span class="p">[</span><span class="s2">&quot;ts&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;npred_excess&quot;</span><span class="p">])</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">reduce_over_axes</span><span class="p">()</span>
-        <span class="n">npred_excess_sum</span> <span class="o">+=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;npred_excess&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">reduce_over_axes</span><span class="p">()</span>
-
-    <span class="n">significance</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">)</span>
-    <span class="n">significance</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">ts_to_sigma</span><span class="p">(</span><span class="n">ts_sum</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">df</span><span class="o">.</span><span class="n">data</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="n">ts_sum_sign</span><span class="p">)</span>
-    <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
-        <span class="n">significance</span><span class="o">=</span><span class="n">significance</span><span class="p">,</span>
-        <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span>
-        <span class="n">npred_excess</span><span class="o">=</span><span class="n">npred_excess_sum</span><span class="p">,</span>
-        <span class="n">estimator_results</span><span class="o">=</span><span class="n">results</span><span class="p">,</span>
-    <span class="p">)</span></div>
+    <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">dataset</span> <span class="ow">in</span> <span class="n">datasets</span><span class="p">:</span>
+        <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">estimator</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">dataset</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">combine_significance_maps</span><span class="p">(</span><span class="n">results</span><span class="p">)</span></div>
 
 
 
+<div class="viewcode-block" id="combine_flux_maps">
+<a class="viewcode-back" href="../../../api/gammapy.estimators.utils.combine_flux_maps.html#gammapy.estimators.utils.combine_flux_maps">[docs]</a>
 <span class="k">def</span> <span class="nf">combine_flux_maps</span><span class="p">(</span>
     <span class="n">maps</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s2">&quot;gaussian_errors&quot;</span><span class="p">,</span> <span class="n">reference_model</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dnde_scan_axis</span><span class="o">=</span><span class="kc">None</span>
 <span class="p">):</span>
@@ -1375,7 +1423,7 @@
 <span class="sd">    ----------</span>
 <span class="sd">    maps : list of `~gammapy.estimators.FluxMaps`</span>
 <span class="sd">        List of maps with the same geometry.</span>
-<span class="sd">    method : {&quot;gaussian_errors&quot;}</span>
+<span class="sd">    method : str</span>
 <span class="sd">        * gaussian_errors :</span>
 <span class="sd">            Under the gaussian error approximation the likelihood is given by the gaussian distibution.</span>
 <span class="sd">            The product of gaussians is also a gaussian so can derive dnde, dnde_err, and ts.</span>
@@ -1404,6 +1452,12 @@
 <span class="sd">    -------</span>
 <span class="sd">    flux_maps : `~gammapy.estimators.FluxMaps`</span>
 <span class="sd">        Joint flux map.</span>
+
+
+<span class="sd">    See also</span>
+<span class="sd">    --------</span>
+<span class="sd">    get_combined_flux_maps : same method but using directly the flux maps from estimators</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">gtis</span> <span class="o">=</span> <span class="p">[</span><span class="n">map_</span><span class="o">.</span><span class="n">gti</span> <span class="k">for</span> <span class="n">map_</span> <span class="ow">in</span> <span class="n">maps</span> <span class="k">if</span> <span class="n">map_</span><span class="o">.</span><span class="n">gti</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span>
     <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">gtis</span><span class="p">):</span>
@@ -1488,7 +1542,89 @@
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s1">&#39;Invalid method provided : </span><span class="si">{</span><span class="n">method</span><span class="si">}</span><span class="s1">. Available methods are : &quot;gaussian_errors&quot;, &quot;distrib&quot;, &quot;profile&quot;&#39;</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="get_combined_flux_maps">
+<a class="viewcode-back" href="../../../api/gammapy.estimators.utils.get_combined_flux_maps.html#gammapy.estimators.utils.get_combined_flux_maps">[docs]</a>
+<span class="k">def</span> <span class="nf">get_combined_flux_maps</span><span class="p">(</span>
+    <span class="n">estimator</span><span class="p">,</span>
+    <span class="n">datasets</span><span class="p">,</span>
+    <span class="n">method</span><span class="o">=</span><span class="s2">&quot;gaussian_errors&quot;</span><span class="p">,</span>
+    <span class="n">reference_model</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">dnde_scan_axis</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a `~gammapy.estimators.FluxMaps` by combining a list of flux maps with the same geometry.</span>
+
+<span class="sd">    This assumes the flux maps are independent measurements of the same true value.</span>
+<span class="sd">    The GTI is stacked in the process.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    estimator : `~gammapy.estimators.ExcessMapEstimator` or `~gammapy.estimators.TSMapEstimator`</span>
+<span class="sd">        Excess Map Estimator or TS Map Estimator</span>
+<span class="sd">    dataset : `~gammapy.datasets.Datasets` or list of `~gammapy.datasets.MapDataset`</span>
+<span class="sd">        Datasets containing only `~gammapy.datasets.MapDataset`.</span>
+<span class="sd">    method : str</span>
+<span class="sd">        * gaussian_errors :</span>
+<span class="sd">            Under the gaussian error approximation the likelihood is given by the gaussian distibution.</span>
+<span class="sd">            The product of gaussians is also a gaussian so can derive dnde, dnde_err, and ts.</span>
+<span class="sd">        * distrib :</span>
+<span class="sd">            Likelihood profile approximation assuming that probabilities distributions for</span>
+<span class="sd">            flux points correspond to asymmetric gaussians and for upper limits to complementary error functions.</span>
+<span class="sd">            Use available quantities among dnde, dnde_err, dnde_errp, dnde_errn, dnde_ul, and ts.</span>
+<span class="sd">        * profile :</span>
+<span class="sd">            Sum the likelihood profile maps.</span>
+<span class="sd">            The flux maps must contains the `stat_scan` maps.</span>
+
+<span class="sd">        Default is &quot;gaussian_errors&quot; which is the faster but least accurate solution,</span>
+<span class="sd">        &quot;distrib&quot;  will be more accurate if dnde_errp and dnde_errn are available,</span>
+<span class="sd">        &quot;profile&quot;  will be even more accurate if &quot;stat_scan&quot; is available.</span>
+
+<span class="sd">    reference_model : `~gammapy.modeling.models.SkyModel`, optional</span>
+<span class="sd">        Reference model to use for conversions.</span>
+<span class="sd">        Default is None and is will use the reference_model of the first FluxMaps in the list.</span>
+<span class="sd">    dnde_scan_axis : `~gammapy.maps.MapAxis`, optional</span>
+<span class="sd">        Map axis providing the dnde values used to compute the profile.</span>
+<span class="sd">        If None, it will be derived from the first FluxMaps in the list. Default is None.</span>
+<span class="sd">        Used only if `method` is &quot;distrib&quot; or &quot;profile&quot;.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    results : dict</span>
+<span class="sd">        Dictionary with entries:</span>
+
+<span class="sd">                * &quot;flux_maps&quot; : `gammapy.estimators.FluxMaps`</span>
+<span class="sd">                * &quot;estimator_results&quot; : dictionary containing the flux maps computed for each dataset.</span>
+
+<span class="sd">    See also</span>
+<span class="sd">    --------</span>
+<span class="sd">    combine_flux_maps : same method but using directly the flux maps from estimators</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">.map.excess</span> <span class="kn">import</span> <span class="n">ExcessMapEstimator</span>
+    <span class="kn">from</span> <span class="nn">.map.ts</span> <span class="kn">import</span> <span class="n">TSMapEstimator</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">estimator</span><span class="p">,</span> <span class="p">(</span><span class="n">ExcessMapEstimator</span><span class="p">,</span> <span class="n">TSMapEstimator</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;`estimator` type should be ExcessMapEstimator or TSMapEstimator), got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">estimator</span><span class="p">)</span><span class="si">}</span><span class="s2"> instead.&quot;</span>
         <span class="p">)</span>
+
+    <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">dataset</span> <span class="ow">in</span> <span class="n">datasets</span><span class="p">:</span>
+        <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">estimator</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">dataset</span><span class="p">))</span>
+
+    <span class="n">output</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    <span class="n">output</span><span class="p">[</span><span class="s2">&quot;flux_maps&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">combine_flux_maps</span><span class="p">(</span>
+        <span class="n">results</span><span class="p">,</span>
+        <span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">,</span>
+        <span class="n">reference_model</span><span class="o">=</span><span class="n">reference_model</span><span class="p">,</span>
+        <span class="n">dnde_scan_axis</span><span class="o">=</span><span class="n">dnde_scan_axis</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">output</span><span class="p">[</span><span class="s2">&quot;estimator_results&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">results</span>
+    <span class="k">return</span> <span class="n">output</span></div>
+
 
 
 <span class="k">def</span> <span class="nf">_default_scan_map</span><span class="p">(</span><span class="n">flux_map</span><span class="p">,</span> <span class="n">dnde_scan_axis</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
@@ -1841,7 +1977,7 @@
     <div class="footer-items__center">
       
         <div class="footer-item"><p class="last-updated">
-  Last updated on 02 Nov 2024.
+  Last updated on 05 Nov 2024.
   <br/>
 </p></div>
       
