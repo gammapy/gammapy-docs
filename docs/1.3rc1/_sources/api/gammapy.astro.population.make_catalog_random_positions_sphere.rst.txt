@@ -1,0 +1,6 @@
+make_catalog_random_positions_sphere
+====================================
+
+.. currentmodule:: gammapy.astro.population
+
+.. autofunction:: make_catalog_random_positions_sphere

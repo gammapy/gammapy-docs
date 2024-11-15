@@ -1,0 +1,77 @@
+PriorParameter
+==============
+
+.. currentmodule:: gammapy.modeling
+
+.. autoclass:: PriorParameter
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~PriorParameter.conf_max
+      ~PriorParameter.conf_min
+      ~PriorParameter.error
+      ~PriorParameter.factor
+      ~PriorParameter.factor_max
+      ~PriorParameter.factor_min
+      ~PriorParameter.frozen
+      ~PriorParameter.max
+      ~PriorParameter.min
+      ~PriorParameter.name
+      ~PriorParameter.prior
+      ~PriorParameter.quantity
+      ~PriorParameter.scale
+      ~PriorParameter.scale_method
+      ~PriorParameter.scan_max
+      ~PriorParameter.scan_min
+      ~PriorParameter.scan_n_sigma
+      ~PriorParameter.scan_values
+      ~PriorParameter.type
+      ~PriorParameter.unit
+      ~PriorParameter.value
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~PriorParameter.autoscale
+      ~PriorParameter.check_limits
+      ~PriorParameter.copy
+      ~PriorParameter.prior_stat_sum
+      ~PriorParameter.to_dict
+      ~PriorParameter.update_from_dict
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: conf_max
+   .. autoattribute:: conf_min
+   .. autoattribute:: error
+   .. autoattribute:: factor
+   .. autoattribute:: factor_max
+   .. autoattribute:: factor_min
+   .. autoattribute:: frozen
+   .. autoattribute:: max
+   .. autoattribute:: min
+   .. autoattribute:: name
+   .. autoattribute:: prior
+   .. autoattribute:: quantity
+   .. autoattribute:: scale
+   .. autoattribute:: scale_method
+   .. autoattribute:: scan_max
+   .. autoattribute:: scan_min
+   .. autoattribute:: scan_n_sigma
+   .. autoattribute:: scan_values
+   .. autoattribute:: type
+   .. autoattribute:: unit
+   .. autoattribute:: value
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: autoscale
+   .. automethod:: check_limits
+   .. automethod:: copy
+   .. automethod:: prior_stat_sum
+   .. automethod:: to_dict
+   .. automethod:: update_from_dict

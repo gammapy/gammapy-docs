@@ -1,0 +1,45 @@
+SourceCatalogObject3PC
+======================
+
+.. currentmodule:: gammapy.catalog
+
+.. autoclass:: SourceCatalogObject3PC
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~SourceCatalogObject3PC.asso
+      ~SourceCatalogObject3PC.flux_points
+      ~SourceCatalogObject3PC.flux_points_table
+      ~SourceCatalogObject3PC.lightcurve
+      ~SourceCatalogObject3PC.name
+      ~SourceCatalogObject3PC.position
+      ~SourceCatalogObject3PC.row_index
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~SourceCatalogObject3PC.info
+      ~SourceCatalogObject3PC.sky_model
+      ~SourceCatalogObject3PC.spatial_model
+      ~SourceCatalogObject3PC.spectral_model
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: asso
+   .. autoattribute:: flux_points
+   .. autoattribute:: flux_points_table
+   .. autoattribute:: lightcurve
+   .. autoattribute:: name
+   .. autoattribute:: position
+   .. autoattribute:: row_index
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: info
+   .. automethod:: sky_model
+   .. automethod:: spatial_model
+   .. automethod:: spectral_model

@@ -1,0 +1,65 @@
+FoVBackgroundModel
+==================
+
+.. currentmodule:: gammapy.modeling.models
+
+.. autoclass:: FoVBackgroundModel
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~FoVBackgroundModel.covariance
+      ~FoVBackgroundModel.default_parameters
+      ~FoVBackgroundModel.frozen
+      ~FoVBackgroundModel.name
+      ~FoVBackgroundModel.parameters
+      ~FoVBackgroundModel.parameters_unique_names
+      ~FoVBackgroundModel.spatial_model
+      ~FoVBackgroundModel.spectral_model
+      ~FoVBackgroundModel.tag
+      ~FoVBackgroundModel.type
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~FoVBackgroundModel.contributes
+      ~FoVBackgroundModel.copy
+      ~FoVBackgroundModel.evaluate
+      ~FoVBackgroundModel.evaluate_geom
+      ~FoVBackgroundModel.freeze
+      ~FoVBackgroundModel.from_dict
+      ~FoVBackgroundModel.from_parameters
+      ~FoVBackgroundModel.reassign
+      ~FoVBackgroundModel.reset_to_default
+      ~FoVBackgroundModel.to_dict
+      ~FoVBackgroundModel.unfreeze
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: covariance
+   .. autoattribute:: default_parameters
+   .. autoattribute:: frozen
+   .. autoattribute:: name
+   .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
+   .. autoattribute:: spatial_model
+   .. autoattribute:: spectral_model
+   .. autoattribute:: tag
+   .. autoattribute:: type
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: contributes
+   .. automethod:: copy
+   .. automethod:: evaluate
+   .. automethod:: evaluate_geom
+   .. automethod:: freeze
+   .. automethod:: from_dict
+   .. automethod:: from_parameters
+   .. automethod:: reassign
+   .. automethod:: reset_to_default
+   .. automethod:: to_dict
+   .. automethod:: unfreeze

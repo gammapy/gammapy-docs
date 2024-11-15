@@ -1,0 +1,69 @@
+PriorParameters
+===============
+
+.. currentmodule:: gammapy.modeling
+
+.. autoclass:: PriorParameters
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~PriorParameters.free_parameters
+      ~PriorParameters.max
+      ~PriorParameters.min
+      ~PriorParameters.names
+      ~PriorParameters.prior
+      ~PriorParameters.types
+      ~PriorParameters.unique_parameters
+      ~PriorParameters.value
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~PriorParameters.autoscale
+      ~PriorParameters.check_limits
+      ~PriorParameters.copy
+      ~PriorParameters.count
+      ~PriorParameters.freeze_all
+      ~PriorParameters.from_dict
+      ~PriorParameters.from_stack
+      ~PriorParameters.index
+      ~PriorParameters.prior_stat_sum
+      ~PriorParameters.restore_status
+      ~PriorParameters.select
+      ~PriorParameters.set_parameter_factors
+      ~PriorParameters.to_dict
+      ~PriorParameters.to_table
+      ~PriorParameters.unfreeze_all
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: free_parameters
+   .. autoattribute:: max
+   .. autoattribute:: min
+   .. autoattribute:: names
+   .. autoattribute:: prior
+   .. autoattribute:: types
+   .. autoattribute:: unique_parameters
+   .. autoattribute:: value
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: autoscale
+   .. automethod:: check_limits
+   .. automethod:: copy
+   .. automethod:: count
+   .. automethod:: freeze_all
+   .. automethod:: from_dict
+   .. automethod:: from_stack
+   .. automethod:: index
+   .. automethod:: prior_stat_sum
+   .. automethod:: restore_status
+   .. automethod:: select
+   .. automethod:: set_parameter_factors
+   .. automethod:: to_dict
+   .. automethod:: to_table
+   .. automethod:: unfreeze_all
