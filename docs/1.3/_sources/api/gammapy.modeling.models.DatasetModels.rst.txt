@@ -1,0 +1,95 @@
+DatasetModels
+=============
+
+.. currentmodule:: gammapy.modeling.models
+
+.. autoclass:: DatasetModels
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~DatasetModels.covariance
+      ~DatasetModels.frozen
+      ~DatasetModels.names
+      ~DatasetModels.parameters
+      ~DatasetModels.parameters_unique_names
+      ~DatasetModels.positions
+      ~DatasetModels.wcs_geom
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~DatasetModels.copy
+      ~DatasetModels.count
+      ~DatasetModels.freeze
+      ~DatasetModels.from_dict
+      ~DatasetModels.from_yaml
+      ~DatasetModels.index
+      ~DatasetModels.plot_positions
+      ~DatasetModels.plot_regions
+      ~DatasetModels.read
+      ~DatasetModels.read_covariance
+      ~DatasetModels.reassign
+      ~DatasetModels.restore_status
+      ~DatasetModels.select
+      ~DatasetModels.select_from_geom
+      ~DatasetModels.select_mask
+      ~DatasetModels.select_region
+      ~DatasetModels.selection_mask
+      ~DatasetModels.set_parameters_bounds
+      ~DatasetModels.to_dict
+      ~DatasetModels.to_parameters_table
+      ~DatasetModels.to_regions
+      ~DatasetModels.to_template_sky_model
+      ~DatasetModels.to_template_spectral_model
+      ~DatasetModels.to_yaml
+      ~DatasetModels.unfreeze
+      ~DatasetModels.update_link_label
+      ~DatasetModels.update_parameters_from_table
+      ~DatasetModels.write
+      ~DatasetModels.write_covariance
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: covariance
+   .. autoattribute:: frozen
+   .. autoattribute:: names
+   .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
+   .. autoattribute:: positions
+   .. autoattribute:: wcs_geom
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: copy
+   .. automethod:: count
+   .. automethod:: freeze
+   .. automethod:: from_dict
+   .. automethod:: from_yaml
+   .. automethod:: index
+   .. automethod:: plot_positions
+   .. automethod:: plot_regions
+   .. automethod:: read
+   .. automethod:: read_covariance
+   .. automethod:: reassign
+   .. automethod:: restore_status
+   .. automethod:: select
+   .. automethod:: select_from_geom
+   .. automethod:: select_mask
+   .. automethod:: select_region
+   .. automethod:: selection_mask
+   .. automethod:: set_parameters_bounds
+   .. automethod:: to_dict
+   .. automethod:: to_parameters_table
+   .. automethod:: to_regions
+   .. automethod:: to_template_sky_model
+   .. automethod:: to_template_spectral_model
+   .. automethod:: to_yaml
+   .. automethod:: unfreeze
+   .. automethod:: update_link_label
+   .. automethod:: update_parameters_from_table
+   .. automethod:: write
+   .. automethod:: write_covariance
