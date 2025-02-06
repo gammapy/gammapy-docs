@@ -66,7 +66,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="2.0.dev359+g7ebaa7b9b" />
+  <meta name="docsearch:version" content="2.0.dev383+g940fe8807" />
   </head>
   
   
@@ -460,20 +460,24 @@
 <span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">astropy</span><span class="w"> </span><span class="kn">import</span> <span class="n">units</span> <span class="k">as</span> <span class="n">u</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">astropy.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">fits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">astropy.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">Table</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">GTI</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.irf</span><span class="w"> </span><span class="kn">import</span> <span class="n">EDispKernel</span><span class="p">,</span> <span class="n">EDispKernelMap</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.maps</span><span class="w"> </span><span class="kn">import</span> <span class="n">RegionNDMap</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.utils.scripts</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.irf</span><span class="w"> </span><span class="kn">import</span> <span class="n">EDispKernel</span><span class="p">,</span> <span class="n">EDispKernelMap</span><span class="p">,</span> <span class="n">PSFMap</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.maps</span><span class="w"> </span><span class="kn">import</span> <span class="n">RegionNDMap</span><span class="p">,</span> <span class="n">Map</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.modeling.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_fermi_isotropic_diffuse_model</span><span class="p">,</span> <span class="n">Models</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.utils.scripts</span><span class="w"> </span><span class="kn">import</span> <span class="n">read_yaml</span><span class="p">,</span> <span class="n">make_path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.spectrum</span><span class="w"> </span><span class="kn">import</span> <span class="n">SpectrumDatasetOnOff</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_map_dataset_from_dl4</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;DatasetReader&quot;</span><span class="p">,</span>
     <span class="s2">&quot;DatasetWriter&quot;</span><span class="p">,</span>
     <span class="s2">&quot;OGIPDatasetReader&quot;</span><span class="p">,</span>
     <span class="s2">&quot;OGIPDatasetWriter&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;FermipyDatasetsReader&quot;</span><span class="p">,</span>
 <span class="p">]</span>
 
 
@@ -980,6 +984,192 @@
             <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">SpectrumDatasetOnOff</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">exposure</span><span class="o">=</span><span class="n">exposure</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="FermipyDatasetsReader">
+<a class="viewcode-back" href="../../../api/gammapy.datasets.FermipyDatasetsReader.html#gammapy.datasets.FermipyDatasetsReader">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">FermipyDatasetsReader</span><span class="p">(</span><span class="n">DatasetReader</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create datasets from Fermi-LAT files.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    filename : str</span>
+<span class="sd">        Path to Fermipy configuration file (tested only for v1.3.1).</span>
+<span class="sd">    edisp_bins : int</span>
+<span class="sd">        Number of margin bins to slice in energy. Default is 0.</span>
+<span class="sd">        For now only maps created with edisp_bins=0 in fermipy configuration are supported,</span>
+<span class="sd">        in that case the emin/emax in the fermipy configuration will correspond to the true energy range for gammapy,</span>
+<span class="sd">        and  a value edisp_bins&gt;0 should be set here in order to apply the energy dispersion correctly.</span>
+<span class="sd">        With a binning of 8 to 10 bins per decade, it is recommended to use edisp_bins ≥ 2</span>
+<span class="sd">        (See https://fermi.gsfc.nasa.gov/ssc/data/analysis/documentation/Pass8_edisp_usage.html)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">tag</span> <span class="o">=</span> <span class="s2">&quot;fermipy&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="n">edisp_bins</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">filename</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">edisp_bins</span> <span class="o">=</span> <span class="n">edisp_bins</span>
+
+<div class="viewcode-block" id="FermipyDatasetsReader.create_dataset">
+<a class="viewcode-back" href="../../../api/gammapy.datasets.FermipyDatasetsReader.html#gammapy.datasets.FermipyDatasetsReader.create_dataset">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">create_dataset</span><span class="p">(</span>
+        <span class="n">counts_file</span><span class="p">,</span>
+        <span class="n">exposure_file</span><span class="p">,</span>
+        <span class="n">psf_file</span><span class="p">,</span>
+        <span class="n">edisp_file</span><span class="p">,</span>
+        <span class="n">isotropic_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">edisp_bins</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a map dataset from Fermi-LAT files.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        counts_file : str</span>
+<span class="sd">            Counts file path.</span>
+<span class="sd">        exposure_file : str</span>
+<span class="sd">            Exposure file path.</span>
+<span class="sd">        psf_file : str</span>
+<span class="sd">            Point spread function file path.</span>
+<span class="sd">        edisp_file : str</span>
+<span class="sd">            Energy dispersion file path.</span>
+<span class="sd">        isotropic_file : str, optional</span>
+<span class="sd">            Isotropic file path. Default is None</span>
+<span class="sd">        edisp_bins : int</span>
+<span class="sd">            Number of margin bins to slice in energy. Default is 0.</span>
+<span class="sd">            For now only maps created with edisp_bins=0 in fermipy configuration are supported,</span>
+<span class="sd">            in that case the emin/emax in the fermipy configuration will correspond to the true energy range for gammapy,</span>
+<span class="sd">            and  a value edisp_bins&gt;0 should be set here in order to apply the energy dispersion correctly.</span>
+<span class="sd">            With a binning of 8 to 10 bins per decade, it is recommended to use edisp_bins ≥ 2</span>
+<span class="sd">            (See https://fermi.gsfc.nasa.gov/ssc/data/analysis/documentation/Pass8_edisp_usage.html)</span>
+<span class="sd">        name : str, optional</span>
+<span class="sd">            Dataset name. The default is None, and the name is randomly generated.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dataset : `~gammapy.datasets.MapDataset`</span>
+<span class="sd">            Map dataset.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">MapDataset</span>
+
+        <span class="n">counts</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">counts_file</span><span class="p">)</span>
+        <span class="n">exposure</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">exposure_file</span><span class="p">)</span>
+        <span class="n">psf</span> <span class="o">=</span> <span class="n">PSFMap</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">psf_file</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;gtpsf&quot;</span><span class="p">)</span>
+        <span class="n">edisp</span> <span class="o">=</span> <span class="n">EDispKernelMap</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">edisp_file</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;gtdrm&quot;</span><span class="p">)</span>
+
+        <span class="c1"># check that fermipy edisp_bins are matching between edisp and exposure</span>
+        <span class="c1"># as we will interp to edisp axis the exposure axis must be larger or equal</span>
+        <span class="n">edisp_axes</span> <span class="o">=</span> <span class="n">edisp</span><span class="o">.</span><span class="n">edisp_map</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">axes</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">edisp_axes</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">center</span><span class="p">)</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span>
+            <span class="n">exposure</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">center</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Energy true axes of exposure and DRM do not match. Check fermipy configuration.&quot;</span>
+            <span class="p">)</span>
+            <span class="n">edisp_axes</span> <span class="o">=</span> <span class="n">edisp</span><span class="o">.</span><span class="n">edisp_map</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">axes</span>
+
+        <span class="n">psf_r68s</span> <span class="o">=</span> <span class="n">psf</span><span class="o">.</span><span class="n">containment_radius</span><span class="p">(</span>
+            <span class="mf">0.68</span><span class="p">,</span>
+            <span class="n">edisp_axes</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">center</span><span class="p">,</span>
+            <span class="n">position</span><span class="o">=</span><span class="n">counts</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">center_skydir</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># check that pdf is well defined (fails if edisp_bins&gt;0 in fermipy)</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">psf_r68s</span><span class="o">.</span><span class="n">value</span><span class="p">)</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;PSF is not defined for all true energies. Check fermipy configuration.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># change counts energy axis unit keV-&gt;MeV</span>
+        <span class="n">energy_axis</span> <span class="o">=</span> <span class="n">counts</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">_init_copy</span><span class="p">(</span>
+            <span class="n">nodes</span><span class="o">=</span><span class="n">edisp_axes</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">edges</span>
+        <span class="p">)</span>
+        <span class="n">geom</span> <span class="o">=</span> <span class="n">counts</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span><span class="o">.</span><span class="n">to_cube</span><span class="p">([</span><span class="n">energy_axis</span><span class="p">])</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">counts</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+
+        <span class="c1"># standardize dataset interpolating to same geom and axes</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">MapDataset</span><span class="p">(</span>
+            <span class="n">counts</span><span class="o">=</span><span class="n">counts</span><span class="p">,</span>
+            <span class="n">exposure</span><span class="o">=</span><span class="n">exposure</span><span class="p">,</span>
+            <span class="n">psf</span><span class="o">=</span><span class="n">psf</span><span class="p">,</span>
+            <span class="n">edisp</span><span class="o">=</span><span class="n">edisp</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">create_map_dataset_from_dl4</span><span class="p">(</span>
+            <span class="n">dataset</span><span class="p">,</span> <span class="n">geom</span><span class="o">=</span><span class="n">counts</span><span class="o">.</span><span class="n">geom</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">name</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">edisp_bins</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># slice edisp_bins</span>
+            <span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">slice_by_idx</span><span class="p">(</span>
+                <span class="nb">dict</span><span class="p">(</span><span class="n">energy</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="n">edisp_bins</span><span class="p">,</span> <span class="o">-</span><span class="n">edisp_bins</span><span class="p">)),</span> <span class="n">name</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">name</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">isotropic_file</span><span class="p">:</span>
+            <span class="n">model</span> <span class="o">=</span> <span class="n">create_fermi_isotropic_diffuse_model</span><span class="p">(</span>
+                <span class="n">isotropic_file</span><span class="p">,</span> <span class="n">datasets_names</span><span class="o">=</span><span class="p">[</span><span class="n">dataset</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+            <span class="p">)</span>
+            <span class="n">dataset</span><span class="o">.</span><span class="n">models</span> <span class="o">=</span> <span class="n">Models</span><span class="p">([</span><span class="n">model</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">dataset</span></div>
+
+
+<div class="viewcode-block" id="FermipyDatasetsReader.read">
+<a class="viewcode-back" href="../../../api/gammapy.datasets.FermipyDatasetsReader.html#gammapy.datasets.FermipyDatasetsReader.read">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create Fermi-LAT map datasets from Fermipy configuration file.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dataset : `~gammapy.datasets.Datasets`</span>
+<span class="sd">            Map datasets.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">Datasets</span>
+
+        <span class="n">filename</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">filename</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">read_yaml</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="s2">&quot;components&quot;</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+            <span class="n">components</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;components&quot;</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">components</span> <span class="o">=</span> <span class="p">[</span><span class="n">data</span><span class="p">]</span>
+
+        <span class="n">datasets</span> <span class="o">=</span> <span class="n">Datasets</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">file_id</span><span class="p">,</span> <span class="n">component</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">components</span><span class="p">):</span>
+            <span class="k">if</span> <span class="s2">&quot;fileio&quot;</span> <span class="ow">in</span> <span class="n">component</span> <span class="ow">and</span> <span class="s2">&quot;outdir&quot;</span> <span class="ow">in</span> <span class="n">component</span><span class="p">[</span><span class="s2">&quot;fileio&quot;</span><span class="p">]:</span>
+                <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">component</span><span class="p">[</span><span class="s2">&quot;fileio&quot;</span><span class="p">][</span><span class="s2">&quot;outdir&quot;</span><span class="p">])</span>
+            <span class="k">elif</span> <span class="s2">&quot;fileio&quot;</span> <span class="ow">in</span> <span class="n">data</span> <span class="ow">and</span> <span class="s2">&quot;outdir&quot;</span> <span class="ow">in</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;fileio&quot;</span><span class="p">]:</span>
+                <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;fileio&quot;</span><span class="p">][</span><span class="s2">&quot;outdir&quot;</span><span class="p">])</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">filename</span><span class="o">.</span><span class="n">parent</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">is_absolute</span><span class="p">():</span>
+                <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">filename</span><span class="o">.</span><span class="n">parent</span><span class="p">)</span> <span class="o">/</span> <span class="n">path</span>
+
+            <span class="k">if</span> <span class="s2">&quot;model&quot;</span> <span class="ow">in</span> <span class="n">component</span> <span class="ow">and</span> <span class="s2">&quot;isodiff&quot;</span> <span class="ow">in</span> <span class="n">component</span><span class="p">[</span><span class="s2">&quot;model&quot;</span><span class="p">]:</span>
+                <span class="n">isotropic_file</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">component</span><span class="p">[</span><span class="s2">&quot;model&quot;</span><span class="p">][</span><span class="s2">&quot;isodiff&quot;</span><span class="p">])</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">isotropic_file</span><span class="o">.</span><span class="n">stem</span><span class="p">[</span><span class="mi">4</span><span class="p">:]</span>
+            <span class="k">elif</span> <span class="s2">&quot;model&quot;</span> <span class="ow">in</span> <span class="n">data</span> <span class="ow">and</span> <span class="s2">&quot;isodiff&quot;</span> <span class="ow">in</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;model&quot;</span><span class="p">]:</span>
+                <span class="n">isotropic_file</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;model&quot;</span><span class="p">][</span><span class="s2">&quot;isodiff&quot;</span><span class="p">])</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">isotropic_file</span><span class="o">.</span><span class="n">stem</span><span class="p">[</span><span class="mi">4</span><span class="p">:]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">isotropic_file</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="kc">None</span>
+
+            <span class="n">datasets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span>
+                    <span class="n">counts_file</span><span class="o">=</span><span class="n">path</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;ccube_0</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">file_id</span><span class="p">)</span><span class="si">}</span><span class="s2">.fits&quot;</span><span class="p">,</span>
+                    <span class="n">exposure_file</span><span class="o">=</span><span class="n">path</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;bexpmap_0</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">file_id</span><span class="p">)</span><span class="si">}</span><span class="s2">.fits&quot;</span><span class="p">,</span>
+                    <span class="n">psf_file</span><span class="o">=</span><span class="n">path</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;psf_0</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">file_id</span><span class="p">)</span><span class="si">}</span><span class="s2">.fits&quot;</span><span class="p">,</span>
+                    <span class="n">edisp_file</span><span class="o">=</span><span class="n">path</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;drm_0</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">file_id</span><span class="p">)</span><span class="si">}</span><span class="s2">.fits&quot;</span><span class="p">,</span>
+                    <span class="n">isotropic_file</span><span class="o">=</span><span class="n">isotropic_file</span><span class="p">,</span>
+                    <span class="n">edisp_bins</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">edisp_bins</span><span class="p">,</span>
+                    <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">datasets</span></div>
 </div>
 
 </pre></div>
