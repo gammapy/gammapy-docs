@@ -66,7 +66,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="2.0.dev387+g04b517e2c" />
+  <meta name="docsearch:version" content="2.0.dev418+g1504f1c47" />
   </head>
   
   
@@ -476,6 +476,7 @@
     <span class="n">WStatCountsStatistic</span><span class="p">,</span>
     <span class="n">cash</span><span class="p">,</span>
     <span class="n">cash_sum_cython</span><span class="p">,</span>
+    <span class="n">weighted_cash_sum_cython</span><span class="p">,</span>
     <span class="n">get_wstat_mu_bkg</span><span class="p">,</span>
     <span class="n">wstat</span><span class="p">,</span>
 <span class="p">)</span>
@@ -491,6 +492,7 @@
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;MapDataset&quot;</span><span class="p">,</span>
     <span class="s2">&quot;MapDatasetOnOff&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;MapDatasetWeighted&quot;</span><span class="p">,</span>
     <span class="s2">&quot;create_empty_map_dataset_from_irfs&quot;</span><span class="p">,</span>
     <span class="s2">&quot;create_map_dataset_geoms&quot;</span><span class="p">,</span>
     <span class="s2">&quot;create_map_dataset_from_observation&quot;</span><span class="p">,</span>
@@ -1981,12 +1983,22 @@
         <span class="n">counts</span><span class="p">,</span> <span class="n">npred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">npred</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="p">(</span>
-                <span class="n">cash_sum_cython</span><span class="p">(</span><span class="n">counts</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="o">.</span><span class="n">data</span><span class="p">],</span> <span class="n">npred</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="o">.</span><span class="n">data</span><span class="p">])</span>
-                <span class="o">+</span> <span class="n">prior_stat_sum</span>
-            <span class="p">)</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="o">~</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="o">.</span><span class="n">data</span> <span class="o">==</span> <span class="kc">False</span><span class="p">)</span>  <span class="c1"># noqa</span>
+            <span class="n">counts</span> <span class="o">=</span> <span class="n">counts</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+            <span class="n">npred</span> <span class="o">=</span> <span class="n">npred</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="nb">bool</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">stat_type</span> <span class="o">==</span> <span class="s2">&quot;cash&quot;</span><span class="p">:</span>
+                <span class="n">cash_sum</span> <span class="o">=</span> <span class="n">cash_sum_cython</span><span class="p">(</span><span class="n">counts</span><span class="p">,</span> <span class="n">npred</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">stat_type</span> <span class="o">==</span> <span class="s2">&quot;cash_weighted&quot;</span><span class="p">:</span>
+                <span class="n">weight</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+                <span class="n">cash_sum</span> <span class="o">=</span> <span class="n">weighted_cash_sum_cython</span><span class="p">(</span><span class="n">counts</span><span class="p">,</span> <span class="n">npred</span><span class="p">,</span> <span class="n">weight</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;&#39;stat_type&#39; must be a &#39;cash&#39; or `cash_weighted`.&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;, got `</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">stat_type</span><span class="si">}</span><span class="s2">` instead.&quot;</span>
+                <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">cash_sum_cython</span><span class="p">(</span><span class="n">counts</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">npred</span><span class="o">.</span><span class="n">ravel</span><span class="p">())</span> <span class="o">+</span> <span class="n">prior_stat_sum</span></div>
+            <span class="n">cash_sum</span> <span class="o">=</span> <span class="n">cash_sum_cython</span><span class="p">(</span><span class="n">counts</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">npred</span><span class="o">.</span><span class="n">ravel</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">cash_sum</span> <span class="o">+</span> <span class="n">prior_stat_sum</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_to_asimov_dataset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -2942,6 +2954,14 @@
         <span class="n">plot_mask</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">axes</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">mask</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mask_fit_image</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
         <span class="n">plot_mask</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">axes</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">mask</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mask_safe_image</span><span class="p">,</span> <span class="n">hatches</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;///&quot;</span><span class="p">],</span> <span class="n">colors</span><span class="o">=</span><span class="s2">&quot;w&quot;</span><span class="p">)</span></div>
 </div>
+
+
+
+<div class="viewcode-block" id="MapDatasetWeighted">
+<a class="viewcode-back" href="../../../api/gammapy.datasets.MapDatasetWeighted.html#gammapy.datasets.MapDatasetWeighted">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MapDatasetWeighted</span><span class="p">(</span><span class="n">MapDataset</span><span class="p">):</span>
+    <span class="n">stat_type</span> <span class="o">=</span> <span class="s2">&quot;cash_weighted&quot;</span>
+    <span class="n">tag</span> <span class="o">=</span> <span class="s2">&quot;MapDatasetWeighted&quot;</span></div>
 
 
 
