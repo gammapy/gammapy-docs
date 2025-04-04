@@ -66,7 +66,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="2.0.dev627+ge1a3c2dac" />
+  <meta name="docsearch:version" content="2.0.dev638+gce5ea590c" />
   </head>
   
   
@@ -479,10 +479,28 @@
 <span class="sd">see :ref:`fit-statistics`</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.stats.fit_statistics_cython</span><span class="w"> </span><span class="kn">import</span> <span class="n">TRUNCATION_VALUE</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.special</span><span class="w"> </span><span class="kn">import</span> <span class="n">erfc</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.maps</span><span class="w"> </span><span class="kn">import</span> <span class="n">Map</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.stats.fit_statistics_cython</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">TRUNCATION_VALUE</span><span class="p">,</span>
+    <span class="n">cash_sum_cython</span><span class="p">,</span>
+    <span class="n">weighted_cash_sum_cython</span><span class="p">,</span>
+<span class="p">)</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;cash&quot;</span><span class="p">,</span> <span class="s2">&quot;cstat&quot;</span><span class="p">,</span> <span class="s2">&quot;wstat&quot;</span><span class="p">,</span> <span class="s2">&quot;get_wstat_mu_bkg&quot;</span><span class="p">,</span> <span class="s2">&quot;get_wstat_gof_terms&quot;</span><span class="p">]</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;cash&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;cstat&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;wstat&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;get_wstat_mu_bkg&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;get_wstat_gof_terms&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;CashFitStatistic&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;WStatFitStatistic&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Chi2FitStatistic&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Chi2AsymmetricErrorFitStatistic&quot;</span><span class="p">,</span>
+<span class="p">]</span>
 
 
 <div class="viewcode-block" id="cash">
@@ -718,6 +736,189 @@
 
     <span class="k">return</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">term</span></div>
 
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">FitStatistic</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Abstract base class for FitStatistic objects.&quot;&quot;&quot;</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stat_sum_dataset</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate -2 * sum log(L).&quot;&quot;&quot;</span>
+        <span class="n">stat_array</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">stat_array_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">dataset</span><span class="o">.</span><span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">mask</span><span class="o">.</span><span class="n">data</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">mask</span><span class="p">,</span> <span class="n">Map</span><span class="p">)</span> <span class="k">else</span> <span class="n">dataset</span><span class="o">.</span><span class="n">mask</span>
+            <span class="n">stat_array</span> <span class="o">=</span> <span class="n">stat_array</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">stat_array</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stat_array_dataset</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate -2 * log(L).&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">loglikelihood_dataset</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate sum log(L).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="bp">cls</span><span class="o">.</span><span class="n">stat_sum_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">CashFitStatistic</span><span class="p">(</span><span class="n">FitStatistic</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Cash statistic class for Poisson with known background.&quot;&quot;&quot;</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stat_sum_dataset</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">mask</span>
+        <span class="n">counts</span><span class="p">,</span> <span class="n">npred</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">npred</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
+
+        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">&quot;bool&quot;</span><span class="p">)</span>
+            <span class="n">counts</span><span class="p">,</span> <span class="n">npred</span> <span class="o">=</span> <span class="n">counts</span><span class="p">[</span><span class="n">mask</span><span class="p">],</span> <span class="n">npred</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+
+        <span class="n">counts</span> <span class="o">=</span> <span class="n">counts</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>  <span class="c1"># This might be done in the Dataset</span>
+        <span class="k">return</span> <span class="n">cash_sum_cython</span><span class="p">(</span><span class="n">counts</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">npred</span><span class="o">.</span><span class="n">ravel</span><span class="p">())</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stat_array_dataset</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
+        <span class="n">counts</span><span class="p">,</span> <span class="n">npred</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">npred</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
+        <span class="k">return</span> <span class="n">cash</span><span class="p">(</span><span class="n">n_on</span><span class="o">=</span><span class="n">counts</span><span class="p">,</span> <span class="n">mu_on</span><span class="o">=</span><span class="n">npred</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">WeightedCashFitStatistic</span><span class="p">(</span><span class="n">FitStatistic</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Cash statistic class for Poisson with known background applying weights.&quot;&quot;&quot;</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stat_sum_dataset</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
+        <span class="n">counts</span><span class="p">,</span> <span class="n">npred</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">),</span> <span class="n">dataset</span><span class="o">.</span><span class="n">npred</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
+
+        <span class="k">if</span> <span class="n">dataset</span><span class="o">.</span><span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="o">~</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">mask</span><span class="o">.</span><span class="n">data</span> <span class="o">==</span> <span class="kc">False</span><span class="p">)</span>  <span class="c1"># noqa</span>
+            <span class="n">counts</span> <span class="o">=</span> <span class="n">counts</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+            <span class="n">npred</span> <span class="o">=</span> <span class="n">npred</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">mask</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">&quot;float&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">weighted_cash_sum_cython</span><span class="p">(</span><span class="n">counts</span><span class="p">,</span> <span class="n">npred</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># No weights back to regular cash statistic</span>
+            <span class="k">return</span> <span class="n">cash_sum_cython</span><span class="p">(</span><span class="n">counts</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">npred</span><span class="o">.</span><span class="n">ravel</span><span class="p">())</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stat_array_dataset</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
+        <span class="n">counts</span><span class="p">,</span> <span class="n">npred</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">npred</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="k">if</span> <span class="n">dataset</span><span class="o">.</span><span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">mask</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">&quot;float&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">cash</span><span class="p">(</span><span class="n">n_on</span><span class="o">=</span><span class="n">counts</span><span class="p">,</span> <span class="n">mu_on</span><span class="o">=</span><span class="n">npred</span><span class="p">)</span> <span class="o">*</span> <span class="n">weights</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">WStatFitStatistic</span><span class="p">(</span><span class="n">FitStatistic</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;WStat fit statistic class for ON-OFF Poisson measurements.&quot;&quot;&quot;</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stat_array_dataset</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Statistic function value per bin given the current model parameters.&quot;&quot;&quot;</span>
+        <span class="n">counts</span><span class="p">,</span> <span class="n">counts_off</span><span class="p">,</span> <span class="n">alpha</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">dataset</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">dataset</span><span class="o">.</span><span class="n">counts_off</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">dataset</span><span class="o">.</span><span class="n">alpha</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">npred_signal</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">npred_signal</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
+        <span class="n">on_stat_</span> <span class="o">=</span> <span class="n">wstat</span><span class="p">(</span>
+            <span class="n">n_on</span><span class="o">=</span><span class="n">counts</span><span class="p">,</span>
+            <span class="n">n_off</span><span class="o">=</span><span class="n">counts_off</span><span class="p">,</span>
+            <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span>
+            <span class="n">mu_sig</span><span class="o">=</span><span class="n">npred_signal</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">on_stat_</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stat_sum_dataset</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Statistic function value per bin given the current model parameters.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">dataset</span><span class="o">.</span><span class="n">counts_off</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">mask_safe</span><span class="o">.</span><span class="n">data</span><span class="p">):</span>
+            <span class="k">return</span> <span class="mi">0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">stat_array</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">stat_array_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">dataset</span><span class="o">.</span><span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">stat_array</span> <span class="o">=</span> <span class="n">stat_array</span><span class="p">[</span><span class="n">dataset</span><span class="o">.</span><span class="n">mask</span><span class="o">.</span><span class="n">data</span><span class="p">]</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">stat_array</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Chi2FitStatistic</span><span class="p">(</span><span class="n">FitStatistic</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Chi2 fit statistic class for measurements with gaussian symmetric errors.&quot;&quot;&quot;</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stat_array_dataset</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Statistic function value per bin given the current model.&quot;&quot;&quot;</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">flux_pred</span><span class="p">()</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dnde</span><span class="o">.</span><span class="n">quantity</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">sigma</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dnde_err</span><span class="o">.</span><span class="n">quantity</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="n">sigma</span> <span class="o">=</span> <span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dnde_errn</span> <span class="o">+</span> <span class="n">dataset</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dnde_errp</span><span class="p">)</span><span class="o">.</span><span class="n">quantity</span> <span class="o">/</span> <span class="mi">2</span>
+        <span class="k">return</span> <span class="p">((</span><span class="n">data</span> <span class="o">-</span> <span class="n">model</span><span class="p">)</span> <span class="o">/</span> <span class="n">sigma</span><span class="p">)</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Chi2AsymmetricErrorFitStatistic</span><span class="p">(</span><span class="n">FitStatistic</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Pseudo-Chi2 fit statistic class for measurements with gaussian asymmetric errors with upper limits.</span>
+
+<span class="sd">    Assumes that regular data follow asymmetric normal pdf and upper limits follow complementary error functions</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stat_array_dataset</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Estimate statistic from probability distributions,</span>
+<span class="sd">        assumes that flux points correspond to asymmetric gaussians</span>
+<span class="sd">        and upper limits complementary error functions.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dnde</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">+</span> <span class="n">dataset</span><span class="o">.</span><span class="n">flux_pred</span><span class="p">()</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span>
+            <span class="n">dataset</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dnde</span><span class="o">.</span><span class="n">unit</span>
+        <span class="p">)</span>
+
+        <span class="n">stat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+        <span class="n">mask_valid</span> <span class="o">=</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dnde</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">loc</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dnde</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">mask_valid</span><span class="p">]</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">model</span><span class="p">[</span><span class="n">mask_valid</span><span class="p">]</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">mask_p</span> <span class="o">=</span> <span class="p">(</span><span class="n">model</span> <span class="o">&gt;=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dnde</span><span class="o">.</span><span class="n">data</span><span class="p">)[</span><span class="n">mask_valid</span><span class="p">]</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">mask_p</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="n">scale</span><span class="p">[</span><span class="n">mask_p</span><span class="p">]</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dnde_errp</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">mask_valid</span><span class="p">][</span><span class="n">mask_p</span><span class="p">]</span>
+            <span class="n">scale</span><span class="p">[</span><span class="o">~</span><span class="n">mask_p</span><span class="p">]</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dnde_errn</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">mask_valid</span><span class="p">][</span><span class="o">~</span><span class="n">mask_p</span><span class="p">]</span>
+
+            <span class="n">mask_invalid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">scale</span><span class="p">)</span>
+            <span class="n">scale</span><span class="p">[</span><span class="n">mask_invalid</span><span class="p">]</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dnde_err</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">mask_valid</span><span class="p">][</span><span class="n">mask_invalid</span><span class="p">]</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dnde_err</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">mask_valid</span><span class="p">]</span>
+
+        <span class="n">stat</span><span class="p">[</span><span class="n">mask_valid</span><span class="p">]</span> <span class="o">=</span> <span class="p">((</span><span class="n">value</span> <span class="o">-</span> <span class="n">loc</span><span class="p">)</span> <span class="o">/</span> <span class="n">scale</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+
+        <span class="n">mask_ul</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">is_ul</span><span class="o">.</span><span class="n">data</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">model</span><span class="p">[</span><span class="n">mask_ul</span><span class="p">]</span>
+        <span class="n">loc_ul</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dnde_ul</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">mask_ul</span><span class="p">]</span>
+        <span class="n">scale_ul</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dnde_ul</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">mask_ul</span><span class="p">]</span>
+        <span class="n">stat</span><span class="p">[</span><span class="n">mask_ul</span><span class="p">]</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">erfc</span><span class="p">((</span><span class="n">loc_ul</span> <span class="o">-</span> <span class="n">value</span><span class="p">)</span> <span class="o">/</span> <span class="n">scale_ul</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+            <span class="o">/</span> <span class="p">(</span><span class="n">erfc</span><span class="p">((</span><span class="n">loc_ul</span> <span class="o">-</span> <span class="mi">0</span><span class="p">)</span> <span class="o">/</span> <span class="n">scale_ul</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="n">stat</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">stat</span><span class="o">.</span><span class="n">data</span><span class="p">)]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">return</span> <span class="n">stat</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ProfileFitStatistic</span><span class="p">(</span><span class="n">FitStatistic</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Pseudo-Chi2 fit statistic class for measurements with gaussian asymmetric errors with upper limits.</span>
+
+<span class="sd">    Assumes that regular data follow asymmetric normal pdf and upper limits follow complementary error functions</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stat_array_dataset</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Estimate statitistic from interpolation of the likelihood profile.&quot;&quot;&quot;</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dnde</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span>
+            <span class="n">dataset</span><span class="o">.</span><span class="n">flux_pred</span><span class="p">()</span> <span class="o">/</span> <span class="n">dataset</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dnde_ref</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">stat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">ndindex</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">_profile_interpolators</span><span class="o">.</span><span class="n">shape</span><span class="p">):</span>
+            <span class="n">stat</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">_profile_interpolators</span><span class="p">[</span><span class="n">idx</span><span class="p">](</span><span class="n">model</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">stat</span>
 </pre></div>
 
                 </article>
