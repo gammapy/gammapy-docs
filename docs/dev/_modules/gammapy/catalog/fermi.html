@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="2.0.dev861+g2b39a1872" />
+  <meta name="docsearch:version" content="2.0.dev878+gea8792ff1" />
   </head>
   
   
@@ -485,7 +485,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">astropy.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">Table</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">astropy.wcs</span><span class="w"> </span><span class="kn">import</span> <span class="n">FITSFixedWarning</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.estimators</span><span class="w"> </span><span class="kn">import</span> <span class="n">FluxPoints</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.maps</span><span class="w"> </span><span class="kn">import</span> <span class="n">MapAxis</span><span class="p">,</span> <span class="n">Maps</span><span class="p">,</span> <span class="n">RegionGeom</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.maps</span><span class="w"> </span><span class="kn">import</span> <span class="n">MapAxis</span><span class="p">,</span> <span class="n">Maps</span><span class="p">,</span> <span class="n">RegionGeom</span><span class="p">,</span> <span class="n">RegionNDMap</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.modeling.models</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">DiskSpatialModel</span><span class="p">,</span>
     <span class="n">GaussianSpatialModel</span><span class="p">,</span>
@@ -2069,6 +2069,16 @@
 
     <span class="n">_energy_edges</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">([</span><span class="mi">50</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">300</span><span class="p">,</span> <span class="mi">1_000</span><span class="p">,</span> <span class="mf">3e3</span><span class="p">,</span> <span class="mf">1e4</span><span class="p">,</span> <span class="mf">3e4</span><span class="p">,</span> <span class="mf">1e5</span><span class="p">,</span> <span class="mf">1e6</span><span class="p">],</span> <span class="s2">&quot;MeV&quot;</span><span class="p">)</span>
 
+    <span class="n">_pulse_profile_column_name</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="s2">&quot;GT100_WtCnt&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;50_100_WtCt&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;100_300_WtCt&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;300_1000_WtCt&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;1000_3000_WtCt&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;3000_100000_WtCt&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;10000_100000_WtCt&quot;</span><span class="p">,</span>
+    <span class="p">]</span>
+
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_auxiliary_filename</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">make_path</span><span class="p">(</span>
@@ -2173,6 +2183,92 @@
                 <span class="n">d</span><span class="p">[</span><span class="s2">&quot;Unc_PLEC_ExpfactorS_bfr&quot;</span><span class="p">],</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">ss</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">pulse_profile_best_fit</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Best fit of the &gt; 100 MeV 3PC pulse profile.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        best_fit_profile: `~gammapy.maps.RegionNDMap`</span>
+<span class="sd">            Map containing the best fit.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_auxiliary_filename</span><span class="p">,</span> <span class="n">hdu</span><span class="o">=</span><span class="s2">&quot;BEST_FIT_LC&quot;</span><span class="p">)</span>
+
+        <span class="c1"># For best-fit profile, Ph_min and Ph_max are equal and represent bin centers.</span>
+        <span class="n">phases</span> <span class="o">=</span> <span class="n">MapAxis</span><span class="o">.</span><span class="n">from_nodes</span><span class="p">(</span><span class="n">table</span><span class="p">[</span><span class="s2">&quot;Ph_Min&quot;</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;phase&quot;</span><span class="p">,</span> <span class="n">interp</span><span class="o">=</span><span class="s2">&quot;lin&quot;</span><span class="p">)</span>
+        <span class="n">best_fit_profile</span> <span class="o">=</span> <span class="n">RegionNDMap</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+            <span class="n">region</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">[</span><span class="n">phases</span><span class="p">],</span> <span class="n">data</span><span class="o">=</span><span class="n">table</span><span class="p">[</span><span class="s2">&quot;Intensity&quot;</span><span class="p">]</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">best_fit_profile</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">pulse_profile_radio</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Radio pulse profile provided in the auxiliary file of 3PC.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        radio_profile: `~gammapy.maps.RegionNDMap`</span>
+<span class="sd">            Map containing the radio profile.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_auxiliary_filename</span><span class="p">,</span> <span class="n">hdu</span><span class="o">=</span><span class="s2">&quot;RADIO_PROFILE&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Need to do this because some PSR (J0540-6919) has duplicates</span>
+        <span class="n">ph_node</span><span class="p">,</span> <span class="n">unique_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">table</span><span class="p">[</span><span class="s2">&quot;Ph_Min&quot;</span><span class="p">],</span> <span class="n">return_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="s2">&quot;Norm_Intensity&quot;</span><span class="p">][</span><span class="n">unique_idx</span><span class="p">]</span>
+
+        <span class="c1"># For radio pulse profile, Ph_min and Ph_max are equal and represent bin centers.</span>
+        <span class="n">phases</span> <span class="o">=</span> <span class="n">MapAxis</span><span class="o">.</span><span class="n">from_nodes</span><span class="p">(</span><span class="n">ph_node</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;phase&quot;</span><span class="p">,</span> <span class="n">interp</span><span class="o">=</span><span class="s2">&quot;lin&quot;</span><span class="p">)</span>
+        <span class="n">radio_profile</span> <span class="o">=</span> <span class="n">RegionNDMap</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">region</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">[</span><span class="n">phases</span><span class="p">],</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">radio_profile</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">pulse_profiles</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        The 3PC pulse profiles are provided in different energy ranges, each represented in weighted counts.</span>
+<span class="sd">        These profiles are stored in a `~gammapy.maps.Maps` of `~gammapy.maps.RegionNDMap`, one per energy bin.</span>
+
+<span class="sd">        The `~gammapy.maps.Maps` keys correspond to specific energy ranges as follows:</span>
+
+<span class="sd">        - `GT100_WtCnt`: &gt; 0.1 GeV</span>
+<span class="sd">        - `50_100_WtCt`: 0.05 – 0.1 GeV</span>
+<span class="sd">        - `100_300_WtCt`: 0.1 – 0.3 GeV</span>
+<span class="sd">        - `300_1000_WtCt`: 0.3 – 1 GeV</span>
+<span class="sd">        - `1000_3000_WtCt`: 1 – 3 GeV</span>
+<span class="sd">        - `3000_100000_WtCt`: 3 – 1000 GeV</span>
+<span class="sd">        - `10000_100000_WtCt`: 10 – 1000 GeV</span>
+
+<span class="sd">        Each pulse profile has an associated uncertainty map, which can be accessed by</span>
+<span class="sd">        prepending `&quot;Unc_&quot;` to the corresponding key.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        maps: `~gammapy.maps.Maps`</span>
+<span class="sd">            Maps containing the pulse profile in the different energy bin.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_auxiliary_filename</span><span class="p">,</span> <span class="n">hdu</span><span class="o">=</span><span class="s2">&quot;GAMMA_LC&quot;</span><span class="p">)</span>
+        <span class="n">phases</span> <span class="o">=</span> <span class="n">MapAxis</span><span class="o">.</span><span class="n">from_edges</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">table</span><span class="p">[</span><span class="s2">&quot;Ph_Min&quot;</span><span class="p">],</span> <span class="n">table</span><span class="p">[</span><span class="s2">&quot;Ph_Max&quot;</span><span class="p">]])),</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;phase&quot;</span><span class="p">,</span>
+            <span class="n">interp</span><span class="o">=</span><span class="s2">&quot;lin&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">geom</span> <span class="o">=</span> <span class="n">RegionGeom</span><span class="p">(</span><span class="n">region</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">[</span><span class="n">phases</span><span class="p">])</span>
+        <span class="n">names</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span>
+            <span class="p">[</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_pulse_profile_column_name</span><span class="p">,</span>
+                <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;Unc_</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pulse_profile_column_name</span><span class="p">],</span>
+            <span class="p">]</span>
+        <span class="p">)</span>
+        <span class="n">maps</span> <span class="o">=</span> <span class="n">Maps</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span>
+            <span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span>
+            <span class="n">names</span><span class="o">=</span><span class="n">names</span><span class="p">,</span>
+            <span class="n">kwargs_list</span><span class="o">=</span><span class="p">[{</span><span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="n">table</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="p">}</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">maps</span>
 
 <div class="viewcode-block" id="SourceCatalogObject3PC.spectral_model">
 <a class="viewcode-back" href="../../../api/gammapy.catalog.SourceCatalogObject3PC.html#gammapy.catalog.SourceCatalogObject3PC.spectral_model">[docs]</a>
