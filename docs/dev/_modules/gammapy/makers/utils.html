@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="2.0.dev1036+g8ae2f75b0" />
+  <meta name="docsearch:version" content="2.0.dev1055+gd3f7ec83a" />
   </head>
   
   
@@ -481,6 +481,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">astropy.units</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">u</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">astropy.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">Angle</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">astropy.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">Table</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">astropy.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Time</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">FixedPointingInfo</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.irf</span><span class="w"> </span><span class="kn">import</span> <span class="n">BackgroundIRF</span><span class="p">,</span> <span class="n">EDispMap</span><span class="p">,</span> <span class="n">FoVAlignment</span><span class="p">,</span> <span class="n">PSFMap</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.maps</span><span class="w"> </span><span class="kn">import</span> <span class="n">Map</span><span class="p">,</span> <span class="n">RegionNDMap</span>
@@ -503,6 +504,9 @@
 <span class="p">]</span>
 
 <span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="n">MINIMUM_TIME_STEP</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">s</span>  <span class="c1"># Minimum time step used to handle FoV rotations</span>
+<span class="n">EARTH_ANGULAR_VELOCITY</span> <span class="o">=</span> <span class="mi">360</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span> <span class="o">/</span> <span class="n">u</span><span class="o">.</span><span class="n">day</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_get_fov_coords</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">irf</span><span class="p">,</span> <span class="n">geom</span><span class="p">,</span> <span class="n">use_region_center</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">obstime</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
@@ -535,14 +539,6 @@
         <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;offset&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sky_coord</span><span class="o">.</span><span class="n">separation</span><span class="p">(</span><span class="n">pointing_icrs</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">irf</span><span class="o">.</span><span class="n">fov_alignment</span> <span class="o">==</span> <span class="n">FoVAlignment</span><span class="o">.</span><span class="n">ALTAZ</span><span class="p">:</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">FixedPointingInfo</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span>
-                <span class="n">irf</span><span class="p">,</span> <span class="n">BackgroundIRF</span>
-            <span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-                    <span class="s2">&quot;make_map_background_irf requires FixedPointingInfo if &quot;</span>
-                    <span class="s2">&quot;BackgroundIRF.fov_alignement is ALTAZ&quot;</span><span class="p">,</span>
-                <span class="p">)</span>
-
             <span class="c1"># for backwards compatibility, obstime should be required</span>
             <span class="k">if</span> <span class="n">obstime</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
@@ -575,6 +571,49 @@
         <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;fov_lon&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">fov_lon</span>
         <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;fov_lat&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">fov_lat</span>
     <span class="k">return</span> <span class="n">coords</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_compute_rotation_time_steps</span><span class="p">(</span><span class="n">time_start</span><span class="p">,</span> <span class="n">time_stop</span><span class="p">,</span> <span class="n">fov_rotation</span><span class="p">,</span> <span class="n">pointing_altaz</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Compute the time intervals between start and stop times, such that the FoV associated to a fixed RaDec position rotates</span>
+<span class="sd">    by &#39;fov_rotation&#39; in AltAz frame during each time step.</span>
+<span class="sd">    It assumes that the rotation rate at the provided pointing is a good estimate of the rotation rate over the full</span>
+<span class="sd">    output duration (first order approximation).</span>
+
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    time_start : `~astropy.time.Time`</span>
+<span class="sd">        Start time</span>
+<span class="sd">    time_stop : `~astropy.time.Time`</span>
+<span class="sd">        Stop time</span>
+<span class="sd">    fov_rotation : `~astropy.units.Quantity`</span>
+<span class="sd">        Rotation angle.</span>
+<span class="sd">    pointing_altaz : `~astropy.coordinates.SkyCoord`</span>
+<span class="sd">        Pointing direction.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    times : `~astropy.time.Time`</span>
+<span class="sd">        Times associated with the requested rotation.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_time_step</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="n">pnt_altaz</span><span class="p">):</span>
+        <span class="n">denom</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">EARTH_ANGULAR_VELOCITY</span>
+            <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">pnt_altaz</span><span class="o">.</span><span class="n">location</span><span class="o">.</span><span class="n">lat</span><span class="o">.</span><span class="n">rad</span><span class="p">)</span>
+            <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">pnt_altaz</span><span class="o">.</span><span class="n">az</span><span class="o">.</span><span class="n">rad</span><span class="p">))</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">rotation</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">pnt_altaz</span><span class="o">.</span><span class="n">alt</span><span class="o">.</span><span class="n">rad</span><span class="p">)</span> <span class="o">/</span> <span class="n">denom</span>
+
+    <span class="n">time</span> <span class="o">=</span> <span class="n">time_start</span>
+    <span class="n">times</span> <span class="o">=</span> <span class="p">[</span><span class="n">time</span><span class="p">]</span>
+    <span class="k">while</span> <span class="n">time</span> <span class="o">&lt;</span> <span class="n">time_stop</span><span class="p">:</span>
+        <span class="n">time_step</span> <span class="o">=</span> <span class="n">_time_step</span><span class="p">(</span><span class="n">fov_rotation</span><span class="p">,</span> <span class="n">pointing_altaz</span><span class="o">.</span><span class="n">get_altaz</span><span class="p">(</span><span class="n">time</span><span class="p">))</span>
+        <span class="n">time_step</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">time_step</span><span class="p">,</span> <span class="n">MINIMUM_TIME_STEP</span><span class="p">)</span>
+        <span class="n">time</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">time</span> <span class="o">+</span> <span class="n">time_step</span><span class="p">,</span> <span class="n">time_stop</span><span class="p">)</span>
+        <span class="n">times</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">time</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Time</span><span class="p">(</span><span class="n">times</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="make_map_exposure_true_energy">
@@ -667,6 +706,50 @@
     <span class="k">return</span> <span class="nb">map</span> <span class="o">*</span> <span class="n">weights</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">shape</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">))</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_integrate_bkg</span><span class="p">(</span>
+    <span class="n">pointing</span><span class="p">,</span> <span class="n">bkg</span><span class="p">,</span> <span class="n">geom</span><span class="p">,</span> <span class="n">time_start</span><span class="p">,</span> <span class="n">time_stop</span><span class="p">,</span> <span class="n">d_omega</span><span class="p">,</span> <span class="n">use_region_center</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Integrate the background IRF on a given geometry.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    pointing :  `~gammapy.data.FixedPointingInfo` or `~astropy.coordinates.SkyCoord`</span>
+<span class="sd">        Observation pointing.</span>
+<span class="sd">    bkg : `~gammapy.irf.Background3D`</span>
+<span class="sd">        Background rate model.</span>
+<span class="sd">    geom : `~gammapy.maps.WcsGeom`</span>
+<span class="sd">        Reference geometry.</span>
+<span class="sd">    time_start : `~astropy.time.Time`</span>
+<span class="sd">        Observation time start.</span>
+<span class="sd">    time_stop : `~astropy.time.Time`</span>
+<span class="sd">        Observation time stop.</span>
+<span class="sd">    d_omega : &#39;astropy.units.Quantity&#39;</span>
+<span class="sd">        Solid angle of the image geometry.</span>
+<span class="sd">    use_region_center : bool, optional</span>
+<span class="sd">        For geom as a `~gammapy.maps.RegionGeom`. If True, consider the values at the region center.</span>
+<span class="sd">        If False, average over the whole region. Default is True.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    evaluated_bkg : `numpy.ndarray`</span>
+<span class="sd">        Background IRF evaluated on the provided geometry</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">duration</span> <span class="o">=</span> <span class="n">time_stop</span> <span class="o">-</span> <span class="n">time_start</span>
+    <span class="n">coords</span> <span class="o">=</span> <span class="n">_get_fov_coords</span><span class="p">(</span>
+        <span class="n">pointing</span><span class="o">=</span><span class="n">pointing</span><span class="p">,</span>
+        <span class="n">irf</span><span class="o">=</span><span class="n">bkg</span><span class="p">,</span>
+        <span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span>
+        <span class="n">use_region_center</span><span class="o">=</span><span class="n">use_region_center</span><span class="p">,</span>
+        <span class="n">obstime</span><span class="o">=</span><span class="n">time_start</span> <span class="o">+</span> <span class="n">duration</span> <span class="o">*</span> <span class="mf">0.5</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">broadcast_axis_values_to_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+
+    <span class="n">bkg_de</span> <span class="o">=</span> <span class="n">bkg</span><span class="o">.</span><span class="n">integrate_log_log</span><span class="p">(</span><span class="o">**</span><span class="n">coords</span><span class="p">,</span> <span class="n">axis_name</span><span class="o">=</span><span class="s2">&quot;energy&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">bkg_de</span> <span class="o">*</span> <span class="n">d_omega</span> <span class="o">*</span> <span class="n">duration</span><span class="p">)</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+
+
 <div class="viewcode-block" id="make_map_background_irf">
 <a class="viewcode-back" href="../../../api/gammapy.makers.utils.make_map_background_irf.html#gammapy.makers.utils.make_map_background_irf">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">make_map_background_irf</span><span class="p">(</span>
@@ -674,9 +757,10 @@
     <span class="n">ontime</span><span class="p">,</span>
     <span class="n">bkg</span><span class="p">,</span>
     <span class="n">geom</span><span class="p">,</span>
+    <span class="n">time_start</span><span class="p">,</span>
+    <span class="n">fov_rotation_step</span><span class="o">=</span><span class="mf">1.0</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span><span class="p">,</span>
     <span class="n">oversampling</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">use_region_center</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">obstime</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute background map from background IRFs.</span>
 
@@ -697,14 +781,18 @@
 <span class="sd">        Background rate model.</span>
 <span class="sd">    geom : `~gammapy.maps.WcsGeom`</span>
 <span class="sd">        Reference geometry.</span>
-<span class="sd">    oversampling : int</span>
+<span class="sd">    time_start : `~astropy.time.Time`</span>
+<span class="sd">        Observation start time.</span>
+<span class="sd">    fov_rotation_step : `~astropy.units.Quantity`</span>
+<span class="sd">        Maximum rotation error to create sub-time bins if the irf is 3D and in AltAz.</span>
+<span class="sd">        Default is 1.0 deg.</span>
+<span class="sd">    oversampling : int, optional</span>
 <span class="sd">        Oversampling factor in energy, used for the background model evaluation.</span>
+<span class="sd">        Default is None.</span>
 <span class="sd">    use_region_center : bool, optional</span>
 <span class="sd">        For geom as a `~gammapy.maps.RegionGeom`. If True, consider the values at the region center.</span>
 <span class="sd">        If False, average over the whole region.</span>
 <span class="sd">        Default is True.</span>
-<span class="sd">    obstime : `~astropy.time.Time`</span>
-<span class="sd">        Observation time to use.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -712,13 +800,23 @@
 <span class="sd">        Background predicted counts sky cube in reconstructed energy.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># TODO:</span>
-    <span class="c1">#  This implementation can be improved in two ways:</span>
-    <span class="c1">#  1. Create equal time intervals between TSTART and TSTOP and sum up the</span>
-    <span class="c1">#  background IRF for each interval. This is instead of multiplying by</span>
-    <span class="c1">#  the total ontime. This then handles the rotation of the FoV.</span>
-    <span class="c1">#  2. Use the pointing table (does not currently exist in CTA files) to</span>
+    <span class="c1">#  This implementation can be improved in one way:</span>
+    <span class="c1">#  Use the pointing table (does not currently exist in CTA files) to</span>
     <span class="c1">#  obtain the RA DEC and time for each interval. This then considers that</span>
     <span class="c1">#  the pointing might change slightly over the observation duration</span>
+
+    <span class="c1"># Compute intermediate time ranges if needed</span>
+    <span class="n">times</span> <span class="o">=</span> <span class="n">Time</span><span class="p">([</span><span class="n">time_start</span><span class="p">,</span> <span class="n">time_start</span> <span class="o">+</span> <span class="n">ontime</span><span class="p">])</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">bkg</span><span class="o">.</span><span class="n">has_offset_axis</span> <span class="ow">and</span> <span class="n">bkg</span><span class="o">.</span><span class="n">fov_alignment</span> <span class="o">==</span> <span class="n">FoVAlignment</span><span class="o">.</span><span class="n">ALTAZ</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">FixedPointingInfo</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;make_map_background_irf requires FixedPointingInfo if &quot;</span>
+                <span class="s2">&quot;BackgroundIRF.fov_alignement is ALTAZ&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">times</span> <span class="o">=</span> <span class="n">_compute_rotation_time_steps</span><span class="p">(</span>
+            <span class="n">time_start</span><span class="p">,</span> <span class="n">time_start</span> <span class="o">+</span> <span class="n">ontime</span><span class="p">,</span> <span class="n">fov_rotation_step</span><span class="p">,</span> <span class="n">pointing</span>
+        <span class="p">)</span>
 
     <span class="c1"># Get altaz coords for map</span>
     <span class="k">if</span> <span class="n">oversampling</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -733,21 +831,16 @@
         <span class="n">image_geom</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span>
         <span class="n">d_omega</span> <span class="o">=</span> <span class="n">image_geom</span><span class="o">.</span><span class="n">solid_angle</span><span class="p">()</span>
 
-    <span class="n">coords</span> <span class="o">=</span> <span class="n">_get_fov_coords</span><span class="p">(</span>
-        <span class="n">pointing</span><span class="o">=</span><span class="n">pointing</span><span class="p">,</span>
-        <span class="n">irf</span><span class="o">=</span><span class="n">bkg</span><span class="p">,</span>
-        <span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span>
-        <span class="n">use_region_center</span><span class="o">=</span><span class="n">use_region_center</span><span class="p">,</span>
-        <span class="n">obstime</span><span class="o">=</span><span class="n">obstime</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">broadcast_axis_values_to_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">geom</span><span class="o">.</span><span class="n">data_shape</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">start</span><span class="p">,</span> <span class="n">stop</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">times</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">times</span><span class="p">[</span><span class="mi">1</span><span class="p">:]):</span>
+        <span class="n">npred</span> <span class="o">=</span> <span class="n">_integrate_bkg</span><span class="p">(</span>
+            <span class="n">pointing</span><span class="p">,</span> <span class="n">bkg</span><span class="p">,</span> <span class="n">geom</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">d_omega</span><span class="p">,</span> <span class="n">use_region_center</span>
+        <span class="p">)</span>
 
-    <span class="n">bkg_de</span> <span class="o">=</span> <span class="n">bkg</span><span class="o">.</span><span class="n">integrate_log_log</span><span class="p">(</span><span class="o">**</span><span class="n">coords</span><span class="p">,</span> <span class="n">axis_name</span><span class="o">=</span><span class="s2">&quot;energy&quot;</span><span class="p">)</span>
-    <span class="n">data</span> <span class="o">=</span> <span class="p">(</span><span class="n">bkg_de</span> <span class="o">*</span> <span class="n">d_omega</span> <span class="o">*</span> <span class="n">ontime</span><span class="p">)</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
-
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">use_region_center</span><span class="p">:</span>
-        <span class="n">region_coord</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_wcs_coord_and_weights</span><span class="p">()</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">weights</span> <span class="o">*</span> <span class="n">data</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">use_region_center</span><span class="p">:</span>
+            <span class="n">region_coord</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_wcs_coord_and_weights</span><span class="p">()</span>
+            <span class="n">npred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">weights</span> <span class="o">*</span> <span class="n">npred</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">+=</span> <span class="n">npred</span>
 
     <span class="n">bkg_map</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
 
