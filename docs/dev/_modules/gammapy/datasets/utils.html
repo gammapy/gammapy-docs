@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="2.0.dev1505+gc09ab3f95" />
+  <meta name="docsearch:version" content="2.0.dev1513+gcef4837c6" />
   </head>
   
   
@@ -475,6 +475,7 @@
                   
   <h1>Source code for gammapy.datasets.utils</h1><div class="highlight"><pre>
 <span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">astropy.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">SkyCoord</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Observation</span>
@@ -489,6 +490,8 @@
     <span class="s2">&quot;split_dataset&quot;</span><span class="p">,</span>
     <span class="s2">&quot;create_map_dataset_from_dl4&quot;</span><span class="p">,</span>
 <span class="p">]</span>
+
+<span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="apply_edisp">
@@ -899,6 +902,61 @@
         <span class="n">per_decade</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">MapDataset</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span> <span class="n">energy_axis_true</span><span class="o">=</span><span class="n">energy_axis_true</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">set_and_restore_mask_fit</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Context manager to set a `mask_fit` on dataset and restore the initial mask.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    datasets : `~gammapy.datasets.datasets`</span>
+<span class="sd">        the Datasets to apply the energy mask to.</span>
+<span class="sd">    energy_min : `~astropy.units.Quantity`, optional</span>
+<span class="sd">        minimum energy.</span>
+<span class="sd">    energy_min : `~astropy.units.Quantity`, optional</span>
+<span class="sd">        maximum energy.</span>
+<span class="sd">    round_to_edge: bool, optional</span>
+<span class="sd">        Whether to round `energy_min` and `energy_max` to the closest axis bin value.</span>
+<span class="sd">        See `~gammapy.maps.MapAxis.round`. Default is False.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">datasets</span><span class="p">,</span>
+        <span class="n">mask_fit</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">energy_min</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">energy_max</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">round_to_edge</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">energy_min</span> <span class="o">=</span> <span class="n">energy_min</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">energy_max</span> <span class="o">=</span> <span class="n">energy_max</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">round_to_edge</span> <span class="o">=</span> <span class="n">round_to_edge</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mask_fit</span> <span class="o">=</span> <span class="n">mask_fit</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">datasets</span> <span class="o">=</span> <span class="n">datasets</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mask_fits</span> <span class="o">=</span> <span class="p">[</span><span class="n">dataset</span><span class="o">.</span><span class="n">mask_fit</span> <span class="k">for</span> <span class="n">dataset</span> <span class="ow">in</span> <span class="n">datasets</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">datasets</span> <span class="o">=</span> <span class="n">Datasets</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">dataset</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">datasets</span><span class="p">:</span>
+            <span class="n">mask_fit</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">_geom</span><span class="o">.</span><span class="n">energy_mask</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">energy_min</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_max</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">round_to_edge</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_fit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">mask_fit</span> <span class="o">*=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_fit</span><span class="o">.</span><span class="n">interp_to_geom</span><span class="p">(</span>
+                    <span class="n">mask_fit</span><span class="o">.</span><span class="n">geom</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s2">&quot;nearest&quot;</span>
+                <span class="p">)</span>
+            <span class="n">dataset</span><span class="o">.</span><span class="n">mask_fit</span> <span class="o">=</span> <span class="n">mask_fit</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">mask_fit</span><span class="o">.</span><span class="n">data</span><span class="p">):</span>
+                <span class="n">datasets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Dataset </span><span class="si">{</span><span class="n">dataset</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> does not contribute in the energy range&quot;</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="n">datasets</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">type</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">traceback</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">mask_fit</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">datasets</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_fits</span><span class="p">):</span>
+            <span class="n">dataset</span><span class="o">.</span><span class="n">mask_fit</span> <span class="o">=</span> <span class="n">mask_fit</span>
 </pre></div>
 
                 </article>
