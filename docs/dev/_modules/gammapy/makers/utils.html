@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="2.0.dev1640+g1765450ff" />
+  <meta name="docsearch:version" content="2.0.dev1649+g9edee9ec0" />
   </head>
   
   
@@ -476,19 +476,19 @@
   <h1>Source code for gammapy.makers.utils</h1><div class="highlight"><pre>
 <span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">astropy.units</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">u</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">astropy.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">Angle</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">astropy.coordinates.erfa_astrom</span><span class="w"> </span><span class="kn">import</span> <span class="n">erfa_astrom</span><span class="p">,</span> <span class="n">ErfaAstromInterpolator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">astropy.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">Table</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">astropy.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Time</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">FixedPointingInfo</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.irf</span><span class="w"> </span><span class="kn">import</span> <span class="n">BackgroundIRF</span><span class="p">,</span> <span class="n">EDispMap</span><span class="p">,</span> <span class="n">FoVAlignment</span><span class="p">,</span> <span class="n">PSFMap</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.maps</span><span class="w"> </span><span class="kn">import</span> <span class="n">Map</span><span class="p">,</span> <span class="n">RegionNDMap</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">FixedPointingInfo</span><span class="p">,</span> <span class="n">PointingMode</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.irf</span><span class="w"> </span><span class="kn">import</span> <span class="n">EDispMap</span><span class="p">,</span> <span class="n">FoVAlignment</span><span class="p">,</span> <span class="n">PSFMap</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.maps</span><span class="w"> </span><span class="kn">import</span> <span class="n">Map</span><span class="p">,</span> <span class="n">RegionNDMap</span><span class="p">,</span> <span class="n">MapAxis</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.maps.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">broadcast_axis_values_to_geom</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.modeling.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">PowerLawSpectralModel</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">WStatCountsStatistic</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.utils.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">sky_to_fov</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.utils.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">FoVICRSFrame</span><span class="p">,</span> <span class="n">FoVAltAzFrame</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.utils.regions</span><span class="w"> </span><span class="kn">import</span> <span class="n">compound_region_to_regions</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
@@ -507,70 +507,6 @@
 
 <span class="n">MINIMUM_TIME_STEP</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">s</span>  <span class="c1"># Minimum time step used to handle FoV rotations</span>
 <span class="n">EARTH_ANGULAR_VELOCITY</span> <span class="o">=</span> <span class="mi">360</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span> <span class="o">/</span> <span class="n">u</span><span class="o">.</span><span class="n">day</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_get_fov_coords</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">irf</span><span class="p">,</span> <span class="n">geom</span><span class="p">,</span> <span class="n">use_region_center</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">obstime</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-    <span class="c1"># TODO: create dedicated coordinate handling see #5041</span>
-    <span class="n">coords</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">FixedPointingInfo</span><span class="p">):</span>
-        <span class="c1"># for backwards compatibility, obstime should be required</span>
-        <span class="k">if</span> <span class="n">obstime</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obstime</span><span class="p">,</span> <span class="n">BackgroundIRF</span><span class="p">):</span>
-                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                    <span class="s2">&quot;Future versions of gammapy will require the obstime keyword for this function&quot;</span><span class="p">,</span>
-                    <span class="ne">DeprecationWarning</span><span class="p">,</span>
-                <span class="p">)</span>
-            <span class="n">obstime</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">obstime</span>
-
-        <span class="n">pointing_icrs</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">get_icrs</span><span class="p">(</span><span class="n">obstime</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">pointing_icrs</span> <span class="o">=</span> <span class="n">pointing</span>
-
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">use_region_center</span><span class="p">:</span>
-        <span class="n">region_coord</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_wcs_coord_and_weights</span><span class="p">()</span>
-        <span class="n">sky_coord</span> <span class="o">=</span> <span class="n">region_coord</span><span class="o">.</span><span class="n">skycoord</span>
-
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">image_geom</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span>
-        <span class="n">map_coord</span> <span class="o">=</span> <span class="n">image_geom</span><span class="o">.</span><span class="n">get_coord</span><span class="p">()</span>
-        <span class="n">sky_coord</span> <span class="o">=</span> <span class="n">map_coord</span><span class="o">.</span><span class="n">skycoord</span>
-
-    <span class="k">if</span> <span class="n">irf</span><span class="o">.</span><span class="n">has_offset_axis</span><span class="p">:</span>
-        <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;offset&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sky_coord</span><span class="o">.</span><span class="n">separation</span><span class="p">(</span><span class="n">pointing_icrs</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">irf</span><span class="o">.</span><span class="n">fov_alignment</span> <span class="o">==</span> <span class="n">FoVAlignment</span><span class="o">.</span><span class="n">ALTAZ</span><span class="p">:</span>
-            <span class="c1"># for backwards compatibility, obstime should be required</span>
-            <span class="k">if</span> <span class="n">obstime</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                    <span class="s2">&quot;Future versions of gammapy will require the obstime keyword for this function&quot;</span><span class="p">,</span>
-                    <span class="ne">DeprecationWarning</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="n">obstime</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">obstime</span>
-
-            <span class="n">pointing_altaz</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">get_altaz</span><span class="p">(</span><span class="n">obstime</span><span class="p">)</span>
-            <span class="n">altaz_coord</span> <span class="o">=</span> <span class="n">sky_coord</span><span class="o">.</span><span class="n">transform_to</span><span class="p">(</span><span class="n">pointing_altaz</span><span class="o">.</span><span class="n">frame</span><span class="p">)</span>
-
-            <span class="c1"># Compute FOV coordinates of map relative to pointing</span>
-            <span class="n">fov_lon</span><span class="p">,</span> <span class="n">fov_lat</span> <span class="o">=</span> <span class="n">sky_to_fov</span><span class="p">(</span>
-                <span class="n">altaz_coord</span><span class="o">.</span><span class="n">az</span><span class="p">,</span> <span class="n">altaz_coord</span><span class="o">.</span><span class="n">alt</span><span class="p">,</span> <span class="n">pointing_altaz</span><span class="o">.</span><span class="n">az</span><span class="p">,</span> <span class="n">pointing_altaz</span><span class="o">.</span><span class="n">alt</span>
-            <span class="p">)</span>
-        <span class="k">elif</span> <span class="n">irf</span><span class="o">.</span><span class="n">fov_alignment</span> <span class="ow">in</span> <span class="p">[</span><span class="n">FoVAlignment</span><span class="o">.</span><span class="n">RADEC</span><span class="p">,</span> <span class="n">FoVAlignment</span><span class="o">.</span><span class="n">REVERSE_LON_RADEC</span><span class="p">]:</span>
-            <span class="n">fov_lon</span><span class="p">,</span> <span class="n">fov_lat</span> <span class="o">=</span> <span class="n">sky_to_fov</span><span class="p">(</span>
-                <span class="n">sky_coord</span><span class="o">.</span><span class="n">icrs</span><span class="o">.</span><span class="n">ra</span><span class="p">,</span>
-                <span class="n">sky_coord</span><span class="o">.</span><span class="n">icrs</span><span class="o">.</span><span class="n">dec</span><span class="p">,</span>
-                <span class="n">pointing_icrs</span><span class="o">.</span><span class="n">icrs</span><span class="o">.</span><span class="n">ra</span><span class="p">,</span>
-                <span class="n">pointing_icrs</span><span class="o">.</span><span class="n">icrs</span><span class="o">.</span><span class="n">dec</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="n">irf</span><span class="o">.</span><span class="n">fov_alignment</span> <span class="o">==</span> <span class="n">FoVAlignment</span><span class="o">.</span><span class="n">REVERSE_LON_RADEC</span><span class="p">:</span>
-                <span class="n">fov_lon</span> <span class="o">=</span> <span class="o">-</span><span class="n">fov_lon</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Unsupported background coordinate system: </span><span class="si">{</span><span class="n">irf</span><span class="o">.</span><span class="n">fov_alignment</span><span class="si">!r}</span><span class="s2">&quot;</span>
-            <span class="p">)</span>
-
-        <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;fov_lon&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">fov_lon</span>
-        <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;fov_lat&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">fov_lat</span>
-    <span class="k">return</span> <span class="n">coords</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_compute_rotation_time_steps</span><span class="p">(</span><span class="n">time_start</span><span class="p">,</span> <span class="n">time_stop</span><span class="p">,</span> <span class="n">fov_rotation</span><span class="p">,</span> <span class="n">pointing_altaz</span><span class="p">):</span>
@@ -646,24 +582,20 @@
 <span class="sd">    map : `~gammapy.maps.WcsNDMap`</span>
 <span class="sd">        Exposure map.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">coords</span> <span class="o">=</span> <span class="n">_get_fov_coords</span><span class="p">(</span>
-        <span class="n">pointing</span><span class="o">=</span><span class="n">pointing</span><span class="p">,</span>
-        <span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span>
-        <span class="n">use_region_center</span><span class="o">=</span><span class="n">use_region_center</span><span class="p">,</span>
-        <span class="n">irf</span><span class="o">=</span><span class="n">aeff</span><span class="p">,</span>
-        <span class="n">obstime</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">FixedPointingInfo</span><span class="p">):</span>
+        <span class="n">origin</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">get_icrs</span><span class="p">(</span><span class="n">pointing</span><span class="o">.</span><span class="n">obstime</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">origin</span> <span class="o">=</span> <span class="n">pointing</span>
 
-    <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">broadcast_axis_values_to_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="s2">&quot;energy_true&quot;</span><span class="p">)</span>
-    <span class="n">exposure</span> <span class="o">=</span> <span class="n">aeff</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="o">**</span><span class="n">coords</span><span class="p">)</span>
+    <span class="n">fov_frame</span> <span class="o">=</span> <span class="n">FoVICRSFrame</span><span class="p">(</span><span class="n">origin</span><span class="o">=</span><span class="n">origin</span><span class="p">)</span>
 
-    <span class="n">data</span> <span class="o">=</span> <span class="p">(</span><span class="n">exposure</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">livetime</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;m2 s&quot;</span><span class="p">)</span>
-    <span class="n">meta</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;livetime&quot;</span><span class="p">:</span> <span class="n">livetime</span><span class="p">,</span> <span class="s2">&quot;is_pointlike&quot;</span><span class="p">:</span> <span class="n">aeff</span><span class="o">.</span><span class="n">is_pointlike</span><span class="p">}</span>
+    <span class="n">exposure</span> <span class="o">=</span> <span class="n">project_irf_on_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">aeff</span><span class="p">,</span> <span class="n">fov_frame</span><span class="p">,</span> <span class="n">use_region_center</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">use_region_center</span><span class="p">:</span>
-        <span class="n">_</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_wcs_coord_and_weights</span><span class="p">()</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">average</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">unit</span><span class="p">,</span> <span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">)</span></div>
+    <span class="n">exposure</span> <span class="o">*=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">livetime</span><span class="p">)</span>
+    <span class="n">exposure</span> <span class="o">=</span> <span class="n">exposure</span><span class="o">.</span><span class="n">to_unit</span><span class="p">(</span><span class="s2">&quot;m2 s&quot;</span><span class="p">)</span>
+    <span class="n">exposure</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;livetime&quot;</span><span class="p">:</span> <span class="n">livetime</span><span class="p">,</span> <span class="s2">&quot;is_pointlike&quot;</span><span class="p">:</span> <span class="n">aeff</span><span class="o">.</span><span class="n">is_pointlike</span><span class="p">})</span>
+
+    <span class="k">return</span> <span class="n">exposure</span></div>
 
 
 
@@ -704,50 +636,6 @@
     <span class="n">shape</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nb">map</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">data_shape</span><span class="p">))</span>
     <span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
     <span class="k">return</span> <span class="nb">map</span> <span class="o">*</span> <span class="n">weights</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">shape</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">))</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_integrate_bkg</span><span class="p">(</span>
-    <span class="n">pointing</span><span class="p">,</span> <span class="n">bkg</span><span class="p">,</span> <span class="n">geom</span><span class="p">,</span> <span class="n">time_start</span><span class="p">,</span> <span class="n">time_stop</span><span class="p">,</span> <span class="n">d_omega</span><span class="p">,</span> <span class="n">use_region_center</span>
-<span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Integrate the background IRF on a given geometry.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    pointing :  `~gammapy.data.FixedPointingInfo` or `~astropy.coordinates.SkyCoord`</span>
-<span class="sd">        Observation pointing.</span>
-<span class="sd">    bkg : `~gammapy.irf.Background3D`</span>
-<span class="sd">        Background rate model.</span>
-<span class="sd">    geom : `~gammapy.maps.WcsGeom`</span>
-<span class="sd">        Reference geometry.</span>
-<span class="sd">    time_start : `~astropy.time.Time`</span>
-<span class="sd">        Observation time start.</span>
-<span class="sd">    time_stop : `~astropy.time.Time`</span>
-<span class="sd">        Observation time stop.</span>
-<span class="sd">    d_omega : &#39;astropy.units.Quantity&#39;</span>
-<span class="sd">        Solid angle of the image geometry.</span>
-<span class="sd">    use_region_center : bool, optional</span>
-<span class="sd">        For geom as a `~gammapy.maps.RegionGeom`. If True, consider the values at the region center.</span>
-<span class="sd">        If False, average over the whole region. Default is True.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    evaluated_bkg : `numpy.ndarray`</span>
-<span class="sd">        Background IRF evaluated on the provided geometry</span>
-
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">duration</span> <span class="o">=</span> <span class="n">time_stop</span> <span class="o">-</span> <span class="n">time_start</span>
-    <span class="n">coords</span> <span class="o">=</span> <span class="n">_get_fov_coords</span><span class="p">(</span>
-        <span class="n">pointing</span><span class="o">=</span><span class="n">pointing</span><span class="p">,</span>
-        <span class="n">irf</span><span class="o">=</span><span class="n">bkg</span><span class="p">,</span>
-        <span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span>
-        <span class="n">use_region_center</span><span class="o">=</span><span class="n">use_region_center</span><span class="p">,</span>
-        <span class="n">obstime</span><span class="o">=</span><span class="n">time_start</span> <span class="o">+</span> <span class="n">duration</span> <span class="o">*</span> <span class="mf">0.5</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">broadcast_axis_values_to_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
-
-    <span class="n">bkg_de</span> <span class="o">=</span> <span class="n">bkg</span><span class="o">.</span><span class="n">integrate_log_log</span><span class="p">(</span><span class="o">**</span><span class="n">coords</span><span class="p">,</span> <span class="n">axis_name</span><span class="o">=</span><span class="s2">&quot;energy&quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="p">(</span><span class="n">bkg_de</span> <span class="o">*</span> <span class="n">d_omega</span> <span class="o">*</span> <span class="n">duration</span><span class="p">)</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="make_map_background_irf">
@@ -817,37 +705,33 @@
         <span class="n">times</span> <span class="o">=</span> <span class="n">_compute_rotation_time_steps</span><span class="p">(</span>
             <span class="n">time_start</span><span class="p">,</span> <span class="n">time_start</span> <span class="o">+</span> <span class="n">ontime</span><span class="p">,</span> <span class="n">fov_rotation_step</span><span class="p">,</span> <span class="n">pointing</span>
         <span class="p">)</span>
+        <span class="n">origin</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">get_altaz</span><span class="p">(</span><span class="n">times</span><span class="p">)</span>
+        <span class="n">fov_frame</span> <span class="o">=</span> <span class="n">FoVAltAzFrame</span><span class="p">(</span>
+            <span class="n">origin</span><span class="o">=</span><span class="n">origin</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">origin</span><span class="o">.</span><span class="n">location</span><span class="p">,</span> <span class="n">obstime</span><span class="o">=</span><span class="n">times</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">FixedPointingInfo</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">pointing</span><span class="o">.</span><span class="n">mode</span> <span class="o">==</span> <span class="n">PointingMode</span><span class="o">.</span><span class="n">POINTING</span><span class="p">:</span>
+                <span class="n">origin</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">fixed_icrs</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                    <span class="s2">&quot;Drift pointing mode is not supported for background calculation.&quot;</span>
+                <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">origin</span> <span class="o">=</span> <span class="n">pointing</span>
 
-    <span class="c1"># Get altaz coords for map</span>
+        <span class="n">fov_frame</span> <span class="o">=</span> <span class="n">FoVICRSFrame</span><span class="p">(</span><span class="n">origin</span><span class="o">=</span><span class="n">origin</span><span class="p">)</span>
+
     <span class="k">if</span> <span class="n">oversampling</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">geom</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">upsample</span><span class="p">(</span><span class="n">factor</span><span class="o">=</span><span class="n">oversampling</span><span class="p">,</span> <span class="n">axis_name</span><span class="o">=</span><span class="s2">&quot;energy&quot;</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">use_region_center</span><span class="p">:</span>
-        <span class="n">image_geom</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">to_wcs_geom</span><span class="p">()</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span>
-        <span class="n">region_coord</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_wcs_coord_and_weights</span><span class="p">()</span>
-        <span class="n">idx</span> <span class="o">=</span> <span class="n">image_geom</span><span class="o">.</span><span class="n">coord_to_idx</span><span class="p">(</span><span class="n">region_coord</span><span class="p">)</span>
-        <span class="n">d_omega</span> <span class="o">=</span> <span class="n">image_geom</span><span class="o">.</span><span class="n">solid_angle</span><span class="p">()</span><span class="o">.</span><span class="n">T</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">image_geom</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span>
-        <span class="n">d_omega</span> <span class="o">=</span> <span class="n">image_geom</span><span class="o">.</span><span class="n">solid_angle</span><span class="p">()</span>
-
-    <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">geom</span><span class="o">.</span><span class="n">data_shape</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">start</span><span class="p">,</span> <span class="n">stop</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">times</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">times</span><span class="p">[</span><span class="mi">1</span><span class="p">:]):</span>
-        <span class="n">npred</span> <span class="o">=</span> <span class="n">_integrate_bkg</span><span class="p">(</span>
-            <span class="n">pointing</span><span class="p">,</span> <span class="n">bkg</span><span class="p">,</span> <span class="n">geom</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">d_omega</span><span class="p">,</span> <span class="n">use_region_center</span>
-        <span class="p">)</span>
-
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">use_region_center</span><span class="p">:</span>
-            <span class="n">region_coord</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_wcs_coord_and_weights</span><span class="p">()</span>
-            <span class="n">npred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">weights</span> <span class="o">*</span> <span class="n">npred</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="n">data</span> <span class="o">+=</span> <span class="n">npred</span>
-
-    <span class="n">bkg_map</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
+    <span class="n">bkg_map</span> <span class="o">=</span> <span class="n">integrate_project_irf_on_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">bkg</span><span class="p">,</span> <span class="n">fov_frame</span><span class="p">,</span> <span class="n">use_region_center</span><span class="p">)</span>
+    <span class="n">bkg_map</span> <span class="o">*=</span> <span class="n">ontime</span>
 
     <span class="k">if</span> <span class="n">oversampling</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">bkg_map</span> <span class="o">=</span> <span class="n">bkg_map</span><span class="o">.</span><span class="n">downsample</span><span class="p">(</span><span class="n">factor</span><span class="o">=</span><span class="n">oversampling</span><span class="p">,</span> <span class="n">axis_name</span><span class="o">=</span><span class="s2">&quot;energy&quot;</span><span class="p">)</span>
 
-    <span class="k">return</span> <span class="n">bkg_map</span></div>
+    <span class="k">return</span> <span class="n">bkg_map</span><span class="o">.</span><span class="n">to_unit</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span></div>
 
 
 
@@ -877,22 +761,14 @@
 <span class="sd">    psfmap : `~gammapy.irf.PSFMap`</span>
 <span class="sd">        The resulting PSF map.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">coords</span> <span class="o">=</span> <span class="n">_get_fov_coords</span><span class="p">(</span>
-        <span class="n">pointing</span><span class="o">=</span><span class="n">pointing</span><span class="p">,</span>
-        <span class="n">irf</span><span class="o">=</span><span class="n">psf</span><span class="p">,</span>
-        <span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span>
-        <span class="n">use_region_center</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">obstime</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">FixedPointingInfo</span><span class="p">):</span>
+        <span class="n">origin</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">get_icrs</span><span class="p">(</span><span class="n">pointing</span><span class="o">.</span><span class="n">obstime</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">origin</span> <span class="o">=</span> <span class="n">pointing</span>
 
-    <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">broadcast_axis_values_to_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="s2">&quot;energy_true&quot;</span><span class="p">)</span>
-    <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;rad&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">broadcast_axis_values_to_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="s2">&quot;rad&quot;</span><span class="p">)</span>
+    <span class="n">fov_frame</span> <span class="o">=</span> <span class="n">FoVICRSFrame</span><span class="p">(</span><span class="n">origin</span><span class="o">=</span><span class="n">origin</span><span class="p">)</span>
 
-    <span class="c1"># Compute PSF values</span>
-    <span class="n">data</span> <span class="o">=</span> <span class="n">psf</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="o">**</span><span class="n">coords</span><span class="p">)</span>
-
-    <span class="c1"># Create Map and fill relevant entries</span>
-    <span class="n">psf_map</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span>
+    <span class="n">psf_map</span> <span class="o">=</span> <span class="n">project_irf_on_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">psf</span><span class="p">,</span> <span class="n">fov_frame</span><span class="p">)</span>
     <span class="n">psf_map</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="n">axis_name</span><span class="o">=</span><span class="s2">&quot;rad&quot;</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">PSFMap</span><span class="p">(</span><span class="n">psf_map</span><span class="p">,</span> <span class="n">exposure_map</span><span class="p">)</span></div>
 
@@ -928,19 +804,14 @@
 <span class="sd">    edispmap : `~gammapy.irf.EDispMap`</span>
 <span class="sd">        The resulting energy dispersion map.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">coords</span> <span class="o">=</span> <span class="n">_get_fov_coords</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">edisp</span><span class="p">,</span> <span class="n">geom</span><span class="p">,</span> <span class="n">use_region_center</span><span class="o">=</span><span class="n">use_region_center</span><span class="p">)</span>
-    <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">broadcast_axis_values_to_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="s2">&quot;energy_true&quot;</span><span class="p">)</span>
-    <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;migra&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">broadcast_axis_values_to_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="s2">&quot;migra&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">FixedPointingInfo</span><span class="p">):</span>
+        <span class="n">origin</span> <span class="o">=</span> <span class="n">pointing</span><span class="o">.</span><span class="n">get_icrs</span><span class="p">(</span><span class="n">pointing</span><span class="o">.</span><span class="n">obstime</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">origin</span> <span class="o">=</span> <span class="n">pointing</span>
 
-    <span class="c1"># Compute EDisp values</span>
-    <span class="n">data</span> <span class="o">=</span> <span class="n">edisp</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="o">**</span><span class="n">coords</span><span class="p">)</span>
+    <span class="n">fov_frame</span> <span class="o">=</span> <span class="n">FoVICRSFrame</span><span class="p">(</span><span class="n">origin</span><span class="o">=</span><span class="n">origin</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">use_region_center</span><span class="p">:</span>
-        <span class="n">_</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_wcs_coord_and_weights</span><span class="p">()</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">average</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-
-    <span class="c1"># Create Map and fill relevant entries</span>
-    <span class="n">edisp_map</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">),</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="n">edisp_map</span> <span class="o">=</span> <span class="n">project_irf_on_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">edisp</span><span class="p">,</span> <span class="n">fov_frame</span><span class="p">)</span><span class="o">.</span><span class="n">to_unit</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
     <span class="n">edisp_map</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="n">axis_name</span><span class="o">=</span><span class="s2">&quot;migra&quot;</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">EDispMap</span><span class="p">(</span><span class="n">edisp_map</span><span class="p">,</span> <span class="n">exposure_map</span><span class="p">)</span></div>
 
@@ -979,15 +850,6 @@
 <span class="sd">    edispmap : `~gammapy.irf.EDispKernelMap`</span>
 <span class="sd">        the resulting EDispKernel map</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="n">coords</span> <span class="o">=</span> <span class="n">_get_fov_coords</span><span class="p">(</span>
-        <span class="n">pointing</span><span class="o">=</span><span class="n">pointing</span><span class="p">,</span>
-        <span class="n">irf</span><span class="o">=</span><span class="n">edisp</span><span class="p">,</span>
-        <span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span>
-        <span class="n">use_region_center</span><span class="o">=</span><span class="n">use_region_center</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;energy_true&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">edges</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
-
     <span class="c1"># Use EnergyDispersion2D migra axis.</span>
     <span class="n">migra_axis</span> <span class="o">=</span> <span class="n">edisp</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;migra&quot;</span><span class="p">]</span>
 
@@ -1294,6 +1156,157 @@
     <span class="k">if</span> <span class="s2">&quot;offset&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">obs</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">axes</span><span class="o">.</span><span class="n">names</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Offset axis not present!&quot;</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">obs</span><span class="o">.</span><span class="n">aeff</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;offset&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">center</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_fov_coord</span><span class="p">(</span>
+    <span class="n">skycoord</span><span class="p">,</span> <span class="n">fov_frame</span><span class="p">,</span> <span class="n">use_offset</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">reverse_lon</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">time_resolution</span><span class="o">=</span><span class="mi">1000</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">s</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return coord dict in fov_coord.&quot;&quot;&quot;</span>
+    <span class="n">coords</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">if</span> <span class="n">use_offset</span><span class="p">:</span>
+        <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;offset&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">skycoord</span><span class="o">.</span><span class="n">separation</span><span class="p">(</span><span class="n">fov_frame</span><span class="o">.</span><span class="n">origin</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">sign</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span> <span class="k">if</span> <span class="n">reverse_lon</span> <span class="k">else</span> <span class="mf">1.0</span>
+
+        <span class="k">with</span> <span class="n">erfa_astrom</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">ErfaAstromInterpolator</span><span class="p">(</span><span class="n">time_resolution</span><span class="p">)):</span>
+            <span class="n">fov_coords</span> <span class="o">=</span> <span class="n">skycoord</span><span class="o">.</span><span class="n">transform_to</span><span class="p">(</span><span class="n">fov_frame</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">fov_frame</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;fov_lon&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">moveaxis</span><span class="p">(</span><span class="n">fov_coords</span><span class="o">.</span><span class="n">fov_lon</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;fov_lat&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">moveaxis</span><span class="p">(</span><span class="n">fov_coords</span><span class="o">.</span><span class="n">fov_lat</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;fov_lon&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sign</span> <span class="o">*</span> <span class="n">fov_coords</span><span class="o">.</span><span class="n">fov_lon</span>
+            <span class="n">coords</span><span class="p">[</span><span class="s2">&quot;fov_lat&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">fov_coords</span><span class="o">.</span><span class="n">fov_lat</span>
+
+    <span class="k">return</span> <span class="n">coords</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">project_irf_on_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">irf</span><span class="p">,</span> <span class="n">fov_frame</span><span class="p">,</span> <span class="n">use_region_center</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Evaluate and project an IRF on a given `~gammapy.maps.Geom` object according to a given FoV Frame.</span>
+
+<span class="sd">    When ``geom`` is a `~gammapy.maps.RegionGeom`, the IRF is evaluated at the region center when</span>
+<span class="sd">    ``user_region_center is True``. Otherwise, the IRF is evaluated and averaged over the whole region.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    geom : `~gammapy.maps.Geom`</span>
+<span class="sd">        Geometry to project on. It must follow the required axes of the input IRF.</span>
+<span class="sd">    irf : `~gammapy.itf.IRF`</span>
+<span class="sd">        IRF to reproject.</span>
+<span class="sd">    fov_frame : `~gammapy.utils.coordinate.FoVICRSFrame` or `~gammapy.utils.coordinate.FoVAltAzFrame`</span>
+<span class="sd">        FoV frame to convert geometry to FoV coordinates.</span>
+<span class="sd">    use_region_center : bool, optional</span>
+<span class="sd">        For geom as a `~gammapy.maps.RegionGeom`. If True, consider the values at the region center.</span>
+<span class="sd">        If False, average over the whole region.</span>
+<span class="sd">        Default is True.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    map : `~gammapy.maps.Map`</span>
+<span class="sd">        Map containing the projected IRF.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">use_region_center</span><span class="p">:</span>
+        <span class="n">image_geom</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">to_wcs_geom</span><span class="p">()</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span>
+        <span class="n">region_coord</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_wcs_coord_and_weights</span><span class="p">()</span>
+        <span class="n">skycoord</span> <span class="o">=</span> <span class="n">region_coord</span><span class="o">.</span><span class="n">skycoord</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">image_geom</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span>
+        <span class="n">skycoord</span> <span class="o">=</span> <span class="n">image_geom</span><span class="o">.</span><span class="n">get_coord</span><span class="p">()</span><span class="o">.</span><span class="n">skycoord</span>
+
+    <span class="n">coords</span> <span class="o">=</span> <span class="n">_get_fov_coord</span><span class="p">(</span><span class="n">skycoord</span><span class="p">,</span> <span class="n">fov_frame</span><span class="p">,</span> <span class="n">irf</span><span class="o">.</span><span class="n">has_offset_axis</span><span class="p">)</span>
+
+    <span class="n">non_spatial_axes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">irf</span><span class="o">.</span><span class="n">required_arguments</span><span class="p">)</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span>
+        <span class="p">[</span><span class="s2">&quot;offset&quot;</span><span class="p">,</span> <span class="s2">&quot;fov_lon&quot;</span><span class="p">,</span> <span class="s2">&quot;fov_lat&quot;</span><span class="p">]</span>
+    <span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">axis_name</span> <span class="ow">in</span> <span class="n">non_spatial_axes</span><span class="p">:</span>
+        <span class="n">coords</span><span class="p">[</span><span class="n">axis_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">broadcast_axis_values_to_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">axis_name</span><span class="p">)</span>
+
+    <span class="n">data</span> <span class="o">=</span> <span class="n">irf</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="o">**</span><span class="n">coords</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">use_region_center</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">average</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">integrate_project_irf_on_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">irf</span><span class="p">,</span> <span class="n">fov_frame</span><span class="p">,</span> <span class="n">use_region_center</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Integrate and project an IRF on a given `~gammapy.maps.Geom` object according to a given FoV Frame.</span>
+
+<span class="sd">    The IRF is integrated in energy and multiplied by the solid angle.</span>
+
+<span class="sd">    When ``geom`` is a `~gammapy.maps.RegionGeom`, the IRF is evaluated at the region center when</span>
+<span class="sd">    ``user_region_center is True``. Otherwise, the IRF is evaluated and averaged over the whole region.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    geom : `~gammapy.maps.Geom`</span>
+<span class="sd">        Geometry to project on. It must follow the required axes of the input IRF.</span>
+<span class="sd">    irf : `~gammapy.irf.BackgroundIRF`</span>
+<span class="sd">        IRF to reproject. Typically a background IRF.</span>
+<span class="sd">    fov_frame : `~gammapy.utils.coordinate.FoVICRSFrame` or `~gammapy.utils.coordinate.FoVAltAzFrame`</span>
+<span class="sd">        FoV frame to convert geometry to FoV coordinates.</span>
+<span class="sd">    use_region_center : bool, optional</span>
+<span class="sd">        For geom as a `~gammapy.maps.RegionGeom`. If True, consider the values at the region center.</span>
+<span class="sd">        If False, average over the whole region.</span>
+<span class="sd">        Default is True.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    map : `~gammapy.maps.Map`</span>
+<span class="sd">        Map containing the projected IRF.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.integrate</span><span class="w"> </span><span class="kn">import</span> <span class="n">trapezoid</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">use_region_center</span><span class="p">:</span>
+        <span class="n">image_geom</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">to_wcs_geom</span><span class="p">()</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span>
+        <span class="n">region_coord</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">get_wcs_coord_and_weights</span><span class="p">()</span>
+        <span class="n">skycoord</span> <span class="o">=</span> <span class="n">region_coord</span><span class="o">.</span><span class="n">skycoord</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">image_geom</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span>
+        <span class="n">skycoord</span> <span class="o">=</span> <span class="n">image_geom</span><span class="o">.</span><span class="n">get_coord</span><span class="p">()</span><span class="o">.</span><span class="n">skycoord</span>
+
+    <span class="n">new_geom</span> <span class="o">=</span> <span class="n">geom</span>
+    <span class="c1"># In case we need to integrate over time</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">fov_frame</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">skycoord</span> <span class="o">=</span> <span class="n">skycoord</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">]</span>
+
+        <span class="c1"># Assume ordered times</span>
+        <span class="n">time</span> <span class="o">=</span> <span class="n">MapAxis</span><span class="o">.</span><span class="n">from_edges</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">fov_frame</span><span class="o">.</span><span class="n">obstime</span> <span class="o">-</span> <span class="n">fov_frame</span><span class="o">.</span><span class="n">obstime</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="s2">&quot;s&quot;</span><span class="p">),</span>
+            <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;s&quot;</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;time&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">axes</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">axes</span>
+
+        <span class="n">new_geom</span> <span class="o">=</span> <span class="n">image_geom</span><span class="o">.</span><span class="n">to_cube</span><span class="p">([</span><span class="n">time</span><span class="p">,</span> <span class="o">*</span><span class="n">axes</span><span class="p">])</span>
+
+    <span class="n">reverse_lon</span> <span class="o">=</span> <span class="n">irf</span><span class="o">.</span><span class="n">fov_alignment</span> <span class="o">==</span> <span class="s2">&quot;REVERSE_LON_RADEC&quot;</span>
+    <span class="n">coords</span> <span class="o">=</span> <span class="n">_get_fov_coord</span><span class="p">(</span><span class="n">skycoord</span><span class="p">,</span> <span class="n">fov_frame</span><span class="p">,</span> <span class="n">irf</span><span class="o">.</span><span class="n">has_offset_axis</span><span class="p">,</span> <span class="n">reverse_lon</span><span class="p">)</span>
+
+    <span class="n">non_spatial_axes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">irf</span><span class="o">.</span><span class="n">required_arguments</span><span class="p">)</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span>
+        <span class="p">[</span><span class="s2">&quot;offset&quot;</span><span class="p">,</span> <span class="s2">&quot;fov_lon&quot;</span><span class="p">,</span> <span class="s2">&quot;fov_lat&quot;</span><span class="p">]</span>
+    <span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">axis_name</span> <span class="ow">in</span> <span class="n">non_spatial_axes</span><span class="p">:</span>
+        <span class="n">coords</span><span class="p">[</span><span class="n">axis_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">broadcast_axis_values_to_geom</span><span class="p">(</span><span class="n">new_geom</span><span class="p">,</span> <span class="n">axis_name</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+
+    <span class="n">data</span> <span class="o">=</span> <span class="n">irf</span><span class="o">.</span><span class="n">integrate_log_log</span><span class="p">(</span><span class="o">**</span><span class="n">coords</span><span class="p">,</span> <span class="n">axis_name</span><span class="o">=</span><span class="s2">&quot;energy&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">fov_frame</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">time</span> <span class="o">=</span> <span class="n">new_geom</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">&quot;time&quot;</span><span class="p">]</span>
+        <span class="n">ontime</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">bin_width</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="s2">&quot;s&quot;</span><span class="p">)</span>
+        <span class="n">delta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">edges</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="s2">&quot;s&quot;</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">nbin</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">trapezoid</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">delta</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">ontime</span>
+
+    <span class="k">if</span> <span class="n">use_region_center</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">*=</span> <span class="n">image_geom</span><span class="o">.</span><span class="n">solid_angle</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">image_geom</span><span class="o">.</span><span class="n">coord_to_idx</span><span class="p">(</span><span class="n">region_coord</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">*=</span> <span class="n">image_geom</span><span class="o">.</span><span class="n">solid_angle</span><span class="p">()</span><span class="o">.</span><span class="n">T</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">weights</span> <span class="o">*</span> <span class="n">data</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span>
 </pre></div>
 
                 </article>
