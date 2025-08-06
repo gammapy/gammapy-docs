@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="2.0.dev2070+g2d849bce8" />
+  <meta name="docsearch:version" content="2.0.dev2087+gb7778b9df" />
   </head>
   
   
@@ -505,6 +505,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.utils.roots</span><span class="w"> </span><span class="kn">import</span> <span class="n">find_roots</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.utils.scripts</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.utils.random</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_random_state</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">gammapy.utils.parallel</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">parallel</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.utils.deprecation</span><span class="w"> </span><span class="kn">import</span> <span class="n">GammapyDeprecationWarning</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..covariance</span><span class="w"> </span><span class="kn">import</span> <span class="n">CovarianceMixin</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelBase</span>
@@ -560,14 +561,14 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    flux : `Map`</span>
+<span class="sd">    flux : `~gammapy.maps.Map`</span>
 <span class="sd">        Flux map.</span>
 <span class="sd">    energy_power : int, optional</span>
 <span class="sd">        Power of energy to multiply flux axis with. Default is 0.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
-<span class="sd">    flux : `Map`</span>
+<span class="sd">    flux : `~gammapy.maps.Map`</span>
 <span class="sd">        Scaled flux map.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">energy</span> <span class="o">=</span> <span class="n">flux</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">get_coord</span><span class="p">(</span><span class="n">sparse</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="s2">&quot;energy&quot;</span><span class="p">]</span>
@@ -582,15 +583,19 @@
 
 <div class="viewcode-block" id="integrate_spectrum">
 <a class="viewcode-back" href="../../../../api/gammapy.modeling.models.integrate_spectrum.html#gammapy.modeling.models.integrate_spectrum">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">integrate_spectrum</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">energy_min</span><span class="p">,</span> <span class="n">energy_max</span><span class="p">,</span> <span class="n">ndecade</span><span class="o">=</span><span class="mi">100</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">integrate_spectrum</span><span class="p">(</span>
+    <span class="n">func</span><span class="p">,</span> <span class="n">energy_min</span><span class="p">,</span> <span class="n">energy_max</span><span class="p">,</span> <span class="n">ndecade</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">energy_flux</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">parameter_samples</span><span class="o">=</span><span class="kc">None</span>
+<span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Integrate one-dimensional function using the log-log trapezoidal rule.</span>
 
 <span class="sd">    Internally an oversampling of the energy bins to &quot;ndecade&quot; is used.</span>
 
+<span class="sd">    To compute the integral func(E)*E (e.g. to get an energy flux) one can set `energy_flux` to True.</span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    func : callable</span>
-<span class="sd">        Function to integrate.</span>
+<span class="sd">        Function to integrate. Usually this is a `~gammapy.modeling.models.SpectralModel`</span>
 <span class="sd">    energy_min : `~astropy.units.Quantity`</span>
 <span class="sd">        Integration range minimum.</span>
 <span class="sd">    energy_max : `~astropy.units.Quantity`</span>
@@ -598,11 +603,46 @@
 <span class="sd">    ndecade : int, optional</span>
 <span class="sd">        Number of grid points per decade used for the integration.</span>
 <span class="sd">        Default is 100.</span>
+<span class="sd">    parameter_samples : list, optional</span>
+<span class="sd">        List of parameter quantities to pass to `func.evaluate` if it exists.</span>
+<span class="sd">        This provides vectorized integral evaluation for parameter samples.</span>
+<span class="sd">        If None, evaluation is performed with a simple call to `func`. Default is None.</span>
+<span class="sd">    energy_flux : bool, optional</span>
+<span class="sd">        If True, the function will integrate func(E)*E, to compute the energy flux.</span>
+<span class="sd">        Default is False.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># Here we impose to duplicate the number</span>
     <span class="n">num</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">ndecade</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="n">energy_max</span> <span class="o">/</span> <span class="n">energy_min</span><span class="p">)),</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="c1"># the shape of energy is (n_energy, num)</span>
     <span class="n">energy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">geomspace</span><span class="p">(</span><span class="n">energy_min</span><span class="p">,</span> <span class="n">energy_max</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">num</span><span class="p">),</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
-    <span class="n">integral</span> <span class="o">=</span> <span class="n">trapz_loglog</span><span class="p">(</span><span class="n">func</span><span class="p">(</span><span class="n">energy</span><span class="p">),</span> <span class="n">energy</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">parameter_samples</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">SpectralModel</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;Integration with parameter samples requires SpectralModel. Got type(func) instead.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># need to convert</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">q</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">energy</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span> <span class="k">if</span> <span class="n">q</span><span class="o">.</span><span class="n">unit</span><span class="o">.</span><span class="n">physical_type</span> <span class="o">==</span> <span class="s2">&quot;energy&quot;</span> <span class="k">else</span> <span class="n">q</span>
+            <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">parameter_samples</span>
+        <span class="p">]</span>
+        <span class="c1"># this will create an array of shape (n_energy, num, n_samples)</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="n">energy</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">],</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
+        <span class="c1"># We repeat energy n_sample times and reshape to (n_energy, num, n_samples)</span>
+        <span class="n">energy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">energy</span><span class="p">,</span> <span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="c1"># We swap axes to have arrays of shape (n_energy, n_samples, num)</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">swapaxes</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">energy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">swapaxes</span><span class="p">(</span><span class="n">energy</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="n">energy</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">energy_flux</span><span class="p">:</span>
+        <span class="n">values</span> <span class="o">*=</span> <span class="n">energy</span>
+
+    <span class="c1"># we can call trapz_loglog assuming the last axis is the one to perform integration on.</span>
+    <span class="n">integral</span> <span class="o">=</span> <span class="n">trapz_loglog</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">energy</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="c1"># integral.shape = (num, n_energy, n_samples) so we sum on axis 0</span>
     <span class="k">return</span> <span class="n">integral</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></div>
 
 
@@ -658,19 +698,21 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__rsub__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="fm">__sub__</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_samples</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fct</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_samples</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fct</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">samples</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create SED samples from parameters and covariance</span>
 <span class="sd">        using multivariate normal distribution.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        fct : `~astropy.units.Quantity`</span>
+<span class="sd">        fct : callable</span>
 <span class="sd">            Function to estimate the SED.</span>
 <span class="sd">        n_samples : int, optional</span>
 <span class="sd">            Number of samples to generate. Default is 10000.</span>
 <span class="sd">        random_state : {int, &#39;random-seed&#39;, &#39;global-rng&#39;, `~numpy.random.RandomState`}, optional</span>
 <span class="sd">                Defines random number generator initialisation.</span>
 <span class="sd">                Passed to `~gammapy.utils.random.get_random_state`. Default is 42.</span>
+<span class="sd">        samples : list of `~astropy.units.Quantity`, optional</span>
+<span class="sd">            List of parameter samples in the same order as model.parameters</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -678,14 +720,26 @@
 <span class="sd">            Array of SED samples</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">rng</span> <span class="o">=</span> <span class="n">get_random_state</span><span class="p">(</span><span class="n">random_state</span><span class="p">)</span>
 
-        <span class="n">samples</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">multivariate_normal</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
-            <span class="n">n_samples</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">([</span><span class="n">fct</span><span class="p">(</span><span class="n">samples</span><span class="p">[</span><span class="n">k</span><span class="p">,</span> <span class="p">:])</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_samples</span><span class="p">)])</span>
+        <span class="k">if</span> <span class="n">samples</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">rng</span> <span class="o">=</span> <span class="n">get_random_state</span><span class="p">(</span><span class="n">random_state</span><span class="p">)</span>
+            <span class="n">samples</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">multivariate_normal</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+                <span class="n">n_samples</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">samples</span> <span class="o">=</span> <span class="p">[</span><span class="n">samples</span><span class="p">[:,</span> <span class="n">k</span><span class="p">]</span> <span class="o">*</span> <span class="n">p</span><span class="o">.</span><span class="n">unit</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">)]</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">fct</span><span class="p">(</span><span class="o">*</span><span class="n">samples</span><span class="p">))</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="c1"># fallback if function is not vectorized</span>
+            <span class="n">output</span> <span class="o">=</span> <span class="n">parallel</span><span class="o">.</span><span class="n">run_multiprocessing</span><span class="p">(</span>
+                <span class="n">fct</span><span class="p">,</span>
+                <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">samples</span><span class="p">),</span>
+                <span class="n">pool_kwargs</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">processes</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">output</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_get_errors</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">samples</span><span class="p">,</span> <span class="n">n_sigma</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute median, negative, and positive errors from samples of SED.</span>
@@ -705,9 +759,9 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">cdf</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">norm</span><span class="o">.</span><span class="n">cdf</span>
 
-        <span class="n">median</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-        <span class="n">errn</span> <span class="o">=</span> <span class="n">median</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="mi">100</span> <span class="o">*</span> <span class="n">cdf</span><span class="p">(</span><span class="o">-</span><span class="n">n_sigma</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-        <span class="n">errp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="mi">100</span> <span class="o">*</span> <span class="n">cdf</span><span class="p">(</span><span class="n">n_sigma</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">-</span> <span class="n">median</span>
+        <span class="n">median</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">errn</span> <span class="o">=</span> <span class="n">median</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="mi">100</span> <span class="o">*</span> <span class="n">cdf</span><span class="p">(</span><span class="o">-</span><span class="n">n_sigma</span><span class="p">),</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">errp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="mi">100</span> <span class="o">*</span> <span class="n">cdf</span><span class="p">(</span><span class="n">n_sigma</span><span class="p">),</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="n">median</span>
         <span class="k">return</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span>
             <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">atleast_1d</span><span class="p">(</span><span class="n">median</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">atleast_1d</span><span class="p">(</span><span class="n">errn</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">atleast_1d</span><span class="p">(</span><span class="n">errp</span><span class="p">)],</span>
             <span class="n">unit</span><span class="o">=</span><span class="n">samples</span><span class="o">.</span><span class="n">unit</span><span class="p">,</span>
@@ -715,7 +769,9 @@
 
 <div class="viewcode-block" id="SpectralModel.evaluate_error">
 <a class="viewcode-back" href="../../../../api/gammapy.modeling.models.SpectralModel.html#gammapy.modeling.models.SpectralModel.evaluate_error">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate_error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">3500</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate_error</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">3500</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">samples</span><span class="o">=</span><span class="kc">None</span>
+    <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate spectral model error from parameter distribution sampling.</span>
 
 <span class="sd">        Parameters</span>
@@ -731,6 +787,8 @@
 <span class="sd">        random_state : {int, &#39;random-seed&#39;, &#39;global-rng&#39;, `~numpy.random.RandomState`}, optional</span>
 <span class="sd">            Defines random number generator initialisation.</span>
 <span class="sd">            Passed to `~gammapy.utils.random.get_random_state`. Default is 42.</span>
+<span class="sd">        samples : list of `~astropy.units.Quantity`, optional</span>
+<span class="sd">            List of parameter samples in the same order as model.parameters</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -749,14 +807,17 @@
         <span class="n">m</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
         <span class="n">n_pars</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">parameters</span><span class="p">)</span>
 
-        <span class="k">def</span><span class="w"> </span><span class="nf">fct</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
-            <span class="n">m</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">values</span>
-            <span class="k">return</span> <span class="n">m</span><span class="p">(</span><span class="n">energy</span><span class="p">)</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">fct</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">m</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="n">energy</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">],</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
 
-        <span class="n">samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_samples</span><span class="p">(</span>
-            <span class="n">fct</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="n">n_pars</span> <span class="o">*</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span>
+        <span class="n">propagated_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_samples</span><span class="p">(</span>
+            <span class="n">fct</span><span class="p">,</span>
+            <span class="n">n_samples</span><span class="o">=</span><span class="n">n_pars</span> <span class="o">*</span> <span class="n">n_samples</span><span class="p">,</span>
+            <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">,</span>
+            <span class="n">samples</span><span class="o">=</span><span class="n">samples</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_errors</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span></div>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_errors</span><span class="p">(</span><span class="n">propagated_samples</span><span class="p">)</span></div>
 
 
     <span class="nd">@property</span>
@@ -776,7 +837,7 @@
         <span class="k">def</span><span class="w"> </span><span class="nf">min_func</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
 <span class="w">            </span><span class="sd">&quot;&quot;&quot;Function to minimise.&quot;&quot;&quot;</span>
             <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-            <span class="n">dnde</span><span class="p">,</span> <span class="n">dnde_errn</span><span class="p">,</span> <span class="n">dnde_errp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">evaluate_error</span><span class="p">(</span><span class="n">x</span> <span class="o">*</span> <span class="n">x_unit</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">400</span><span class="p">)</span>
+            <span class="n">dnde</span><span class="p">,</span> <span class="n">dnde_errn</span><span class="p">,</span> <span class="n">dnde_errp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">evaluate_error</span><span class="p">(</span><span class="n">x</span> <span class="o">*</span> <span class="n">x_unit</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">500</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">dnde_errn</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">dnde_errp</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="n">dnde</span>
 
         <span class="n">bounds</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reference</span><span class="o">.</span><span class="n">value</span><span class="p">)</span> <span class="o">-</span> <span class="mi">3</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reference</span><span class="o">.</span><span class="n">value</span><span class="p">)</span> <span class="o">+</span> <span class="mi">3</span><span class="p">]</span>
@@ -824,7 +885,14 @@
 <div class="viewcode-block" id="SpectralModel.integral_error">
 <a class="viewcode-back" href="../../../../api/gammapy.modeling.models.SpectralModel.html#gammapy.modeling.models.SpectralModel.integral_error">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">integral_error</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">energy_min</span><span class="p">,</span> <span class="n">energy_max</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">3500</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">energy_min</span><span class="p">,</span>
+        <span class="n">energy_max</span><span class="p">,</span>
+        <span class="n">epsilon</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span>
+        <span class="n">n_samples</span><span class="o">=</span><span class="mi">3500</span><span class="p">,</span>
+        <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+        <span class="n">samples</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate the error of the integral flux of a given spectrum in a given energy range.</span>
 
@@ -838,7 +906,11 @@
 <span class="sd">            Deprecated in v2.0 and unused.</span>
 <span class="sd">        n_samples : int, optional</span>
 <span class="sd">            Number of samples to generate per parameter. Default is 3500.</span>
-
+<span class="sd">        random_state : {int, &#39;random-seed&#39;, &#39;global-rng&#39;, `~numpy.random.RandomState`}, optional</span>
+<span class="sd">            Defines random number generator initialisation.</span>
+<span class="sd">            Passed to `~gammapy.utils.random.get_random_state`. Default is 42.</span>
+<span class="sd">        samples : list of `~astropy.units.Quantity`, optional</span>
+<span class="sd">            List of parameter samples in the same order as model.parameters</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -857,12 +929,23 @@
         <span class="n">m</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
         <span class="n">n_pars</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">parameters</span><span class="p">)</span>
 
-        <span class="k">def</span><span class="w"> </span><span class="nf">fct</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
-            <span class="n">m</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">values</span>
-            <span class="k">return</span> <span class="n">m</span><span class="o">.</span><span class="n">integral</span><span class="p">(</span><span class="n">energy_min</span><span class="p">,</span> <span class="n">energy_max</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">fct</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">integrate_spectrum</span><span class="p">(</span>
+                <span class="bp">self</span><span class="p">,</span>
+                <span class="n">energy_min</span><span class="p">,</span>
+                <span class="n">energy_max</span><span class="p">,</span>
+                <span class="n">parameter_samples</span><span class="o">=</span><span class="n">args</span><span class="p">,</span>
+                <span class="n">energy_flux</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
 
-        <span class="n">samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_samples</span><span class="p">(</span><span class="n">fct</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="n">n_pars</span> <span class="o">*</span> <span class="n">n_samples</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_errors</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span></div>
+        <span class="n">propagated_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_samples</span><span class="p">(</span>
+            <span class="n">fct</span><span class="p">,</span>
+            <span class="n">n_samples</span><span class="o">=</span><span class="n">n_pars</span> <span class="o">*</span> <span class="n">n_samples</span><span class="p">,</span>
+            <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">,</span>
+            <span class="n">samples</span><span class="o">=</span><span class="n">samples</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_errors</span><span class="p">(</span><span class="n">propagated_samples</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="SpectralModel.energy_flux">
@@ -895,7 +978,14 @@
 <div class="viewcode-block" id="SpectralModel.energy_flux_error">
 <a class="viewcode-back" href="../../../../api/gammapy.modeling.models.SpectralModel.html#gammapy.modeling.models.SpectralModel.energy_flux_error">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">energy_flux_error</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">energy_min</span><span class="p">,</span> <span class="n">energy_max</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">3500</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">energy_min</span><span class="p">,</span>
+        <span class="n">energy_max</span><span class="p">,</span>
+        <span class="n">epsilon</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span>
+        <span class="n">n_samples</span><span class="o">=</span><span class="mi">3500</span><span class="p">,</span>
+        <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+        <span class="n">samples</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate the error of the energy flux of a given spectrum in a given energy range.</span>
 
@@ -909,6 +999,11 @@
 <span class="sd">            Deprecated in v2.0 and unused.</span>
 <span class="sd">        n_samples : int, optional</span>
 <span class="sd">            Number of samples to generate per parameter. Default is 3500.</span>
+<span class="sd">        random_state : {int, &#39;random-seed&#39;, &#39;global-rng&#39;, `~numpy.random.RandomState`}, optional</span>
+<span class="sd">            Defines random number generator initialisation.</span>
+<span class="sd">            Passed to `~gammapy.utils.random.get_random_state`. Default is 42.</span>
+<span class="sd">        samples : list of `~astropy.units.Quantity`, optional</span>
+<span class="sd">            List of parameter samples in the same order as model.parameters</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -927,12 +1022,23 @@
         <span class="n">m</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
         <span class="n">n_pars</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">parameters</span><span class="p">)</span>
 
-        <span class="k">def</span><span class="w"> </span><span class="nf">fct</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
-            <span class="n">m</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">values</span>
-            <span class="k">return</span> <span class="n">m</span><span class="o">.</span><span class="n">energy_flux</span><span class="p">(</span><span class="n">energy_min</span><span class="p">,</span> <span class="n">energy_max</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">fct</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">integrate_spectrum</span><span class="p">(</span>
+                <span class="bp">self</span><span class="p">,</span>
+                <span class="n">energy_min</span><span class="p">,</span>
+                <span class="n">energy_max</span><span class="p">,</span>
+                <span class="n">parameter_samples</span><span class="o">=</span><span class="n">args</span><span class="p">,</span>
+                <span class="n">energy_flux</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
 
-        <span class="n">samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_samples</span><span class="p">(</span><span class="n">fct</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="n">n_pars</span> <span class="o">*</span> <span class="n">n_samples</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_errors</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span></div>
+        <span class="n">propagated_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_samples</span><span class="p">(</span>
+            <span class="n">fct</span><span class="p">,</span>
+            <span class="n">n_samples</span><span class="o">=</span><span class="n">n_pars</span> <span class="o">*</span> <span class="n">n_samples</span><span class="p">,</span>
+            <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">,</span>
+            <span class="n">samples</span><span class="o">=</span><span class="n">samples</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_errors</span><span class="p">(</span><span class="n">propagated_samples</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="SpectralModel.reference_fluxes">
@@ -979,24 +1085,40 @@
         <span class="n">flux</span><span class="o">.</span><span class="n">quantity</span> <span class="o">=</span> <span class="n">output</span>
         <span class="k">return</span> <span class="n">flux</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_get_plot_flux_error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">,</span> <span class="n">sed_type</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_plot_flux_error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">,</span> <span class="n">sed_type</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">random_state</span><span class="p">,</span> <span class="n">samples</span><span class="p">):</span>
         <span class="n">flux</span> <span class="o">=</span> <span class="n">RegionNDMap</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">region</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">[</span><span class="n">energy</span><span class="p">])</span>
         <span class="n">flux_errn</span> <span class="o">=</span> <span class="n">RegionNDMap</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">region</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">[</span><span class="n">energy</span><span class="p">])</span>
         <span class="n">flux_errp</span> <span class="o">=</span> <span class="n">RegionNDMap</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">region</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">[</span><span class="n">energy</span><span class="p">])</span>
 
         <span class="k">if</span> <span class="n">sed_type</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;dnde&quot;</span><span class="p">,</span> <span class="s2">&quot;norm&quot;</span><span class="p">]:</span>
-            <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">evaluate_error</span><span class="p">(</span><span class="n">energy</span><span class="o">.</span><span class="n">center</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="n">n_samples</span><span class="p">)</span>
+            <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">evaluate_error</span><span class="p">(</span>
+                <span class="n">energy</span><span class="o">.</span><span class="n">center</span><span class="p">,</span>
+                <span class="n">n_samples</span><span class="o">=</span><span class="n">n_samples</span><span class="p">,</span>
+                <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">,</span>
+                <span class="n">samples</span><span class="o">=</span><span class="n">samples</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="k">elif</span> <span class="n">sed_type</span> <span class="o">==</span> <span class="s2">&quot;e2dnde&quot;</span><span class="p">:</span>
             <span class="n">output</span> <span class="o">=</span> <span class="n">energy</span><span class="o">.</span><span class="n">center</span><span class="o">**</span><span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">evaluate_error</span><span class="p">(</span>
-                <span class="n">energy</span><span class="o">.</span><span class="n">center</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="n">n_samples</span>
+                <span class="n">energy</span><span class="o">.</span><span class="n">center</span><span class="p">,</span>
+                <span class="n">n_samples</span><span class="o">=</span><span class="n">n_samples</span><span class="p">,</span>
+                <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">,</span>
+                <span class="n">samples</span><span class="o">=</span><span class="n">samples</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">elif</span> <span class="n">sed_type</span> <span class="o">==</span> <span class="s2">&quot;flux&quot;</span><span class="p">:</span>
             <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">integral_error</span><span class="p">(</span>
-                <span class="n">energy</span><span class="o">.</span><span class="n">edges_min</span><span class="p">,</span> <span class="n">energy</span><span class="o">.</span><span class="n">edges_max</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="n">n_samples</span>
+                <span class="n">energy</span><span class="o">.</span><span class="n">edges_min</span><span class="p">,</span>
+                <span class="n">energy</span><span class="o">.</span><span class="n">edges_max</span><span class="p">,</span>
+                <span class="n">n_samples</span><span class="o">=</span><span class="n">n_samples</span><span class="p">,</span>
+                <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">,</span>
+                <span class="n">samples</span><span class="o">=</span><span class="n">samples</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">elif</span> <span class="n">sed_type</span> <span class="o">==</span> <span class="s2">&quot;eflux&quot;</span><span class="p">:</span>
             <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_flux_error</span><span class="p">(</span>
-                <span class="n">energy</span><span class="o">.</span><span class="n">edges_min</span><span class="p">,</span> <span class="n">energy</span><span class="o">.</span><span class="n">edges_max</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="n">n_samples</span>
+                <span class="n">energy</span><span class="o">.</span><span class="n">edges_min</span><span class="p">,</span>
+                <span class="n">energy</span><span class="o">.</span><span class="n">edges_max</span><span class="p">,</span>
+                <span class="n">n_samples</span><span class="o">=</span><span class="n">n_samples</span><span class="p">,</span>
+                <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">,</span>
+                <span class="n">samples</span><span class="o">=</span><span class="n">samples</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Not a valid SED type: &#39;</span><span class="si">{</span><span class="n">sed_type</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
@@ -1093,6 +1215,8 @@
         <span class="n">energy_power</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
         <span class="n">n_points</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
         <span class="n">n_samples</span><span class="o">=</span><span class="mi">3500</span><span class="p">,</span>
+        <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+        <span class="n">samples</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Plot spectral model error band.</span>
@@ -1126,6 +1250,11 @@
 <span class="sd">            Number of evaluation nodes. Default is 100.</span>
 <span class="sd">        n_samples : int, optional</span>
 <span class="sd">            Number of samples generated per parameter to estimate the error band. Default is 3500.</span>
+<span class="sd">        random_state : {int, &#39;random-seed&#39;, &#39;global-rng&#39;, `~numpy.random.RandomState`}, optional</span>
+<span class="sd">            Defines random number generator initialisation.</span>
+<span class="sd">            Passed to `~gammapy.utils.random.get_random_state`. Default is 42.</span>
+<span class="sd">        samples : list of `~astropy.units.Quantity`, optional</span>
+<span class="sd">            List of parameter samples in the same order as model.parameters</span>
 <span class="sd">        **kwargs : dict</span>
 <span class="sd">            Keyword arguments forwarded to `matplotlib.pyplot.fill_between`.</span>
 
@@ -1164,7 +1293,11 @@
             <span class="n">ax</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">set_units</span><span class="p">(</span><span class="n">DEFAULT_UNIT</span><span class="p">[</span><span class="n">sed_type</span><span class="p">]</span> <span class="o">*</span> <span class="n">energy</span><span class="o">.</span><span class="n">unit</span><span class="o">**</span><span class="n">energy_power</span><span class="p">)</span>
 
         <span class="n">flux</span><span class="p">,</span> <span class="n">flux_errn</span><span class="p">,</span> <span class="n">flux_errp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_plot_flux_error</span><span class="p">(</span>
-            <span class="n">sed_type</span><span class="o">=</span><span class="n">sed_type</span><span class="p">,</span> <span class="n">energy</span><span class="o">=</span><span class="n">energy</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="n">n_samples</span>
+            <span class="n">sed_type</span><span class="o">=</span><span class="n">sed_type</span><span class="p">,</span>
+            <span class="n">energy</span><span class="o">=</span><span class="n">energy</span><span class="p">,</span>
+            <span class="n">n_samples</span><span class="o">=</span><span class="n">n_samples</span><span class="p">,</span>
+            <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">,</span>
+            <span class="n">samples</span><span class="o">=</span><span class="n">samples</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">y_lo</span> <span class="o">=</span> <span class="n">scale_plot_flux</span><span class="p">(</span><span class="n">flux</span> <span class="o">-</span> <span class="n">flux_errn</span><span class="p">,</span> <span class="n">energy_power</span><span class="p">)</span><span class="o">.</span><span class="n">quantity</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
         <span class="n">y_hi</span> <span class="o">=</span> <span class="n">scale_plot_flux</span><span class="p">(</span><span class="n">flux</span> <span class="o">+</span> <span class="n">flux_errp</span><span class="p">,</span> <span class="n">energy_power</span><span class="p">)</span><span class="o">.</span><span class="n">quantity</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
@@ -1221,9 +1354,17 @@
         <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">f1</span> <span class="o">/</span> <span class="n">f2</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">epsilon</span><span class="p">)</span></div>
 
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_evaluate_spectral_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Same as spectral_index but with parameters samples quantities as *args&quot;&quot;&quot;</span>
+        <span class="n">f1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="n">energy</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
+        <span class="n">f2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="n">energy</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">epsilon</span><span class="p">),</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">f1</span> <span class="o">/</span> <span class="n">f2</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">epsilon</span><span class="p">)</span>
+
 <div class="viewcode-block" id="SpectralModel.spectral_index_error">
 <a class="viewcode-back" href="../../../../api/gammapy.modeling.models.SpectralModel.html#gammapy.modeling.models.SpectralModel.spectral_index_error">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">spectral_index_error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">3500</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">spectral_index_error</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">3500</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">samples</span><span class="o">=</span><span class="kc">None</span>
+    <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate the error on spectral index at the given energy.</span>
 
 <span class="sd">        Parameters</span>
@@ -1235,6 +1376,11 @@
 <span class="sd">            Default is 1e-5. Deprecated in v2.0 and unsued.</span>
 <span class="sd">        n_samples : int, optional</span>
 <span class="sd">            Number of samples to generate per parameter. Default is 3500.</span>
+<span class="sd">        random_state : {int, &#39;random-seed&#39;, &#39;global-rng&#39;, `~numpy.random.RandomState`}, optional</span>
+<span class="sd">            Defines random number generator initialisation.</span>
+<span class="sd">            Passed to `~gammapy.utils.random.get_random_state`. Default is 42.</span>
+<span class="sd">        samples : list of `~astropy.units.Quantity`, optional</span>
+<span class="sd">            List of parameter samples in the same order as model.parameters</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -1252,12 +1398,18 @@
         <span class="n">m</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
         <span class="n">n_pars</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">parameters</span><span class="p">)</span>
 
-        <span class="k">def</span><span class="w"> </span><span class="nf">fct</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
-            <span class="n">m</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">values</span>
-            <span class="k">return</span> <span class="n">m</span><span class="o">.</span><span class="n">spectral_index</span><span class="p">(</span><span class="n">energy</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">)</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">fct</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">m</span><span class="o">.</span><span class="n">_evaluate_spectral_index</span><span class="p">(</span>
+                <span class="n">energy</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">],</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mf">1e-5</span>
+            <span class="p">)</span>
 
-        <span class="n">samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_samples</span><span class="p">(</span><span class="n">fct</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="n">n_pars</span> <span class="o">*</span> <span class="n">n_samples</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_errors</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span></div>
+        <span class="n">propagated_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_samples</span><span class="p">(</span>
+            <span class="n">fct</span><span class="p">,</span>
+            <span class="n">n_samples</span><span class="o">=</span><span class="n">n_pars</span> <span class="o">*</span> <span class="n">n_samples</span><span class="p">,</span>
+            <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">,</span>
+            <span class="n">samples</span><span class="o">=</span><span class="n">samples</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_errors</span><span class="p">(</span><span class="n">propagated_samples</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="SpectralModel.inverse">
@@ -2360,11 +2512,11 @@
         <span class="p">)</span>
 
         <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">index_2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">energy</span> <span class="o">/</span> <span class="n">reference</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mf">1e-2</span>
-        <span class="n">ln_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">energy</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">/</span> <span class="n">reference</span><span class="p">)</span>
+        <span class="n">ln_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">energy</span> <span class="o">/</span> <span class="n">reference</span><span class="p">)</span>
         <span class="n">power</span> <span class="o">=</span> <span class="o">-</span><span class="n">expfactor</span> <span class="o">*</span> <span class="p">(</span>
             <span class="n">ln_</span> <span class="o">/</span> <span class="mf">2.0</span> <span class="o">+</span> <span class="n">index_2</span> <span class="o">/</span> <span class="mf">6.0</span> <span class="o">*</span> <span class="n">ln_</span><span class="o">**</span><span class="mf">2.0</span> <span class="o">+</span> <span class="n">index_2</span><span class="o">**</span><span class="mf">2.0</span> <span class="o">/</span> <span class="mf">24.0</span> <span class="o">*</span> <span class="n">ln_</span><span class="o">**</span><span class="mi">3</span>
         <span class="p">)</span>
-        <span class="n">cutoff</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">energy</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">/</span> <span class="n">reference</span><span class="p">)</span> <span class="o">**</span> <span class="n">power</span>
+        <span class="n">cutoff</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="p">((</span><span class="n">energy</span> <span class="o">/</span> <span class="n">reference</span><span class="p">)</span> <span class="o">**</span> <span class="n">power</span><span class="p">)[</span><span class="n">mask</span><span class="p">]</span>
         <span class="k">return</span> <span class="n">pwl</span> <span class="o">*</span> <span class="n">cutoff</span></div>
 
 
@@ -3180,7 +3332,7 @@
 
 <div class="viewcode-block" id="NaimaSpectralModel.evaluate">
 <a class="viewcode-back" href="../../../../api/gammapy.modeling.models.NaimaSpectralModel.html#gammapy.modeling.models.NaimaSpectralModel.evaluate">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate the model.</span>
 
 <span class="sd">        Parameters</span>
@@ -3193,8 +3345,9 @@
 <span class="sd">        dnde : `~astropy.units.Quantity`</span>
 <span class="sd">            Differential flux at given energy.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_update_naima_parameters</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">q</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">q</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">default_parameters</span><span class="o">.</span><span class="n">names</span><span class="p">,</span> <span class="n">args</span><span class="p">)}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update_naima_parameters</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_ssc</span><span class="p">:</span>
             <span class="n">dnde</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_evaluate_ssc</span><span class="p">(</span><span class="n">energy</span><span class="o">.</span><span class="n">flatten</span><span class="p">())</span>
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">seed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -3203,10 +3356,18 @@
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">dnde</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">radiative_model</span><span class="o">.</span><span class="n">flux</span><span class="p">(</span><span class="n">energy</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span> <span class="n">distance</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">distance</span><span class="p">)</span>
-
         <span class="n">dnde</span> <span class="o">=</span> <span class="n">dnde</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">energy</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
         <span class="n">unit</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="p">(</span><span class="n">energy</span><span class="o">.</span><span class="n">unit</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">cm</span><span class="o">**</span><span class="mi">2</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">s</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">dnde</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">unit</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NaimaSpectralModel.__call__">
+<a class="viewcode-back" href="../../../../api/gammapy.modeling.models.NaimaSpectralModel.html#gammapy.modeling.models.NaimaSpectralModel.__call__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">):</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="n">par</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">par</span><span class="o">.</span><span class="n">quantity</span> <span class="k">for</span> <span class="n">par</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">}</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_evaluate_unit</span><span class="p">(</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">energy</span><span class="p">)</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="n">energy</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="NaimaSpectralModel.to_dict">
