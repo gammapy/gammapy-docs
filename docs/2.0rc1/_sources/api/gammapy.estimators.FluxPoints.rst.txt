@@ -1,0 +1,213 @@
+FluxPoints
+==========
+
+.. currentmodule:: gammapy.estimators
+
+.. autoclass:: FluxPoints
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~FluxPoints.acceptance_off
+      ~FluxPoints.acceptance_on
+      ~FluxPoints.alpha
+      ~FluxPoints.available_quantities
+      ~FluxPoints.counts
+      ~FluxPoints.dnde
+      ~FluxPoints.dnde_err
+      ~FluxPoints.dnde_errn
+      ~FluxPoints.dnde_errp
+      ~FluxPoints.dnde_ref
+      ~FluxPoints.dnde_scan_values
+      ~FluxPoints.dnde_ul
+      ~FluxPoints.e2dnde
+      ~FluxPoints.e2dnde_err
+      ~FluxPoints.e2dnde_errn
+      ~FluxPoints.e2dnde_errp
+      ~FluxPoints.e2dnde_ref
+      ~FluxPoints.e2dnde_ul
+      ~FluxPoints.eflux
+      ~FluxPoints.eflux_err
+      ~FluxPoints.eflux_errn
+      ~FluxPoints.eflux_errp
+      ~FluxPoints.eflux_ref
+      ~FluxPoints.eflux_ul
+      ~FluxPoints.energy_axis
+      ~FluxPoints.energy_max
+      ~FluxPoints.energy_min
+      ~FluxPoints.energy_ref
+      ~FluxPoints.filter_success_nan
+      ~FluxPoints.flux
+      ~FluxPoints.flux_err
+      ~FluxPoints.flux_errn
+      ~FluxPoints.flux_errp
+      ~FluxPoints.flux_ref
+      ~FluxPoints.flux_sensitivity
+      ~FluxPoints.flux_ul
+      ~FluxPoints.geom
+      ~FluxPoints.has_any_ts
+      ~FluxPoints.has_stat_profiles
+      ~FluxPoints.has_success
+      ~FluxPoints.has_ul
+      ~FluxPoints.is_convertible_to_flux_sed_type
+      ~FluxPoints.is_ul
+      ~FluxPoints.n_dof
+      ~FluxPoints.n_sigma
+      ~FluxPoints.n_sigma_ul
+      ~FluxPoints.niter
+      ~FluxPoints.norm
+      ~FluxPoints.norm_err
+      ~FluxPoints.norm_errn
+      ~FluxPoints.norm_errp
+      ~FluxPoints.norm_sensitivity
+      ~FluxPoints.norm_ul
+      ~FluxPoints.npred
+      ~FluxPoints.npred_background
+      ~FluxPoints.npred_excess
+      ~FluxPoints.npred_excess_err
+      ~FluxPoints.npred_excess_errn
+      ~FluxPoints.npred_excess_errp
+      ~FluxPoints.npred_excess_ref
+      ~FluxPoints.npred_excess_ul
+      ~FluxPoints.reference_model
+      ~FluxPoints.reference_model_default
+      ~FluxPoints.reference_spectral_model
+      ~FluxPoints.sed_type_init
+      ~FluxPoints.sed_type_plot_default
+      ~FluxPoints.sqrt_ts
+      ~FluxPoints.sqrt_ts_threshold_ul
+      ~FluxPoints.stat
+      ~FluxPoints.stat_null
+      ~FluxPoints.stat_scan
+      ~FluxPoints.success
+      ~FluxPoints.ts
+      ~FluxPoints.ts_scan
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~FluxPoints.all_quantities
+      ~FluxPoints.copy
+      ~FluxPoints.from_hdulist
+      ~FluxPoints.from_maps
+      ~FluxPoints.from_stack
+      ~FluxPoints.from_table
+      ~FluxPoints.get_flux_points
+      ~FluxPoints.iter_by_axis
+      ~FluxPoints.plot
+      ~FluxPoints.plot_ts_profiles
+      ~FluxPoints.read
+      ~FluxPoints.recompute_ul
+      ~FluxPoints.resample_axis
+      ~FluxPoints.slice_by_coord
+      ~FluxPoints.slice_by_energy
+      ~FluxPoints.slice_by_idx
+      ~FluxPoints.slice_by_time
+      ~FluxPoints.to_hdulist
+      ~FluxPoints.to_maps
+      ~FluxPoints.to_table
+      ~FluxPoints.write
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: acceptance_off
+   .. autoattribute:: acceptance_on
+   .. autoattribute:: alpha
+   .. autoattribute:: available_quantities
+   .. autoattribute:: counts
+   .. autoattribute:: dnde
+   .. autoattribute:: dnde_err
+   .. autoattribute:: dnde_errn
+   .. autoattribute:: dnde_errp
+   .. autoattribute:: dnde_ref
+   .. autoattribute:: dnde_scan_values
+   .. autoattribute:: dnde_ul
+   .. autoattribute:: e2dnde
+   .. autoattribute:: e2dnde_err
+   .. autoattribute:: e2dnde_errn
+   .. autoattribute:: e2dnde_errp
+   .. autoattribute:: e2dnde_ref
+   .. autoattribute:: e2dnde_ul
+   .. autoattribute:: eflux
+   .. autoattribute:: eflux_err
+   .. autoattribute:: eflux_errn
+   .. autoattribute:: eflux_errp
+   .. autoattribute:: eflux_ref
+   .. autoattribute:: eflux_ul
+   .. autoattribute:: energy_axis
+   .. autoattribute:: energy_max
+   .. autoattribute:: energy_min
+   .. autoattribute:: energy_ref
+   .. autoattribute:: filter_success_nan
+   .. autoattribute:: flux
+   .. autoattribute:: flux_err
+   .. autoattribute:: flux_errn
+   .. autoattribute:: flux_errp
+   .. autoattribute:: flux_ref
+   .. autoattribute:: flux_sensitivity
+   .. autoattribute:: flux_ul
+   .. autoattribute:: geom
+   .. autoattribute:: has_any_ts
+   .. autoattribute:: has_stat_profiles
+   .. autoattribute:: has_success
+   .. autoattribute:: has_ul
+   .. autoattribute:: is_convertible_to_flux_sed_type
+   .. autoattribute:: is_ul
+   .. autoattribute:: n_dof
+   .. autoattribute:: n_sigma
+   .. autoattribute:: n_sigma_ul
+   .. autoattribute:: niter
+   .. autoattribute:: norm
+   .. autoattribute:: norm_err
+   .. autoattribute:: norm_errn
+   .. autoattribute:: norm_errp
+   .. autoattribute:: norm_sensitivity
+   .. autoattribute:: norm_ul
+   .. autoattribute:: npred
+   .. autoattribute:: npred_background
+   .. autoattribute:: npred_excess
+   .. autoattribute:: npred_excess_err
+   .. autoattribute:: npred_excess_errn
+   .. autoattribute:: npred_excess_errp
+   .. autoattribute:: npred_excess_ref
+   .. autoattribute:: npred_excess_ul
+   .. autoattribute:: reference_model
+   .. autoattribute:: reference_model_default
+   .. autoattribute:: reference_spectral_model
+   .. autoattribute:: sed_type_init
+   .. autoattribute:: sed_type_plot_default
+   .. autoattribute:: sqrt_ts
+   .. autoattribute:: sqrt_ts_threshold_ul
+   .. autoattribute:: stat
+   .. autoattribute:: stat_null
+   .. autoattribute:: stat_scan
+   .. autoattribute:: success
+   .. autoattribute:: ts
+   .. autoattribute:: ts_scan
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: all_quantities
+   .. automethod:: copy
+   .. automethod:: from_hdulist
+   .. automethod:: from_maps
+   .. automethod:: from_stack
+   .. automethod:: from_table
+   .. automethod:: get_flux_points
+   .. automethod:: iter_by_axis
+   .. automethod:: plot
+   .. automethod:: plot_ts_profiles
+   .. automethod:: read
+   .. automethod:: recompute_ul
+   .. automethod:: resample_axis
+   .. automethod:: slice_by_coord
+   .. automethod:: slice_by_energy
+   .. automethod:: slice_by_idx
+   .. automethod:: slice_by_time
+   .. automethod:: to_hdulist
+   .. automethod:: to_maps
+   .. automethod:: to_table
+   .. automethod:: write
