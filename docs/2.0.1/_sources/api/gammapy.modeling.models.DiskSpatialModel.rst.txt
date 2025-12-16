@@ -1,0 +1,103 @@
+DiskSpatialModel
+================
+
+.. currentmodule:: gammapy.modeling.models
+
+.. autoclass:: DiskSpatialModel
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~DiskSpatialModel.covariance
+      ~DiskSpatialModel.default_parameters
+      ~DiskSpatialModel.e
+      ~DiskSpatialModel.edge_width
+      ~DiskSpatialModel.evaluation_bin_size_min
+      ~DiskSpatialModel.evaluation_radius
+      ~DiskSpatialModel.evaluation_region
+      ~DiskSpatialModel.frozen
+      ~DiskSpatialModel.is_energy_dependent
+      ~DiskSpatialModel.lat_0
+      ~DiskSpatialModel.lon_0
+      ~DiskSpatialModel.parameters
+      ~DiskSpatialModel.parameters_unique_names
+      ~DiskSpatialModel.phi
+      ~DiskSpatialModel.phi_0
+      ~DiskSpatialModel.position
+      ~DiskSpatialModel.position_error
+      ~DiskSpatialModel.position_lonlat
+      ~DiskSpatialModel.r_0
+      ~DiskSpatialModel.tag
+      ~DiskSpatialModel.type
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~DiskSpatialModel.__call__
+      ~DiskSpatialModel.copy
+      ~DiskSpatialModel.evaluate
+      ~DiskSpatialModel.evaluate_geom
+      ~DiskSpatialModel.freeze
+      ~DiskSpatialModel.from_dict
+      ~DiskSpatialModel.from_parameters
+      ~DiskSpatialModel.from_position
+      ~DiskSpatialModel.from_region
+      ~DiskSpatialModel.integrate_geom
+      ~DiskSpatialModel.plot
+      ~DiskSpatialModel.plot_error
+      ~DiskSpatialModel.plot_grid
+      ~DiskSpatialModel.plot_interactive
+      ~DiskSpatialModel.plot_position_error
+      ~DiskSpatialModel.reassign
+      ~DiskSpatialModel.to_dict
+      ~DiskSpatialModel.to_region
+      ~DiskSpatialModel.unfreeze
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: covariance
+   .. autoattribute:: default_parameters
+   .. autoattribute:: e
+   .. autoattribute:: edge_width
+   .. autoattribute:: evaluation_bin_size_min
+   .. autoattribute:: evaluation_radius
+   .. autoattribute:: evaluation_region
+   .. autoattribute:: frozen
+   .. autoattribute:: is_energy_dependent
+   .. autoattribute:: lat_0
+   .. autoattribute:: lon_0
+   .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
+   .. autoattribute:: phi
+   .. autoattribute:: phi_0
+   .. autoattribute:: position
+   .. autoattribute:: position_error
+   .. autoattribute:: position_lonlat
+   .. autoattribute:: r_0
+   .. autoattribute:: tag
+   .. autoattribute:: type
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: __call__
+   .. automethod:: copy
+   .. automethod:: evaluate
+   .. automethod:: evaluate_geom
+   .. automethod:: freeze
+   .. automethod:: from_dict
+   .. automethod:: from_parameters
+   .. automethod:: from_position
+   .. automethod:: from_region
+   .. automethod:: integrate_geom
+   .. automethod:: plot
+   .. automethod:: plot_error
+   .. automethod:: plot_grid
+   .. automethod:: plot_interactive
+   .. automethod:: plot_position_error
+   .. automethod:: reassign
+   .. automethod:: to_dict
+   .. automethod:: to_region
+   .. automethod:: unfreeze
