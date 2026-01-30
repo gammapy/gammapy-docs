@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="2.0.dev2700+g72c7a4b53" />
+  <meta name="docsearch:version" content="2.0.dev2778+gd0113d72d" />
   </head>
   
   
@@ -480,7 +480,7 @@
 <span class="sd">see :ref:`fit-statistics`</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.special</span><span class="w"> </span><span class="kn">import</span> <span class="n">erfc</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.maps</span><span class="w"> </span><span class="kn">import</span> <span class="n">Map</span>
@@ -498,6 +498,7 @@
     <span class="s2">&quot;WStatFitStatistic&quot;</span><span class="p">,</span>
     <span class="s2">&quot;Chi2FitStatistic&quot;</span><span class="p">,</span>
     <span class="s2">&quot;Chi2AsymmetricErrorFitStatistic&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;GaussianPriorPenalty&quot;</span><span class="p">,</span>
 <span class="p">]</span>
 
 
@@ -941,6 +942,228 @@
         <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">ndindex</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">_profile_interpolators</span><span class="o">.</span><span class="n">shape</span><span class="p">):</span>
             <span class="n">stat</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">_profile_interpolators</span><span class="p">[</span><span class="n">idx</span><span class="p">](</span><span class="n">model</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
         <span class="k">return</span> <span class="n">stat</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">FitStatisticPenalty</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Abstract base class for fit statistic penalties</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    parameters : list of `~gammapy.modeling.Parameter`</span>
+<span class="sd">        List of parameters to apply the penalty to.</span>
+<span class="sd">    lambda_ : float</span>
+<span class="sd">        Regularization strength (Lagrange multiplier).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">lambda_</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_parameters</span> <span class="o">=</span> <span class="n">parameters</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lambda_</span> <span class="o">=</span> <span class="n">lambda_</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stat_sum</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the penalty term.&quot;&quot;&quot;</span>
+        <span class="k">pass</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parameters</span>
+
+
+<div class="viewcode-block" id="GaussianPriorPenalty">
+<a class="viewcode-back" href="../../../api/gammapy.stats.GaussianPriorPenalty.html#gammapy.stats.GaussianPriorPenalty">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">GaussianPriorPenalty</span><span class="p">(</span><span class="n">FitStatisticPenalty</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Penalty based on a multivariate Gaussian prior.</span>
+
+<span class="sd">    This implements a quadratic penalty of the form:</span>
+<span class="sd">    .. math::</span>
+<span class="sd">        \lambda \times (x - \mu)^T C^{-1} (x - \mu)</span>
+
+<span class="sd">    where x are the parameter values, μ is the prior mean vector,</span>
+<span class="sd">    and C is the prior covariance matrix.</span>
+
+<span class="sd">    If C is the identity matrix (default), this is equivalent to the L2 (ridge) regression.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    parameters : list of `~gammapy.modeling.Parameter`</span>
+<span class="sd">        Parameters to which the penalty is applied.</span>
+<span class="sd">    mean : list of float, optional</span>
+<span class="sd">        Prior mean values for each parameter. If not provided, defaults to zeros.</span>
+<span class="sd">    covariance : array-like, optional</span>
+<span class="sd">        Prior covariance matrix. If not provided, an identity matrix is used.</span>
+<span class="sd">    lambda_ : float</span>
+<span class="sd">        Regularization strength (Lagrange multiplier).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="GaussianPriorPenalty.__init__">
+<a class="viewcode-back" href="../../../api/gammapy.stats.GaussianPriorPenalty.html#gammapy.stats.GaussianPriorPenalty.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">covariance</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">lambda_</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">lambda_</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">mean</span><span class="p">)</span> <span class="k">if</span> <span class="n">mean</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">parameters</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">covariance</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">covariance</span> <span class="k">if</span> <span class="n">covariance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">parameters</span><span class="p">))</span>
+        <span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">covariance</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return covariance matrix of the multivariate gaussian.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_covariance</span>
+
+    <span class="nd">@covariance</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">covariance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">matrix</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set covariance matrix.&quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.modeling</span><span class="w"> </span><span class="kn">import</span> <span class="n">Covariance</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_covariance</span> <span class="o">=</span> <span class="n">Covariance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">,</span> <span class="n">matrix</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_inverse_covariance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_covariance</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+
+<div class="viewcode-block" id="GaussianPriorPenalty.stat_sum">
+<a class="viewcode-back" href="../../../api/gammapy.stats.GaussianPriorPenalty.html#gammapy.stats.GaussianPriorPenalty.stat_sum">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stat_sum</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the Gaussian prior penalty.&quot;&quot;&quot;</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">p</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">])</span>
+        <span class="n">delta</span> <span class="o">=</span> <span class="n">x</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">mean</span>
+        <span class="n">penalty</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">delta</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inverse_covariance</span> <span class="o">@</span> <span class="n">delta</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">lambda_</span> <span class="o">*</span> <span class="n">penalty</span></div>
+
+
+<div class="viewcode-block" id="GaussianPriorPenalty.from_precision">
+<a class="viewcode-back" href="../../../api/gammapy.stats.GaussianPriorPenalty.html#gammapy.stats.GaussianPriorPenalty.from_precision">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_precision</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">precision</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">lambda_</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a GaussianPriorPenalty from a precision matrix (inverse covariance).</span>
+
+<span class="sd">        Internally uses `~scipy.stats.Covariance.from_precision`</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        parameters : list of `~gammapy.modeling.Parameter` or `~gammapy.modeling.Parameters`</span>
+<span class="sd">            Parameters to which the penalty is applied.</span>
+<span class="sd">        precision : `~numpy.ndarray`</span>
+<span class="sd">            Inverse covariance matrix (precision matrix).</span>
+<span class="sd">        mean : `~numpy.ndarray` or None</span>
+<span class="sd">            Mean values. If None, uses zero array. Default is None.</span>
+<span class="sd">        lambda_ : float</span>
+<span class="sd">            Penalty strength (Lagrange multiplier).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">Covariance</span>
+
+        <span class="n">cov</span> <span class="o">=</span> <span class="n">Covariance</span><span class="o">.</span><span class="n">from_precision</span><span class="p">(</span><span class="n">precision</span><span class="p">)</span>
+        <span class="n">mean</span> <span class="o">=</span> <span class="n">mean</span> <span class="k">if</span> <span class="n">mean</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">parameters</span><span class="p">))</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">parameters</span><span class="o">=</span><span class="n">parameters</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="n">mean</span><span class="p">,</span> <span class="n">covariance</span><span class="o">=</span><span class="n">cov</span><span class="o">.</span><span class="n">covariance</span><span class="p">,</span> <span class="n">lambda_</span><span class="o">=</span><span class="n">lambda_</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GaussianPriorPenalty.from_diagonal">
+<a class="viewcode-back" href="../../../api/gammapy.stats.GaussianPriorPenalty.html#gammapy.stats.GaussianPriorPenalty.from_diagonal">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_diagonal</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">sigma</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">lambda_</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a GaussianPriorPenalty with a diagonal covariance matrix.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        parameters : list of Parameter</span>
+<span class="sd">            Parameters to apply the prior to.</span>
+<span class="sd">        sigma : ~numpy.ndarray` or float</span>
+<span class="sd">            Standard deviation(s) for each parameter.</span>
+<span class="sd">        mean : `~numpy.ndarray` or float, optional</span>
+<span class="sd">            Mean values. If None, uses zero array. Default is None.</span>
+<span class="sd">        lambda_ : float</span>
+<span class="sd">            Penalty scaling factor.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">Covariance</span>
+
+        <span class="n">sigma</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">broadcast_to</span><span class="p">(</span><span class="n">sigma</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">parameters</span><span class="p">))</span>
+
+        <span class="n">mean</span> <span class="o">=</span> <span class="n">mean</span> <span class="k">if</span> <span class="n">mean</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">0</span>
+        <span class="n">mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">broadcast_to</span><span class="p">(</span><span class="n">mean</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">parameters</span><span class="p">))</span>
+
+        <span class="n">covariance</span> <span class="o">=</span> <span class="n">Covariance</span><span class="o">.</span><span class="n">from_diagonal</span><span class="p">(</span><span class="n">sigma</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">parameters</span><span class="o">=</span><span class="n">parameters</span><span class="p">,</span>
+            <span class="n">mean</span><span class="o">=</span><span class="n">mean</span><span class="p">,</span>
+            <span class="n">covariance</span><span class="o">=</span><span class="n">covariance</span><span class="o">.</span><span class="n">covariance</span><span class="p">,</span>
+            <span class="n">lambda_</span><span class="o">=</span><span class="n">lambda_</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GaussianPriorPenalty.L2_penalty">
+<a class="viewcode-back" href="../../../api/gammapy.stats.GaussianPriorPenalty.html#gammapy.stats.GaussianPriorPenalty.L2_penalty">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">L2_penalty</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">lambda_</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Standard ridge (L2) regularization penalty.</span>
+
+<span class="sd">        Computes a penalty of the form:  lambda * sum ||x_i - mu_i||²</span>
+<span class="sd">        which corresponds to applying an identity covariance gaussian prior.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        parameters : list of `~gammapy.modeling.Parameter`</span>
+<span class="sd">            Parameters to which the penalty is applied.</span>
+<span class="sd">        mean : list of float, optional</span>
+<span class="sd">            Prior mean values for each parameter. If not provided, defaults to zeros.</span>
+<span class="sd">        lambda_ : float</span>
+<span class="sd">            Regularization strength (Lagrange multiplier).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_diagonal</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">sigma</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="n">mean</span><span class="p">,</span> <span class="n">lambda_</span><span class="o">=</span><span class="n">lambda_</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GaussianPriorPenalty.SmoothnessPenalty">
+<a class="viewcode-back" href="../../../api/gammapy.stats.GaussianPriorPenalty.html#gammapy.stats.GaussianPriorPenalty.SmoothnessPenalty">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">SmoothnessPenalty</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">lambda_</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a smoothness penalty using finite differences.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        parameters: list of `~gammapy.modeling.Parameter`</span>
+<span class="sd">            Parameters to which the penalty is applied.</span>
+<span class="sd">        lambda_: float, optional</span>
+<span class="sd">            Penalty strength. Default is 1.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="kn">import</span> <span class="n">diags</span>
+
+        <span class="n">n_params</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">parameters</span><span class="p">)</span>
+        <span class="n">diagonals</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_params</span><span class="p">),</span>  <span class="c1"># main diagonal</span>
+            <span class="o">-</span><span class="mi">1</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_params</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span>  <span class="c1"># upper diagonal</span>
+            <span class="o">-</span><span class="mi">1</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_params</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span>  <span class="c1"># lower diagonal</span>
+        <span class="p">]</span>
+        <span class="n">Q</span> <span class="o">=</span> <span class="n">diags</span><span class="p">(</span><span class="n">diagonals</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">toarray</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_precision</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">Q</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="n">mean</span><span class="p">,</span> <span class="n">lambda_</span><span class="o">=</span><span class="n">lambda_</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GaussianPriorPenalty.from_method">
+<a class="viewcode-back" href="../../../api/gammapy.stats.GaussianPriorPenalty.html#gammapy.stats.GaussianPriorPenalty.from_method">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_method</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">method</span><span class="p">,</span> <span class="o">**</span><span class="n">method_kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create from a specific method</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        parameters: list of `~gammapy.modeling.Parameter`</span>
+<span class="sd">            Parameters to which the penalty is applied.</span>
+<span class="sd">        method: str</span>
+<span class="sd">            Option are precision, diagonal, smoothness, L2</span>
+<span class="sd">            which call `from_precision`, `from_diagonal`, `SmoothnessPenalty`, `L2_penalty` methods respectively</span>
+<span class="sd">        method_kwargs: dict</span>
+<span class="sd">            method specific arguments.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;precision&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_precision</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="o">**</span><span class="n">method_kwargs</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;diagonal&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_diagonal</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="o">**</span><span class="n">method_kwargs</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;smoothness&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">SmoothnessPenalty</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="o">**</span><span class="n">method_kwargs</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;L2&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">L2_penalty</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="o">**</span><span class="n">method_kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+</div>
+
 </pre></div>
 
                 </article>
