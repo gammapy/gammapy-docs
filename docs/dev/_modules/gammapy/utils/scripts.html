@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="2.0.dev3116+gf591d5242" />
+  <meta name="docsearch:version" content="2.0.dev3151+g83b3a64f5" />
   </head>
   
   
@@ -500,6 +500,7 @@
     <span class="s2">&quot;recursive_merge_dicts&quot;</span><span class="p">,</span>
     <span class="s2">&quot;to_yaml&quot;</span><span class="p">,</span>
     <span class="s2">&quot;write_yaml&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;logic_parser&quot;</span><span class="p">,</span>
 <span class="p">]</span>
 
 <span class="n">PATH_DOCS</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">&quot;..&quot;</span> <span class="o">/</span> <span class="s2">&quot;..&quot;</span> <span class="o">/</span> <span class="s2">&quot;docs&quot;</span>
@@ -791,6 +792,8 @@
 <span class="p">}</span>
 
 
+<div class="viewcode-block" id="logic_parser">
+<a class="viewcode-back" href="../../../api/gammapy.utils.scripts.logic_parser.html#gammapy.utils.scripts.logic_parser">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">logic_parser</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="n">expression</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Parse and apply a logical expression to filter rows from an Astropy Table.</span>
@@ -798,8 +801,14 @@
 <span class="sd">    This function evaluates a logical expression on each row of the input table</span>
 <span class="sd">    and returns a new table containing only the rows that satisfy the expression.</span>
 <span class="sd">    The expression can reference any column in the table by name and supports</span>
-<span class="sd">    logical operators (`and`, `or`), comparison operators (`&lt;`, `&gt;`, `==`, `!=`, `in`),</span>
-<span class="sd">    lists, and constants.</span>
+<span class="sd">    logical operators (``and``, ``or``), comparison operators</span>
+<span class="sd">    (``&lt;``, ``&lt;=``, ``&gt;``, ``&gt;=``, ``==``, ``!=``, ``in``), lists, constants,</span>
+<span class="sd">    and chained comparisons (e.g. ``1 &lt; OBS_ID &lt; 3``).</span>
+
+<span class="sd">    Chained comparisons follow standard Python semantics and are equivalent to</span>
+<span class="sd">    combining individual comparisons with ``and``. For example,</span>
+<span class="sd">    ``1 &lt; OBS_ID &lt; 3`` is equivalent to</span>
+<span class="sd">    ``(OBS_ID &gt; 1) and (OBS_ID &lt; 3)``.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -823,46 +832,79 @@
 <span class="sd">    &gt;&gt;&gt; from astropy.table import Table</span>
 <span class="sd">    &gt;&gt;&gt; data = {&#39;OBS_ID&#39;: [1, 2, 3, 4], &#39;EVENT_TYPE&#39;: [&#39;1&#39;, &#39;3&#39;, &#39;4&#39;, &#39;2&#39;]}</span>
 <span class="sd">    &gt;&gt;&gt; table = Table(data)</span>
-<span class="sd">    &gt;&gt;&gt; expression = &#39;(OBS_ID &lt; 3) and (OBS_ID &gt; 1) and ((EVENT_TYPE in [&quot;3&quot;, &quot;4&quot;]) or (EVENT_TYPE == &quot;3&quot;))&#39;</span>
-<span class="sd">    &gt;&gt;&gt; filtered_table = logic_parser(table, expression)</span>
-<span class="sd">    &gt;&gt;&gt; print(filtered_table)</span>
-<span class="sd">    OBS_ID EVENT_TYPE</span>
-<span class="sd">    ------ ----------</span>
-<span class="sd">         2          3</span>
 
+<span class="sd">    Standard logical expression:</span>
+
+<span class="sd">    &gt;&gt;&gt; expression = &#39;(OBS_ID &lt; 3) and (OBS_ID &gt; 1)&#39;</span>
+<span class="sd">    &gt;&gt;&gt; logic_parser(table, expression)</span>
+
+<span class="sd">    Using chained comparisons:</span>
+
+<span class="sd">    &gt;&gt;&gt; expression = &#39;1 &lt; OBS_ID &lt; 3&#39;</span>
+<span class="sd">    &gt;&gt;&gt; logic_parser(table, expression)</span>
+
+<span class="sd">    Combining chained comparisons with other conditions:</span>
+
+<span class="sd">    &gt;&gt;&gt; expression = &#39;(1 &lt; OBS_ID &lt; 4) and (EVENT_TYPE in [&quot;3&quot;, &quot;4&quot;])&#39;</span>
+<span class="sd">    &gt;&gt;&gt; logic_parser(table, expression)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">handle_boolop</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
+        <span class="n">op_func</span> <span class="o">=</span> <span class="n">_OPERATORS</span><span class="p">[</span><span class="nb">type</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">op</span><span class="p">)]</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="p">[</span><span class="n">eval_node</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">values</span><span class="p">]</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">values</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">op_func</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">handle_compare</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
+        <span class="n">left</span> <span class="o">=</span> <span class="n">eval_node</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">left</span><span class="p">)</span>
+        <span class="n">parts</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">op</span><span class="p">,</span> <span class="n">comparator</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">ops</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">comparators</span><span class="p">):</span>
+            <span class="n">right</span> <span class="o">=</span> <span class="n">eval_node</span><span class="p">(</span><span class="n">comparator</span><span class="p">)</span>
+            <span class="n">op_func</span> <span class="o">=</span> <span class="n">_OPERATORS</span><span class="p">[</span><span class="nb">type</span><span class="p">(</span><span class="n">op</span><span class="p">)]</span>
+            <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">op_func</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">))</span>
+            <span class="n">left</span> <span class="o">=</span> <span class="n">right</span>
+
+        <span class="n">result</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">logical_and</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">part</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">handle_name</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">colnames</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Column &#39;</span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2">&#39; not found in the table. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Available columns: </span><span class="si">{</span><span class="n">table</span><span class="o">.</span><span class="n">colnames</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">table</span><span class="p">[</span><span class="n">node</span><span class="o">.</span><span class="n">id</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">handle_constant</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">node</span><span class="o">.</span><span class="n">value</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">handle_list</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">eval_node</span><span class="p">(</span><span class="n">elt</span><span class="p">)</span> <span class="k">for</span> <span class="n">elt</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">elts</span><span class="p">]</span>
+
+    <span class="n">handlers</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">ast</span><span class="o">.</span><span class="n">BoolOp</span><span class="p">:</span> <span class="n">handle_boolop</span><span class="p">,</span>
+        <span class="n">ast</span><span class="o">.</span><span class="n">Compare</span><span class="p">:</span> <span class="n">handle_compare</span><span class="p">,</span>
+        <span class="n">ast</span><span class="o">.</span><span class="n">Name</span><span class="p">:</span> <span class="n">handle_name</span><span class="p">,</span>
+        <span class="n">ast</span><span class="o">.</span><span class="n">Constant</span><span class="p">:</span> <span class="n">handle_constant</span><span class="p">,</span>
+        <span class="n">ast</span><span class="o">.</span><span class="n">List</span><span class="p">:</span> <span class="n">handle_list</span><span class="p">,</span>
+    <span class="p">}</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">eval_node</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">ast</span><span class="o">.</span><span class="n">BoolOp</span><span class="p">):</span>
-            <span class="n">op_func</span> <span class="o">=</span> <span class="n">_OPERATORS</span><span class="p">[</span><span class="nb">type</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">op</span><span class="p">)]</span>
-            <span class="n">values</span> <span class="o">=</span> <span class="p">[</span><span class="n">eval_node</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">values</span><span class="p">]</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-            <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">values</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
-                <span class="n">result</span> <span class="o">=</span> <span class="n">op_func</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">result</span>
-        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">ast</span><span class="o">.</span><span class="n">Compare</span><span class="p">):</span>
-            <span class="n">left</span> <span class="o">=</span> <span class="n">eval_node</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">left</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">op</span><span class="p">,</span> <span class="n">comparator</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">ops</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">comparators</span><span class="p">):</span>
-                <span class="n">right</span> <span class="o">=</span> <span class="n">eval_node</span><span class="p">(</span><span class="n">comparator</span><span class="p">)</span>
-                <span class="n">op_func</span> <span class="o">=</span> <span class="n">_OPERATORS</span><span class="p">[</span><span class="nb">type</span><span class="p">(</span><span class="n">op</span><span class="p">)]</span>
-                <span class="n">left</span> <span class="o">=</span> <span class="n">op_func</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">left</span>
-        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">ast</span><span class="o">.</span><span class="n">Name</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">colnames</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Column &#39;</span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2">&#39; not found in the table. Available columns: </span><span class="si">{</span><span class="n">table</span><span class="o">.</span><span class="n">colnames</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-            <span class="k">return</span> <span class="n">table</span><span class="p">[</span><span class="n">node</span><span class="o">.</span><span class="n">id</span><span class="p">]</span>
-        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">ast</span><span class="o">.</span><span class="n">Constant</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">node</span><span class="o">.</span><span class="n">value</span>
-        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">ast</span><span class="o">.</span><span class="n">List</span><span class="p">):</span>
-            <span class="k">return</span> <span class="p">[</span><span class="n">eval_node</span><span class="p">(</span><span class="n">elt</span><span class="p">)</span> <span class="k">for</span> <span class="n">elt</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">elts</span><span class="p">]</span>
-        <span class="k">else</span><span class="p">:</span>
+        <span class="n">handler</span> <span class="o">=</span> <span class="n">handlers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">node</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">handler</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported expression type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">node</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">handler</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
 
     <span class="n">expr_ast</span> <span class="o">=</span> <span class="n">ast</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">expression</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;eval&quot;</span><span class="p">)</span>
     <span class="n">mask</span> <span class="o">=</span> <span class="n">eval_node</span><span class="p">(</span><span class="n">expr_ast</span><span class="o">.</span><span class="n">body</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">table</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">table</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span></div>
+
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">method_wrapper</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
