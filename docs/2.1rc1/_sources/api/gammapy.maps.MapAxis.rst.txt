@@ -1,0 +1,127 @@
+MapAxis
+=======
+
+.. currentmodule:: gammapy.maps
+
+.. autoclass:: MapAxis
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~MapAxis.as_plot_center
+      ~MapAxis.as_plot_edges
+      ~MapAxis.as_plot_labels
+      ~MapAxis.as_plot_scale
+      ~MapAxis.as_plot_xerr
+      ~MapAxis.bin_width
+      ~MapAxis.bounds
+      ~MapAxis.center
+      ~MapAxis.edges
+      ~MapAxis.edges_max
+      ~MapAxis.edges_min
+      ~MapAxis.interp
+      ~MapAxis.is_energy_axis
+      ~MapAxis.iter_by_edges
+      ~MapAxis.name
+      ~MapAxis.nbin
+      ~MapAxis.nbin_per_decade
+      ~MapAxis.node_type
+      ~MapAxis.unit
+      ~MapAxis.use_center_as_plot_labels
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~MapAxis.assert_name
+      ~MapAxis.concatenate
+      ~MapAxis.coord_to_idx
+      ~MapAxis.coord_to_pix
+      ~MapAxis.copy
+      ~MapAxis.downsample
+      ~MapAxis.format_plot_xaxis
+      ~MapAxis.format_plot_yaxis
+      ~MapAxis.from_bounds
+      ~MapAxis.from_edges
+      ~MapAxis.from_energy_bounds
+      ~MapAxis.from_energy_edges
+      ~MapAxis.from_nodes
+      ~MapAxis.from_stack
+      ~MapAxis.from_table
+      ~MapAxis.from_table_hdu
+      ~MapAxis.group_table
+      ~MapAxis.is_aligned
+      ~MapAxis.is_allclose
+      ~MapAxis.pad
+      ~MapAxis.pix_to_coord
+      ~MapAxis.pix_to_idx
+      ~MapAxis.rename
+      ~MapAxis.round
+      ~MapAxis.slice
+      ~MapAxis.squash
+      ~MapAxis.to_header
+      ~MapAxis.to_node_type
+      ~MapAxis.to_table
+      ~MapAxis.to_table_hdu
+      ~MapAxis.upsample
+      ~MapAxis.wrap_coord
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: as_plot_center
+   .. autoattribute:: as_plot_edges
+   .. autoattribute:: as_plot_labels
+   .. autoattribute:: as_plot_scale
+   .. autoattribute:: as_plot_xerr
+   .. autoattribute:: bin_width
+   .. autoattribute:: bounds
+   .. autoattribute:: center
+   .. autoattribute:: edges
+   .. autoattribute:: edges_max
+   .. autoattribute:: edges_min
+   .. autoattribute:: interp
+   .. autoattribute:: is_energy_axis
+   .. autoattribute:: iter_by_edges
+   .. autoattribute:: name
+   .. autoattribute:: nbin
+   .. autoattribute:: nbin_per_decade
+   .. autoattribute:: node_type
+   .. autoattribute:: unit
+   .. autoattribute:: use_center_as_plot_labels
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: assert_name
+   .. automethod:: concatenate
+   .. automethod:: coord_to_idx
+   .. automethod:: coord_to_pix
+   .. automethod:: copy
+   .. automethod:: downsample
+   .. automethod:: format_plot_xaxis
+   .. automethod:: format_plot_yaxis
+   .. automethod:: from_bounds
+   .. automethod:: from_edges
+   .. automethod:: from_energy_bounds
+   .. automethod:: from_energy_edges
+   .. automethod:: from_nodes
+   .. automethod:: from_stack
+   .. automethod:: from_table
+   .. automethod:: from_table_hdu
+   .. automethod:: group_table
+   .. automethod:: is_aligned
+   .. automethod:: is_allclose
+   .. automethod:: pad
+   .. automethod:: pix_to_coord
+   .. automethod:: pix_to_idx
+   .. automethod:: rename
+   .. automethod:: round
+   .. automethod:: slice
+   .. automethod:: squash
+   .. automethod:: to_header
+   .. automethod:: to_node_type
+   .. automethod:: to_table
+   .. automethod:: to_table_hdu
+   .. automethod:: upsample
+   .. automethod:: wrap_coord

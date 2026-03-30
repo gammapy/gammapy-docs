@@ -1,0 +1,6 @@
+motion_since_birth
+==================
+
+.. currentmodule:: gammapy.utils.coordinates
+
+.. autofunction:: motion_since_birth
