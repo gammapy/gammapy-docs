@@ -69,7 +69,7 @@
     <link rel="search" title="Search" href="../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="2.0.dev3807+g01b7e1f40" />
+  <meta name="docsearch:version" content="2.0.dev3837+g7fc55417c" />
   
     
     <script src="../../../../_static/searchtools.js"></script>
@@ -495,30 +495,41 @@
 <span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">itertools</span><span class="w"> </span><span class="kn">import</span> <span class="n">repeat</span>
+
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">scipy.stats</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">stats</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">astropy</span><span class="w"> </span><span class="kn">import</span> <span class="n">units</span> <span class="k">as</span> <span class="n">u</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">astropy.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">Table</span>
+
 <span class="kn">import</span><span class="w"> </span><span class="nn">gammapy.utils.parallel</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">parallel</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">Datasets</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.datasets.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_and_restore_mask_fit</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.datasets.actors</span><span class="w"> </span><span class="kn">import</span> <span class="n">DatasetsActor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.datasets.flux_points</span><span class="w"> </span><span class="kn">import</span> <span class="n">_get_reference_model</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.maps</span><span class="w"> </span><span class="kn">import</span> <span class="n">MapAxis</span><span class="p">,</span> <span class="n">Map</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.modeling</span><span class="w"> </span><span class="kn">import</span> <span class="n">Fit</span><span class="p">,</span> <span class="n">Sampler</span><span class="p">,</span> <span class="n">Parameters</span><span class="p">,</span> <span class="n">Parameter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.datasets.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_and_restore_mask_fit</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.maps</span><span class="w"> </span><span class="kn">import</span> <span class="n">Map</span><span class="p">,</span> <span class="n">MapAxis</span><span class="p">,</span> <span class="n">RegionGeom</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.modeling</span><span class="w"> </span><span class="kn">import</span> <span class="n">Fit</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">,</span> <span class="n">Parameters</span><span class="p">,</span> <span class="n">Sampler</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.modeling.models</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">Models</span><span class="p">,</span>
+    <span class="n">PiecewiseNormSpectralModel</span><span class="p">,</span>
     <span class="n">PowerLawNormSpectralModel</span><span class="p">,</span>
     <span class="n">TemplateNPredModel</span><span class="p">,</span>
     <span class="n">UniformPrior</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.modeling.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_parse_datasets</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.stats.fit_statistics</span><span class="w"> </span><span class="kn">import</span> <span class="n">GaussianPriorPenalty</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.utils.scripts</span><span class="w"> </span><span class="kn">import</span> <span class="n">recursive_merge_dicts</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">..core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Estimator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..flux</span><span class="w"> </span><span class="kn">import</span> <span class="n">FluxEstimator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">FluxPoints</span>
 
 <span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;FluxPointsEstimator&quot;</span><span class="p">,</span> <span class="s2">&quot;FluxCollectionEstimator&quot;</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;FluxPointsEstimator&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;FluxCollectionEstimator&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;RegularizedFluxPointsEstimator&quot;</span><span class="p">,</span>
+<span class="p">]</span>
 
 
 <div class="viewcode-block" id="FluxPointsEstimator">
@@ -1174,6 +1185,272 @@
             <span class="n">fp_dict</span><span class="p">[</span><span class="s2">&quot;samples&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">dnde</span><span class="o">=</span><span class="n">dnde_dict</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">fp_dict</span>
+
+
+<div class="viewcode-block" id="RegularizedFluxPointsEstimator">
+<a class="viewcode-back" href="../../../../api/gammapy.estimators.RegularizedFluxPointsEstimator.html#gammapy.estimators.RegularizedFluxPointsEstimator">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RegularizedFluxPointsEstimator</span><span class="p">(</span><span class="n">Estimator</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Estimate flux points using a regularized likelihood approach.</span>
+
+<span class="sd">    This estimator computes flux points by fitting piecewise-normalized</span>
+<span class="sd">    spectral models to datasets, optionally including Gaussian prior</span>
+<span class="sd">    penalties on the normalization parameters. Regularization can be</span>
+<span class="sd">    used to stabilize the fit or enforce smoothness across energy bins.</span>
+
+<span class="sd">    The estimator works by multiplying each input spectral model with a</span>
+<span class="sd">    `~gammapy.modeling.models.PiecewiseNormSpectralModel` defined on a</span>
+<span class="sd">    set of energy nodes, and fitting the resulting normalization</span>
+<span class="sd">    parameters simultaneously.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    energy_nodes : `~astropy.units.Quantity`</span>
+<span class="sd">        Energy nodes defining the piecewise normalization bins.</span>
+<span class="sd">    models : `~gammapy.modeling.models.Models`</span>
+<span class="sd">        Spectral models for which flux points are estimated.</span>
+<span class="sd">    penalty_name : {&quot;L2&quot;, &quot;smoothness&quot;, &quot;unpenalized&quot;, None}, optional</span>
+<span class="sd">        Name of the regularization penalty to apply. If None or</span>
+<span class="sd">        &quot;unpenalized&quot;, no penalty is used. Default is &quot;L2&quot;.</span>
+<span class="sd">    lambda_ : float, optional</span>
+<span class="sd">        Regularization strength. Larger values increase the impact of</span>
+<span class="sd">        the penalty term. Default is 1.</span>
+<span class="sd">    selection_optional : list of str, optional</span>
+<span class="sd">        Which additional quantities to estimate. Available options are:</span>
+
+<span class="sd">            * &quot;all&quot;: all the optional steps are executed.</span>
+<span class="sd">            * &quot;errn-errp&quot;: estimate asymmetric errors on flux.</span>
+<span class="sd">            * &quot;ul&quot;: estimate upper limits.</span>
+
+<span class="sd">        Default is None so the optional steps are not executed.</span>
+<span class="sd">    fit : `~gammapy.modeling.Fit`, optional</span>
+<span class="sd">        Fit instance used for likelihood minimization and confidence</span>
+<span class="sd">        interval estimation. If None, a default `Fit` is created.</span>
+<span class="sd">    reoptimize : bool, optional</span>
+<span class="sd">        Whether to reoptimize non-flux-point model parameters during the</span>
+<span class="sd">        fit. If False, all other model parameters are frozen.</span>
+<span class="sd">        Default is False.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    The regularization is implemented via Gaussian prior penalties added</span>
+<span class="sd">    to the likelihood:</span>
+
+<span class="sd">    * ``&quot;L2&quot;`` applies a quadratic penalty around a mean normalization of 1.</span>
+<span class="sd">    * ``&quot;smoothness&quot;`` enforces smooth variations between adjacent energy bins.</span>
+
+<span class="sd">    The estimator returns flux points in ``sed_type=&quot;likelihood&quot;`` format,</span>
+<span class="sd">    making them suitable for further statistical analyses.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    result : dict</span>
+<span class="sd">        Dictionary with the following keys:</span>
+
+<span class="sd">        * ``&quot;flux_points&quot;`` : dict of `~gammapy.estimators.FluxPoints`</span>
+<span class="sd">            Flux points for each input model, keyed by model name.</span>
+<span class="sd">        * ``&quot;models&quot;`` : `~gammapy.modeling.models.Models`</span>
+<span class="sd">            Models used in the fit, including the regularized components.</span>
+<span class="sd">        * ``&quot;stat_sum_likelihood&quot;`` : float</span>
+<span class="sd">            Sum of the likelihood terms.</span>
+<span class="sd">        * ``&quot;stat_sum_penalty&quot;`` : float</span>
+<span class="sd">            Sum of the penalty contributions.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">tag</span> <span class="o">=</span> <span class="s2">&quot;RegularizedFluxPointsEstimator&quot;</span>
+    <span class="n">_available_selection_optional</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;errn-errp&quot;</span><span class="p">,</span> <span class="s2">&quot;ul&quot;</span><span class="p">]</span>
+
+<div class="viewcode-block" id="RegularizedFluxPointsEstimator.__init__">
+<a class="viewcode-back" href="../../../../api/gammapy.estimators.RegularizedFluxPointsEstimator.html#gammapy.estimators.RegularizedFluxPointsEstimator.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">energy_nodes</span><span class="p">,</span>
+        <span class="n">models</span><span class="p">,</span>
+        <span class="n">penalty_name</span><span class="o">=</span><span class="s2">&quot;L2&quot;</span><span class="p">,</span>
+        <span class="n">lambda_</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">selection_optional</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">fit</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">reoptimize</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">energy_nodes</span> <span class="o">=</span> <span class="n">energy_nodes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">models</span> <span class="o">=</span> <span class="n">models</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">penalty_name</span> <span class="o">=</span> <span class="n">penalty_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lambda_</span> <span class="o">=</span> <span class="n">lambda_</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">penalty_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">penalty_name</span> <span class="o">=</span> <span class="s2">&quot;unpenalized&quot;</span>
+
+        <span class="k">if</span> <span class="n">fit</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">fit</span> <span class="o">=</span> <span class="n">Fit</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fit</span> <span class="o">=</span> <span class="n">fit</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">reoptimize</span> <span class="o">=</span> <span class="n">reoptimize</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">selection_optional</span> <span class="o">=</span> <span class="n">selection_optional</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_regularized_models</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">datasets</span><span class="p">):</span>
+        <span class="n">norm_models</span> <span class="o">=</span> <span class="n">Models</span><span class="p">()</span>
+        <span class="n">penalties</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">models</span><span class="p">:</span>
+            <span class="n">norm_model</span> <span class="o">=</span> <span class="n">m</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">m</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">_flux_points_</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">penalty_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">norm_model</span><span class="o">.</span><span class="n">freeze</span><span class="p">()</span>
+            <span class="n">norm_model</span><span class="o">.</span><span class="n">spectral_model</span> <span class="o">*=</span> <span class="n">PiecewiseNormSpectralModel</span><span class="p">(</span>
+                <span class="n">energy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">energy_nodes</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">penalty_name</span> <span class="o">==</span> <span class="s2">&quot;unpenalized&quot;</span><span class="p">:</span>
+                <span class="n">penalty</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">penalty_name</span> <span class="o">==</span> <span class="s2">&quot;L2&quot;</span><span class="p">:</span>
+                <span class="n">penalty</span> <span class="o">=</span> <span class="n">GaussianPriorPenalty</span><span class="o">.</span><span class="n">L2_penalty</span><span class="p">(</span>
+                    <span class="n">norm_model</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">free_parameters</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">lambda_</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">lambda_</span>
+                <span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">penalty_name</span> <span class="o">==</span> <span class="s2">&quot;smoothness&quot;</span><span class="p">:</span>
+                <span class="n">penalty</span> <span class="o">=</span> <span class="n">GaussianPriorPenalty</span><span class="o">.</span><span class="n">SmoothnessPenalty</span><span class="p">(</span>
+                    <span class="n">norm_model</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">free_parameters</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">lambda_</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">lambda_</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">penalty_name</span> <span class="o">==</span> <span class="s2">&quot;unpenalized&quot;</span><span class="p">:</span>
+                <span class="n">penalties</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">penalty</span><span class="p">)</span>
+            <span class="n">norm_models</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">norm_model</span><span class="p">)</span>
+
+        <span class="n">norm_models</span><span class="o">.</span><span class="n">set_penalties</span><span class="p">(</span><span class="n">penalties</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">norm_models_names</span> <span class="o">=</span> <span class="n">norm_models</span><span class="o">.</span><span class="n">names</span>
+        <span class="k">return</span> <span class="n">norm_models</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_region</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">e_axis</span> <span class="o">=</span> <span class="n">MapAxis</span><span class="o">.</span><span class="n">from_nodes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">energy_nodes</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;energy&quot;</span><span class="p">,</span> <span class="n">interp</span><span class="o">=</span><span class="s2">&quot;log&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">RegionGeom</span><span class="p">(</span><span class="n">region</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">[</span><span class="n">e_axis</span><span class="p">])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compute_flux</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">datasets</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute flux&quot;&quot;&quot;</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="n">Fit</span><span class="p">()</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">datasets</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">res</span><span class="o">.</span><span class="n">success</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Flux points fitting failed with </span><span class="si">{</span><span class="n">res</span><span class="o">.</span><span class="n">message</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+
+        <span class="n">map_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">km</span><span class="p">,</span> <span class="n">m</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">models</span><span class="p">):</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">norm_models_names</span><span class="p">[</span><span class="n">km</span><span class="p">]</span>
+            <span class="n">parameters</span> <span class="o">=</span> <span class="n">datasets</span><span class="o">.</span><span class="n">models</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">free_parameters</span>
+
+            <span class="n">geom</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_region</span><span class="p">()</span>
+            <span class="n">norm_map</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">parameters</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="n">norm_err_map</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span>
+                <span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">_</span><span class="o">.</span><span class="n">error</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">parameters</span><span class="p">]),</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;&quot;</span>
+            <span class="p">)</span>
+            <span class="n">map_dict</span><span class="p">[</span><span class="n">m</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;norm&quot;</span><span class="p">:</span> <span class="n">norm_map</span><span class="p">,</span> <span class="s2">&quot;norm_err&quot;</span><span class="p">:</span> <span class="n">norm_err_map</span><span class="p">}</span>
+
+        <span class="k">return</span> <span class="n">map_dict</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compute_errn_errp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">datasets</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute asymmetric errors&quot;&quot;&quot;</span>
+        <span class="n">map_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">km</span><span class="p">,</span> <span class="n">m</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">models</span><span class="p">):</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">norm_models_names</span><span class="p">[</span><span class="n">km</span><span class="p">]</span>
+            <span class="n">parameters</span> <span class="o">=</span> <span class="n">datasets</span><span class="o">.</span><span class="n">models</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">free_parameters</span>
+
+            <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">par</span> <span class="ow">in</span> <span class="n">parameters</span><span class="p">:</span>
+                <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fit</span><span class="o">.</span><span class="n">confidence</span><span class="p">(</span><span class="n">datasets</span><span class="p">,</span> <span class="n">par</span><span class="p">))</span>
+            <span class="n">errn</span><span class="p">,</span> <span class="n">errp</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span><span class="p">:</span>
+                <span class="n">errn</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;errn&quot;</span><span class="p">])</span>
+                <span class="n">errp</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;errp&quot;</span><span class="p">])</span>
+
+            <span class="n">geom</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_region</span><span class="p">()</span>
+            <span class="n">norm_errn_map</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">errn</span><span class="p">),</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="n">norm_errp_map</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">errp</span><span class="p">),</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="n">map_dict</span><span class="p">[</span><span class="n">m</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;norm_errn&quot;</span><span class="p">:</span> <span class="n">norm_errn_map</span><span class="p">,</span> <span class="s2">&quot;norm_errp&quot;</span><span class="p">:</span> <span class="n">norm_errp_map</span><span class="p">}</span>
+        <span class="k">return</span> <span class="n">map_dict</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compute_ul</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">datasets</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute upper limits&quot;&quot;&quot;</span>
+        <span class="n">map_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">km</span><span class="p">,</span> <span class="n">m</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">models</span><span class="p">):</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">norm_models_names</span><span class="p">[</span><span class="n">km</span><span class="p">]</span>
+            <span class="n">parameters</span> <span class="o">=</span> <span class="n">datasets</span><span class="o">.</span><span class="n">models</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">free_parameters</span>
+
+            <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">bests</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">par</span> <span class="ow">in</span> <span class="n">parameters</span><span class="p">:</span>
+                <span class="n">bests</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">par</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+                <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fit</span><span class="o">.</span><span class="n">confidence</span><span class="p">(</span><span class="n">datasets</span><span class="p">,</span> <span class="n">par</span><span class="p">,</span> <span class="n">sigma</span><span class="o">=</span><span class="mi">3</span><span class="p">))</span>
+            <span class="n">errp</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">result</span><span class="p">,</span> <span class="n">best</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="n">bests</span><span class="p">):</span>
+                <span class="n">errp</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;errp&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">best</span><span class="p">)</span>
+
+            <span class="n">geom</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_region</span><span class="p">()</span>
+            <span class="n">norm_ul_map</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">errp</span><span class="p">),</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="n">map_dict</span><span class="p">[</span><span class="n">m</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;norm_ul&quot;</span><span class="p">:</span> <span class="n">norm_ul_map</span><span class="p">}</span>
+        <span class="k">return</span> <span class="n">map_dict</span>
+
+<div class="viewcode-block" id="RegularizedFluxPointsEstimator.run">
+<a class="viewcode-back" href="../../../../api/gammapy.estimators.RegularizedFluxPointsEstimator.html#gammapy.estimators.RegularizedFluxPointsEstimator.run">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">datasets</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Run the regularized flux points estimation.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        datasets : `~gammapy.datasets.Datasets` or list of `~gammapy.datasets.Dataset`</span>
+<span class="sd">            Datasets to fit.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        result : dict</span>
+<span class="sd">            Dictionary with the following keys:</span>
+
+<span class="sd">            * ``flux_points`` : dict of `~gammapy.estimators.FluxPoints`</span>
+<span class="sd">                Estimated flux points for each input model.</span>
+<span class="sd">            * ``models`` : `~gammapy.modeling.models.Models`</span>
+<span class="sd">                Models used in the fit.</span>
+<span class="sd">            * ``stat_sum_likelihood`` : float</span>
+<span class="sd">                Sum of likelihood contributions.</span>
+<span class="sd">            * ``stat_sum_penalty`` : float</span>
+<span class="sd">                Sum of penalty contributions.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">datasets</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_parse_datasets</span><span class="p">(</span><span class="n">datasets</span><span class="o">=</span><span class="n">datasets</span><span class="p">)</span>
+
+        <span class="n">datasets</span> <span class="o">=</span> <span class="n">datasets</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">other_models</span> <span class="o">=</span> <span class="n">Models</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">datasets</span><span class="o">.</span><span class="n">models</span> <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">names</span><span class="p">]</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">reoptimize</span><span class="p">:</span>
+            <span class="n">other_models</span><span class="o">.</span><span class="n">freeze</span><span class="p">()</span>
+        <span class="n">norm_models</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_regularized_models</span><span class="p">(</span><span class="n">datasets</span><span class="p">)</span>
+        <span class="n">models</span> <span class="o">=</span> <span class="n">other_models</span> <span class="o">+</span> <span class="n">norm_models</span>
+        <span class="n">models</span><span class="o">.</span><span class="n">_penalties</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">norm_models</span><span class="o">.</span><span class="n">_penalties</span>
+        <span class="p">)</span>  <span class="c1"># TODO: should be supported by __add__</span>
+
+        <span class="n">datasets</span><span class="o">.</span><span class="n">models</span> <span class="o">=</span> <span class="n">models</span>
+
+        <span class="n">maps_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_flux</span><span class="p">(</span><span class="n">datasets</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="s2">&quot;errn-errp&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">selection_optional</span><span class="p">:</span>
+            <span class="n">maps_dict</span> <span class="o">=</span> <span class="n">recursive_merge_dicts</span><span class="p">(</span>
+                <span class="n">maps_dict</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_errn_errp</span><span class="p">(</span><span class="n">datasets</span><span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="s2">&quot;ul&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">selection_optional</span><span class="p">:</span>
+            <span class="n">maps_dict</span> <span class="o">=</span> <span class="n">recursive_merge_dicts</span><span class="p">(</span><span class="n">maps_dict</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_ul</span><span class="p">(</span><span class="n">datasets</span><span class="p">))</span>
+
+        <span class="n">fp_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">models</span><span class="p">:</span>
+            <span class="n">fp_dict</span><span class="p">[</span><span class="n">m</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">FluxPoints</span><span class="o">.</span><span class="n">from_maps</span><span class="p">(</span>
+                <span class="n">maps</span><span class="o">=</span><span class="n">maps_dict</span><span class="p">[</span><span class="n">m</span><span class="o">.</span><span class="n">name</span><span class="p">],</span>
+                <span class="n">reference_model</span><span class="o">=</span><span class="n">m</span><span class="o">.</span><span class="n">spectral_model</span><span class="p">,</span>
+                <span class="n">sed_type</span><span class="o">=</span><span class="s2">&quot;likelihood&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">flux_points</span><span class="o">=</span><span class="n">fp_dict</span><span class="p">,</span>
+            <span class="n">models</span><span class="o">=</span><span class="n">models</span><span class="p">,</span>
+            <span class="n">stat_sum_likelihood</span><span class="o">=</span><span class="n">datasets</span><span class="o">.</span><span class="n">_stat_sum_likelihood</span><span class="p">(),</span>
+            <span class="n">stat_sum_penalty</span><span class="o">=</span><span class="n">datasets</span><span class="o">.</span><span class="n">stat_sum</span><span class="p">()</span> <span class="o">-</span> <span class="n">datasets</span><span class="o">.</span><span class="n">_stat_sum_likelihood</span><span class="p">(),</span>
+        <span class="p">)</span></div>
+</div>
+
 </pre></div>
 
                 </article>
