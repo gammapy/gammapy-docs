@@ -69,7 +69,7 @@
     <link rel="search" title="Search" href="../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="2.0.dev3861+g17c531a3a" />
+  <meta name="docsearch:version" content="2.0.dev3878+g7f526461f" />
   
     
     <script src="../../../../_static/searchtools.js"></script>
@@ -495,21 +495,25 @@
 <span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
 <span class="sd">&quot;&quot;&quot;Dark matter spectra.&quot;&quot;&quot;</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
 <span class="kn">import</span><span class="w"> </span><span class="nn">astropy.units</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">u</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">astropy.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">Table</span>
+
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.maps</span><span class="w"> </span><span class="kn">import</span> <span class="n">Map</span><span class="p">,</span> <span class="n">MapAxis</span><span class="p">,</span> <span class="n">RegionGeom</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.modeling</span><span class="w"> </span><span class="kn">import</span> <span class="n">Parameter</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.modeling.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">SpectralModel</span><span class="p">,</span> <span class="n">TemplateNDSpectralModel</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.utils.scripts</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.utils.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_map_columns</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;PrimaryFlux&quot;</span><span class="p">,</span>
     <span class="s2">&quot;DarkMatterAnnihilationSpectralModel&quot;</span><span class="p">,</span>
     <span class="s2">&quot;DarkMatterDecaySpectralModel&quot;</span><span class="p">,</span>
 <span class="p">]</span>
+<span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="PrimaryFlux">
@@ -530,17 +534,38 @@
 <span class="sd">        Dark matter particle mass as rest mass energy.</span>
 <span class="sd">    channel : str</span>
 <span class="sd">        Annihilation channel. List available channels with `~gammapy.astro.darkmatter.PrimaryFlux.allowed_channels`.</span>
-<span class="sd">    source : {&quot;cosmixs&quot;, &quot;pppc4&quot;}, optional</span>
-<span class="sd">        Data source for the spectra. Default is &#39;pppc4&#39;.</span>
+<span class="sd">    source : str or Table, optional</span>
+<span class="sd">        Data source for the spectra. Options are:</span>
+
+<span class="sd">        * ``&quot;pppc4&quot;`` (default): Cirelli et al. 2011.</span>
+<span class="sd">        * ``&quot;cosmixs&quot;``: Cirelli et al. 2024.</span>
+<span class="sd">        * A path to a custom file: Any format readable by `astropy.table.Table.read`</span>
+<span class="sd">        (e.g., .ecsv, .fits, .csv, .dat).</span>
+<span class="sd">        * An Astropy Table that read the desired path</span>
+
+<span class="sd">        If a custom file path is provided, it must contain &#39;mDM&#39; (mass of dark</span>
+<span class="sd">        matter particle) and &#39;Log[10,x]&#39; (energy) columns, plus columns named after</span>
+<span class="sd">        the requested annihilation/decay channels (see the documentation).</span>
+<span class="sd">    mapping_dict : dict, optional</span>
+<span class="sd">        Mapping dictionary to map the columns of the custom source file to the expected</span>
+<span class="sd">        column names. This is only needed if a file as a spectra source is provided</span>
+<span class="sd">        and the column names in the file do not match the expected names. The dictionary</span>
+<span class="sd">        should have the format {actual_column_name_in_file:expected_column_name}.</span>
+<span class="sd">        An example of the expected columns can be found in the documentation.</span>
+
 
 <span class="sd">    References</span>
 <span class="sd">    ----------</span>
-<span class="sd">    .. [1] `Marco et al. (2011), &quot;PPPC 4 DM ID: a poor particle physicist cookbook for dark matter indirect detection&quot; &lt;https://ui.adsabs.harvard.edu/abs/2011JCAP...03..051C&gt;`_</span>
-<span class="sd">    .. [2] `Cirelli et al. (2016), &quot;PPPC 4 DM ID: A Poor Particle Physicist Cookbook for Dark Matter Indirect Detection&quot; &lt;http://www.marcocirelli.net/PPPC4DMID.html&gt;`_</span>
-<span class="sd">    .. [3] `Arina et al. (2024), &quot;CosmiXs: Cosmic messenger spectra for indirect dark matter searches&quot; &lt;https://arxiv.org/abs/2312.01153&gt;`_</span>
-<span class="sd">    .. [4] `Di Mauro et al. (2025), &quot;Nailing down the theoretical uncertainties of Dbar spectrum produced from dark matter&quot; &lt;https://arxiv.org/abs/2411.04815&gt;`_</span>
+<span class="sd">    .. [1] `Marco et al. (2011), &quot;PPPC 4 DM ID: a poor particle physicist cookbook</span>
+<span class="sd">    for dark matter indirect detection&quot; &lt;https://ui.adsabs.harvard.edu/abs/2011JCAP...03..051C&gt;`_</span>
+<span class="sd">    .. [2] `Cirelli et al. (2016), &quot;PPPC 4 DM ID: A Poor Particle Physicist Cookbook</span>
+<span class="sd">    for Dark Matter Indirect Detection&quot; &lt;http://www.marcocirelli.net/PPPC4DMID.html&gt;`_</span>
+<span class="sd">    .. [3] `Arina et al. (2024), &quot;CosmiXs: Cosmic messenger spectra for indirect dark</span>
+<span class="sd">    matter searches&quot; &lt;https://arxiv.org/abs/2312.01153&gt;`_</span>
+<span class="sd">    .. [4] `Di Mauro et al. (2025), &quot;Nailing down the theoretical uncertainties of Dbar</span>
+<span class="sd">     spectrum produced from dark matter&quot; &lt;https://arxiv.org/abs/2411.04815&gt;`_</span>
 
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
 
     <span class="n">channel_registry</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">&quot;eL&quot;</span><span class="p">:</span> <span class="s2">&quot;eL&quot;</span><span class="p">,</span>
@@ -578,6 +603,8 @@
         <span class="s2">&quot;s&quot;</span><span class="p">:</span> <span class="s2">&quot;s&quot;</span><span class="p">,</span>
     <span class="p">}</span>
 
+    <span class="n">mandatory_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;mDM&quot;</span><span class="p">,</span> <span class="s2">&quot;Log[10,x]&quot;</span><span class="p">]</span>
+
     <span class="n">mapping_dict_PPPC4_to_CosmiXs</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">&quot;DM&quot;</span><span class="p">:</span> <span class="s2">&quot;mDM&quot;</span><span class="p">,</span>
         <span class="s2">&quot;Log10[x]&quot;</span><span class="p">:</span> <span class="s2">&quot;Log[10,x]&quot;</span><span class="p">,</span>
@@ -593,9 +620,9 @@
         <span class="s2">&quot;dNdLog10x[nue]&quot;</span><span class="p">:</span> <span class="s2">&quot;</span><span class="se">\\</span><span class="s2">[Nu]e&quot;</span><span class="p">,</span>
         <span class="s2">&quot;dNdLog10x[numu]&quot;</span><span class="p">:</span> <span class="s2">&quot;</span><span class="se">\\</span><span class="s2">[Nu]</span><span class="se">\\</span><span class="s2">[Mu]&quot;</span><span class="p">,</span>
         <span class="s2">&quot;dNdLog10x[nutau]&quot;</span><span class="p">:</span> <span class="s2">&quot;</span><span class="se">\\</span><span class="s2">[Nu]</span><span class="se">\\</span><span class="s2">[Tau]&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;dNdLog10x[u]&quot;</span><span class="p">:</span> <span class="s2">&quot;u&quot;</span><span class="p">,</span>  <span class="c1"># Does not exist explicitly on PPPC4, but it is equivalent to q</span>
-        <span class="s2">&quot;dNdLog10x[d]&quot;</span><span class="p">:</span> <span class="s2">&quot;d&quot;</span><span class="p">,</span>  <span class="c1"># Does not exist explicitly on PPPC4, but it is equivalent to q</span>
-        <span class="s2">&quot;dNdLog10x[s]&quot;</span><span class="p">:</span> <span class="s2">&quot;s&quot;</span><span class="p">,</span>  <span class="c1"># Does not exist explicitly on PPPC4, but it is equivalent to q</span>
+        <span class="s2">&quot;dNdLog10x[u]&quot;</span><span class="p">:</span> <span class="s2">&quot;u&quot;</span><span class="p">,</span>  <span class="c1"># Does not exist on PPPC4, it is equivalent to q</span>
+        <span class="s2">&quot;dNdLog10x[d]&quot;</span><span class="p">:</span> <span class="s2">&quot;d&quot;</span><span class="p">,</span>  <span class="c1"># Does not exist on PPPC4, it is equivalent to q</span>
+        <span class="s2">&quot;dNdLog10x[s]&quot;</span><span class="p">:</span> <span class="s2">&quot;s&quot;</span><span class="p">,</span>  <span class="c1"># Does not exist on PPPC4, it is equivalent to q</span>
         <span class="s2">&quot;dNdLog10x[c]&quot;</span><span class="p">:</span> <span class="s2">&quot;c&quot;</span><span class="p">,</span>
         <span class="s2">&quot;dNdLog10x[b]&quot;</span><span class="p">:</span> <span class="s2">&quot;b&quot;</span><span class="p">,</span>
         <span class="s2">&quot;dNdLog10x[t]&quot;</span><span class="p">:</span> <span class="s2">&quot;t&quot;</span><span class="p">,</span>
@@ -616,55 +643,63 @@
 
 <div class="viewcode-block" id="PrimaryFlux.__init__">
 <a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.PrimaryFlux.html#gammapy.astro.darkmatter.PrimaryFlux.__init__">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mDM</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="s2">&quot;pppc4&quot;</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">source</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">source</span> <span class="o">=</span> <span class="s2">&quot;pppc4&quot;</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Since no spectra source has been chosen, PPPC4 will be used by default.</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">,</span>
-                <span class="ne">UserWarning</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">=</span> <span class="n">source</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">==</span> <span class="s2">&quot;pppc4&quot;</span><span class="p">:</span>
-            <span class="n">table_filename</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="s2">&quot;$GAMMAPY_DATA/dark_matter_spectra/PPPC4DMID/AtProduction_gammas.dat&quot;</span>
-            <span class="p">)</span>
-        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">==</span> <span class="s2">&quot;cosmixs&quot;</span><span class="p">:</span>
-            <span class="n">table_filename</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="s2">&quot;$GAMMAPY_DATA/dark_matter_spectra/cosmixs/AtProduction-Gamma.dat&quot;</span>
-            <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">Data source is not valid, please choose between PPPC4 or cosmixs</span><span class="se">\n</span><span class="s2">&quot;</span>
-            <span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mDM</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">mapping_dict</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">=</span> <span class="n">source</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">table_path</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">table_filename</span><span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">table_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
-            <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">File not found: </span><span class="si">{</span><span class="n">table_filename</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
-                <span class="s2">&quot;You may download the dataset needed with the following command:</span><span class="se">\n</span><span class="s2">&quot;</span>
-                <span class="s2">&quot;gammapy download datasets --src dark_matter_spectra&quot;</span>
-            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_source_type</span> <span class="o">==</span> <span class="s2">&quot;custom_file&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span> <span class="o">=</span> <span class="n">mapping_dict</span>
+
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">Table</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">table</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">table_filename</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">table_path</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">table_filename</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">table_path</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">table_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                    <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span>  <span class="c1"># pragma: no cover</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">File not found: </span><span class="si">{</span><span class="n">table_filename</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+                        <span class="s2">&quot;You may download the dataset needed with the </span><span class="se">\</span>
+<span class="s2">                            following command:</span><span class="se">\n</span><span class="s2">&quot;</span>
+                        <span class="s2">&quot;gammapy download datasets --src dark_matter_spectra&quot;</span>
+                    <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">table_path</span><span class="p">)</span>
+
         <span class="k">else</span><span class="p">:</span>
+            <span class="n">base_data_path</span> <span class="o">=</span> <span class="s2">&quot;$GAMMAPY_DATA/dark_matter_spectra&quot;</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">==</span> <span class="s2">&quot;pppc4&quot;</span><span class="p">:</span>
+                <span class="n">table_filename</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base_data_path</span><span class="si">}</span><span class="s2">/PPPC4DMID/AtProduction_gammas.dat&quot;</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">==</span> <span class="s2">&quot;cosmixs&quot;</span><span class="p">:</span>
+                <span class="n">table_filename</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base_data_path</span><span class="si">}</span><span class="s2">/cosmixs/AtProduction-Gamma.dat&quot;</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">table_path</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">table_filename</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">table_path</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">table_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">File not found: </span><span class="si">{</span><span class="n">table_filename</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+                    <span class="s2">&quot;You may download the dataset needed with the following command:</span><span class="se">\n</span><span class="s2">&quot;</span>
+                    <span class="s2">&quot;gammapy download datasets --src dark_matter_spectra&quot;</span>
+                <span class="p">)</span>
+
             <span class="n">ascii_format</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="s2">&quot;ascii.commented_header&quot;</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">==</span> <span class="s2">&quot;cosmixs&quot;</span>
                 <span class="k">else</span> <span class="s2">&quot;ascii.fast_basic&quot;</span>
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">table</span> <span class="o">=</span> <span class="n">Table</span><span class="o">.</span><span class="n">read</span><span class="p">(</span>
-                <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">table_path</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">table_path</span><span class="p">,</span>
                 <span class="nb">format</span><span class="o">=</span><span class="n">ascii_format</span><span class="p">,</span>
                 <span class="n">guess</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
                 <span class="n">delimiter</span><span class="o">=</span><span class="s2">&quot; &quot;</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">==</span> <span class="s2">&quot;cosmixs&quot;</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">table</span> <span class="o">=</span> <span class="n">table_map_columns</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict_PPPC4_to_CosmiXs</span>
-                <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_source_type</span> <span class="o">==</span> <span class="s2">&quot;custom_file&quot;</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">table</span> <span class="o">=</span> <span class="n">table_map_columns</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">==</span> <span class="s2">&quot;cosmixs&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">table</span> <span class="o">=</span> <span class="n">table_map_columns</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict_PPPC4_to_CosmiXs</span>
+            <span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">channel</span> <span class="o">=</span> <span class="n">channel</span>
-
-        <span class="c1"># create RegionNDMap for channel</span>
-
         <span class="n">masses</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s2">&quot;mDM&quot;</span><span class="p">])</span>
         <span class="n">log10x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s2">&quot;Log[10,x]&quot;</span><span class="p">])</span>
 
@@ -672,7 +707,6 @@
         <span class="n">log10x_axis</span> <span class="o">=</span> <span class="n">MapAxis</span><span class="o">.</span><span class="n">from_nodes</span><span class="p">(</span><span class="n">log10x</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;energy_true&quot;</span><span class="p">)</span>
 
         <span class="n">channel_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">channel_registry</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">channel</span><span class="p">]</span>
-
         <span class="n">geom</span> <span class="o">=</span> <span class="n">RegionGeom</span><span class="p">(</span><span class="n">region</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">[</span><span class="n">log10x_axis</span><span class="p">,</span> <span class="n">mass_axis</span><span class="p">])</span>
         <span class="n">region_map</span> <span class="o">=</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span>
             <span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="n">channel_name</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">geom</span><span class="o">.</span><span class="n">data_shape</span><span class="p">)</span>
@@ -700,7 +734,8 @@
 
         <span class="k">if</span> <span class="n">_mDM_val</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span><span class="o">.</span><span class="n">min</span> <span class="ow">or</span> <span class="n">_mDM_val</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span><span class="o">.</span><span class="n">max</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;The mass </span><span class="si">{</span><span class="n">_mDM</span><span class="si">}</span><span class="s2"> is out of the bounds of the model. Please choose a mass between </span><span class="si">{</span><span class="n">min_mass</span><span class="si">}</span><span class="s2"> &lt; `mDM` &lt; </span><span class="si">{</span><span class="n">max_mass</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;The mass </span><span class="si">{</span><span class="n">_mDM</span><span class="si">}</span><span class="s2"> is out of the bounds of the model. Please choose a </span><span class="se">\</span>
+<span class="s2">                mass between </span><span class="si">{</span><span class="n">min_mass</span><span class="si">}</span><span class="s2"> &lt; `mDM` &lt; </span><span class="si">{</span><span class="n">max_mass</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">mass</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">_mDM_val</span>
@@ -709,6 +744,48 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">allowed_channels</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;List of allowed annihilation channels.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">channel_registry</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">source</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Data source for the spectra.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_source</span>
+
+    <span class="nd">@source</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">source</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">source</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">source</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_source</span> <span class="o">=</span> <span class="s2">&quot;pppc4&quot;</span>
+
+            <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Since no spectra source has been chosen, PPPC4 will be </span><span class="se">\</span>
+<span class="s2">                    used by default.</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">Table</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_source</span> <span class="o">=</span> <span class="n">source</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">source</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;pppc4&quot;</span><span class="p">,</span> <span class="s2">&quot;cosmixs&quot;</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_source</span> <span class="o">=</span> <span class="n">source</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">make_path</span><span class="p">(</span><span class="n">source</span><span class="p">))</span>
+                <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">path</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;Source file is empty.&quot;</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_source</span> <span class="o">=</span> <span class="n">source</span>
+
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Invalid source: </span><span class="si">{</span><span class="n">source</span><span class="si">}</span><span class="se">\n</span><span class="s2">Available options: &#39;pppc4&#39;, </span><span class="se">\</span>
+<span class="s2">                        &#39;cosmixs&#39; or a valid file path.</span><span class="se">\n</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;source must be None, a string (&#39;pppc4&#39;, &#39;cosmixs&#39;, or a file &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;path), or an astropy.table.Table instance, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">source</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_source_type</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return source type (predefined or custom).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="s2">&quot;predefined&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;pppc4&quot;</span><span class="p">,</span> <span class="s2">&quot;cosmixs&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="s2">&quot;custom_file&quot;</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">channel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -722,34 +799,76 @@
                 <span class="sa">f</span><span class="s2">&quot;Invalid channel: </span><span class="si">{</span><span class="n">channel</span><span class="si">}</span><span class="se">\n</span><span class="s2">Available: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">allowed_channels</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">==</span> <span class="s2">&quot;pppc4&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_source_type</span> <span class="o">==</span> <span class="s2">&quot;custom_file&quot;</span><span class="p">:</span>
+                <span class="n">channel_translation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">channel_registry</span><span class="p">[</span><span class="n">channel</span><span class="p">]</span>
+
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">channel_translation</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;The channel </span><span class="si">{</span><span class="n">channel_translation</span><span class="si">}</span><span class="s2"> is not available </span><span class="se">\</span>
+<span class="s2">                            in the provided mapping dictionary. Please choose another </span><span class="se">\</span>
+<span class="s2">                            channel or check the mapping_dict provided.</span><span class="se">\n</span><span class="s2">&quot;</span>
+                        <span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">channel_translation</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">colnames</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">The channel </span><span class="si">{</span><span class="n">channel_translation</span><span class="si">}</span><span class="s2"> is not available </span><span class="se">\</span>
+<span class="s2">                        in the provided source file. Please choose another channel </span><span class="se">\</span>
+<span class="s2">                        or check the column names in the file.</span><span class="se">\n</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">==</span> <span class="s2">&quot;pppc4&quot;</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">channel</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;aZ&quot;</span><span class="p">,</span> <span class="s2">&quot;HZ&quot;</span><span class="p">):</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">The channel </span><span class="si">{</span><span class="n">channel</span><span class="si">}</span><span class="s2"> is not available in PPPC4, please choose another channel or use CosmiXs (cosmixs) as source</span><span class="se">\n</span><span class="s2">&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">The channel </span><span class="si">{</span><span class="n">channel</span><span class="si">}</span><span class="s2"> is not available in PPPC4, please </span><span class="se">\</span>
+<span class="s2">                           choose another channel or use CosmiXs (cosmixs) as source</span><span class="se">\n</span><span class="s2">&quot;</span>
                     <span class="p">)</span>
                 <span class="k">elif</span> <span class="n">channel</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;d&quot;</span><span class="p">,</span> <span class="s2">&quot;u&quot;</span><span class="p">,</span> <span class="s2">&quot;s&quot;</span><span class="p">):</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">The channel </span><span class="si">{</span><span class="n">channel</span><span class="si">}</span><span class="s2"> is not available in PPPC4, please choose the equivalent channel q or use CosmiXs (cosmixs) as source</span><span class="se">\n</span><span class="s2">&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">The channel </span><span class="si">{</span><span class="n">channel</span><span class="si">}</span><span class="s2"> is not available in PPPC4, </span><span class="se">\</span>
+<span class="s2">                         please choose the equivalent channel q </span><span class="se">\</span>
+<span class="s2">                         or CosmiXs (cosmixs) as source</span><span class="se">\n</span><span class="s2">&quot;</span>
                     <span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span> <span class="o">=</span> <span class="n">channel</span>
 
             <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">==</span> <span class="s2">&quot;cosmixs&quot;</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">channel</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;V-&gt;e&quot;</span><span class="p">,</span> <span class="s2">&quot;V-&gt;mu&quot;</span><span class="p">,</span> <span class="s2">&quot;V-&gt;tau&quot;</span><span class="p">):</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">The channel </span><span class="si">{</span><span class="n">channel</span><span class="si">}</span><span class="s2"> is not available in CosmiXs, please choose another channel or use PPPC4 as source</span><span class="se">\n</span><span class="s2">&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">The channel </span><span class="si">{</span><span class="n">channel</span><span class="si">}</span><span class="s2"> is not available in CosmiXs, </span><span class="se">\</span>
+<span class="s2">                        please choose another channel or use PPPC4 as source</span><span class="se">\n</span><span class="s2">&quot;</span>
                     <span class="p">)</span>
                 <span class="k">elif</span> <span class="n">channel</span> <span class="o">==</span> <span class="s2">&quot;q&quot;</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">The channel q is not available in cosmixs, please choose an equivalent channel such as d, u or s or use PPPC4 as source</span><span class="se">\n</span><span class="s2">&quot;</span>
+                        <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">The channel q is not available in cosmixs, please </span><span class="se">\</span>
+<span class="s2">                        choose an equivalent channel such as d, u or s or </span><span class="se">\</span>
+<span class="s2">                        use PPPC4 as source</span><span class="se">\n</span><span class="s2">&quot;</span>
                     <span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span> <span class="o">=</span> <span class="n">channel</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span> <span class="o">=</span> <span class="n">channel</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mapping_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Mapping dictionary for the spectra file.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mapping_dict</span>
+
+    <span class="nd">@mapping_dict</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mapping_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mapping_dict</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">mapping_dict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">mapping_dict</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;mapping_dict must be a dictionary.&quot;</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">mandatory_keys</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">mapping_dict</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                    <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Mandatory column </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2"> not found in file. </span><span class="se">\</span>
+<span class="s2">                        Please check the mapping_dict provided or the column </span><span class="se">\</span>
+<span class="s2">                        names in the file.</span><span class="se">\n</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_mapping_dict</span> <span class="o">=</span> <span class="n">mapping_dict</span>
 
 <div class="viewcode-block" id="PrimaryFlux.evaluate">
 <a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.PrimaryFlux.html#gammapy.astro.darkmatter.PrimaryFlux.evaluate">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate the primary flux.&quot;&quot;&quot;</span>
+
         <span class="n">args</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
         <span class="n">args</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mDM</span><span class="p">)</span>
 
@@ -779,19 +898,37 @@
 <span class="sd">    mass : `~astropy.units.Quantity`</span>
 <span class="sd">        Dark matter mass.</span>
 <span class="sd">    channel : str</span>
-<span class="sd">        Annihilation channel for `~gammapy.astro.darkmatter.PrimaryFlux`, e.g. &quot;b&quot; for &quot;bbar&quot;.</span>
+<span class="sd">        Annihilation channel for `~gammapy.astro.darkmatter.PrimaryFlux`, e.g. &quot;b&quot;</span>
+<span class="sd">        for &quot;bbar&quot;.</span>
 <span class="sd">        See `PrimaryFlux.channel_registry` for more.</span>
 <span class="sd">    scale : float</span>
 <span class="sd">        Scale parameter for model fitting.</span>
-<span class="sd">    jfactor : `~astropy.units.Quantity`</span>
+<span class="sd">    jfactor : `~astropy.units.Quantity`, optional</span>
 <span class="sd">        Integrated J-Factor needed when `~gammapy.modeling.models.PointSpatialModel`</span>
-<span class="sd">        is used.</span>
+<span class="sd">        is used. Default is 1.</span>
 <span class="sd">    z : float, optional</span>
 <span class="sd">        Redshift value. Default is 0.</span>
 <span class="sd">    k : int, optional</span>
 <span class="sd">        Type of dark matter particle (k:2 Majorana, k:4 Dirac). Default is 2.</span>
-<span class="sd">    source : {&quot;cosmixs&quot;, &quot;pppc4&quot;}, optional</span>
-<span class="sd">        Data source for the spectra. Default is &#39;pppc4&#39;.</span>
+<span class="sd">    source : str or Table, optional</span>
+<span class="sd">        Data source for the spectra. Options are:</span>
+
+<span class="sd">        * ``&quot;pppc4&quot;`` (default): Cirelli et al. 2011.</span>
+<span class="sd">        * ``&quot;cosmixs&quot;``: Cirelli et al. 2024.</span>
+<span class="sd">        * A path to a custom file: Any format readable by `astropy.table.Table.read`</span>
+<span class="sd">        (e.g., .ecsv, .fits, .csv, .dat).</span>
+<span class="sd">        * An Astropy Table that read the desired path</span>
+
+
+<span class="sd">        If a custom file path is provided, it must contain &#39;mDM&#39; (mass of dark</span>
+<span class="sd">        matter particle) and &#39;Log[10,x]&#39; (energy) columns, plus columns named after</span>
+<span class="sd">        the requested annihilation/decay channels (see the documentation).</span>
+<span class="sd">    mapping_dict : dict, optional</span>
+<span class="sd">        Mapping dictionary to map the columns of the custom source file to the expected</span>
+<span class="sd">        column names. This is only needed if a file as a spectra source is provided</span>
+<span class="sd">        and the column names in the file do not match the expected names. The dictionary</span>
+<span class="sd">        should have the format {actual_column_name_in_file:expected_column_name}.</span>
+<span class="sd">        An example of the expected columns can be found in the documentation.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -803,11 +940,13 @@
 <span class="sd">        &gt;&gt;&gt; channel = &quot;b&quot;</span>
 <span class="sd">        &gt;&gt;&gt; massDM = 5000*u.Unit(&quot;GeV&quot;)</span>
 <span class="sd">        &gt;&gt;&gt; jfactor = 3.41e19 * u.Unit(&quot;GeV2 cm-5&quot;)</span>
-<span class="sd">        &gt;&gt;&gt; modelDM = DarkMatterAnnihilationSpectralModel(mass=massDM, channel=channel, jfactor=jfactor)  # noqa: E501</span>
+<span class="sd">        &gt;&gt;&gt; modelDM = DarkMatterAnnihilationSpectralModel(mass=massDM,</span>
+<span class="sd">          channel=channel, jfactor=jfactor)  # noqa: E501</span>
 
 <span class="sd">    References</span>
 <span class="sd">    ----------</span>
-<span class="sd">    `Marco et al. (2011), &quot;PPPC 4 DM ID: a poor particle physicist cookbook for dark matter indirect detection&quot; &lt;https://ui.adsabs.harvard.edu/abs/2011JCAP...03..051C&gt;`_</span>
+<span class="sd">    `Marco et al. (2011), &quot;PPPC 4 DM ID: a poor particle physicist cookbook for dark</span>
+<span class="sd">      matter indirect detection&quot; &lt;https://ui.adsabs.harvard.edu/abs/2011JCAP...03..051C&gt;`_</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">THERMAL_RELIC_CROSS_SECTION</span> <span class="o">=</span> <span class="mf">3e-26</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s2">&quot;cm3 s-1&quot;</span><span class="p">)</span>
@@ -824,15 +963,30 @@
 <div class="viewcode-block" id="DarkMatterAnnihilationSpectralModel.__init__">
 <a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.DarkMatterAnnihilationSpectralModel.html#gammapy.astro.darkmatter.DarkMatterAnnihilationSpectralModel.__init__">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">mass</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="o">.</span><span class="n">quantity</span><span class="p">,</span> <span class="n">jfactor</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="s2">&quot;pppc4&quot;</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">mass</span><span class="p">,</span>
+        <span class="n">channel</span><span class="p">,</span>
+        <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="o">.</span><span class="n">quantity</span><span class="p">,</span>
+        <span class="n">jfactor</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">z</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">k</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="n">source</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">mapping_dict</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">k</span> <span class="o">=</span> <span class="n">k</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">z</span> <span class="o">=</span> <span class="n">z</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">mass</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">channel</span> <span class="o">=</span> <span class="n">channel</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">jfactor</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">jfactor</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">primary_flux</span> <span class="o">=</span> <span class="n">PrimaryFlux</span><span class="p">(</span><span class="n">mass</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">channel</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">source</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">=</span> <span class="n">source</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span> <span class="o">=</span> <span class="n">mapping_dict</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">primary_flux</span> <span class="o">=</span> <span class="n">PrimaryFlux</span><span class="p">(</span>
+            <span class="n">mass</span><span class="p">,</span>
+            <span class="n">channel</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">channel</span><span class="p">,</span>
+            <span class="n">source</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span>
+            <span class="n">mapping_dict</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span><span class="p">,</span>
+        <span class="p">)</span>
+
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">)</span></div>
 
 
@@ -864,6 +1018,7 @@
         <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;z&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">z</span>
         <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;k&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">k</span>
         <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;source&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span>
+        <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;mapping_dict&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span>
         <span class="k">return</span> <span class="n">data</span></div>
 
 
@@ -913,13 +1068,31 @@
 <span class="sd">        See `PrimaryFlux.channel_registry` for more.</span>
 <span class="sd">    scale : float</span>
 <span class="sd">        Scale parameter for model fitting</span>
-<span class="sd">    jfactor : `~astropy.units.Quantity`</span>
+<span class="sd">    jfactor : `~astropy.units.Quantity`, optional</span>
 <span class="sd">        Integrated J-Factor needed when `~gammapy.modeling.models.PointSpatialModel`</span>
-<span class="sd">        is used.</span>
+<span class="sd">        is used. Default is 1.</span>
 <span class="sd">    z : float, optional</span>
 <span class="sd">        Redshift value. Default is 0.</span>
-<span class="sd">    source : {&quot;cosmixs&quot;, &quot;pppc4&quot;}, optional</span>
-<span class="sd">        Data source for the spectra. Default is &#39;pppc4&#39;.</span>
+<span class="sd">    source : str or Table, optional</span>
+<span class="sd">        Data source for the spectra. Options are:</span>
+
+<span class="sd">        * ``&quot;pppc4&quot;`` (default): Cirelli et al. 2011.</span>
+<span class="sd">        * ``&quot;cosmixs&quot;``: Cirelli et al. 2024.</span>
+<span class="sd">        * A path to a custom file: Any format readable by `astropy.table.Table.read`</span>
+<span class="sd">        (e.g., .ecsv, .fits, .csv, .dat).</span>
+<span class="sd">        * An Astropy Table that read the desired path</span>
+
+
+<span class="sd">        If a custom file path is provided, it must contain &#39;mDM&#39; (mass of dark</span>
+<span class="sd">        matter particle) and &#39;Log[10,x]&#39; (energy) columns, plus columns named after</span>
+<span class="sd">        the requested annihilation/decay channels (see the documentation).</span>
+<span class="sd">    mapping_dict : dict, optional</span>
+<span class="sd">        Mapping dictionary to map the columns of the custom source file to the expected</span>
+<span class="sd">        column names. This is only needed if a file as a spectra source is provided</span>
+<span class="sd">        and the column names in the file do not match the expected names. The dictionary</span>
+<span class="sd">        should have the format {actual_column_name_in_file:expected_column_name}.</span>
+<span class="sd">        An example of the expected columns can be found in the documentation.</span>
+
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -931,11 +1104,13 @@
 <span class="sd">        &gt;&gt;&gt; channel = &quot;b&quot;</span>
 <span class="sd">        &gt;&gt;&gt; massDM = 5000*u.Unit(&quot;GeV&quot;)</span>
 <span class="sd">        &gt;&gt;&gt; jfactor = 3.41e19 * u.Unit(&quot;GeV cm-2&quot;)</span>
-<span class="sd">        &gt;&gt;&gt; modelDM = DarkMatterDecaySpectralModel(mass=massDM, channel=channel, jfactor=jfactor)  # noqa: E501</span>
+<span class="sd">        &gt;&gt;&gt; modelDM = DarkMatterDecaySpectralModel(mass=massDM,</span>
+<span class="sd">        channel=channel, jfactor=jfactor)</span>
 
 <span class="sd">    References</span>
 <span class="sd">    ----------</span>
-<span class="sd">    `Marco et al. (2011), &quot;PPPC 4 DM ID: a poor particle physicist cookbook for dark matter indirect detection&quot; &lt;https://ui.adsabs.harvard.edu/abs/2011JCAP...03..051C&gt;`_</span>
+<span class="sd">    `Marco et al. (2011), &quot;PPPC 4 DM ID: a poor particle physicist cookbook for dark</span>
+<span class="sd">    matter indirect detection&quot; &lt;https://ui.adsabs.harvard.edu/abs/2011JCAP...03..051C&gt;`_</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">LIFETIME_AGE_OF_UNIVERSE</span> <span class="o">=</span> <span class="mf">4.3e17</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s2">&quot;s&quot;</span><span class="p">)</span>
@@ -953,16 +1128,28 @@
 <div class="viewcode-block" id="DarkMatterDecaySpectralModel.__init__">
 <a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.DarkMatterDecaySpectralModel.html#gammapy.astro.darkmatter.DarkMatterDecaySpectralModel.__init__">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">mass</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="o">.</span><span class="n">quantity</span><span class="p">,</span> <span class="n">jfactor</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="s2">&quot;pppc4&quot;</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">mass</span><span class="p">,</span>
+        <span class="n">channel</span><span class="p">,</span>
+        <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="o">.</span><span class="n">quantity</span><span class="p">,</span>
+        <span class="n">jfactor</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">z</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">source</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">mapping_dict</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">z</span> <span class="o">=</span> <span class="n">z</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">mass</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">channel</span> <span class="o">=</span> <span class="n">channel</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">jfactor</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">jfactor</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">primary_flux</span> <span class="o">=</span> <span class="n">PrimaryFlux</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">channel</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">source</span>
-        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">=</span> <span class="n">source</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span> <span class="o">=</span> <span class="n">mapping_dict</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">primary_flux</span> <span class="o">=</span> <span class="n">PrimaryFlux</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span>
+            <span class="n">channel</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">channel</span><span class="p">,</span>
+            <span class="n">source</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span>
+            <span class="n">mapping_dict</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span><span class="p">,</span>
+        <span class="p">)</span>
+
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">)</span></div>
 
 
@@ -990,6 +1177,7 @@
         <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;jfactor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">jfactor</span><span class="o">.</span><span class="n">to_string</span><span class="p">()</span>
         <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;z&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">z</span>
         <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;source&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span>
+        <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;mapping_dict&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span>
         <span class="k">return</span> <span class="n">data</span></div>
 
 
