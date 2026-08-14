@@ -69,7 +69,7 @@
     <link rel="search" title="Search" href="../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="2.0.dev4159+g302a2ee09" />
+  <meta name="docsearch:version" content="2.0.dev4189+g94d2ab81e" />
   
     
     <script src="../../../../_static/searchtools.js"></script>
@@ -495,6 +495,8 @@
 <span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
 <span class="sd">&quot;&quot;&quot;Dark matter spectra.&quot;&quot;&quot;</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
@@ -505,67 +507,114 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.maps</span><span class="w"> </span><span class="kn">import</span> <span class="n">Map</span><span class="p">,</span> <span class="n">MapAxis</span><span class="p">,</span> <span class="n">RegionGeom</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.modeling</span><span class="w"> </span><span class="kn">import</span> <span class="n">Parameter</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.modeling.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">SpectralModel</span><span class="p">,</span> <span class="n">TemplateNDSpectralModel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.utils.deprecation</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">GammapyDeprecationWarning</span><span class="p">,</span>
+    <span class="n">deprecated</span><span class="p">,</span>
+    <span class="n">deprecated_renamed_argument</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.utils.scripts</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.utils.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_map_columns</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="s2">&quot;PrimaryFlux&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ContinuumPrimaryFlux&quot;</span><span class="p">,</span>
     <span class="s2">&quot;DarkMatterAnnihilationSpectralModel&quot;</span><span class="p">,</span>
     <span class="s2">&quot;DarkMatterDecaySpectralModel&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;PrimaryFlux&quot;</span><span class="p">,</span>
 <span class="p">]</span>
 <span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="PrimaryFlux">
-<a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.PrimaryFlux.html#gammapy.astro.darkmatter.PrimaryFlux">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">PrimaryFlux</span><span class="p">(</span><span class="n">TemplateNDSpectralModel</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;DM-annihilation gamma-ray spectra.</span>
+<div class="viewcode-block" id="ContinuumPrimaryFlux">
+<a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.ContinuumPrimaryFlux.html#gammapy.astro.darkmatter.ContinuumPrimaryFlux">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ContinuumPrimaryFlux</span><span class="p">(</span><span class="n">TemplateNDSpectralModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Continuum gamma-ray spectrum from dark matter annihilation.</span>
 
-<span class="sd">    Based on the precomputed models of PPPC4 DM ID by [1]_, [2]_ and CosmiXs by [3]_, [4]_.</span>
-<span class="sd">    All available annihilation channels can be found there. The dark matter mass will be set</span>
-<span class="sd">    to the nearest available value. The spectra will be available as</span>
-<span class="sd">    `~gammapy.modeling.models.TemplateNDSpectralModel` for a chosen dark matter mass and</span>
-<span class="sd">    annihilation channel. Using a `~gammapy.modeling.models.TemplateNDSpectralModel`</span>
-<span class="sd">    allows the interpolation between different dark matter masses.</span>
+<span class="sd">    Based on the precomputed tables of PPPC4 DM ID and CosmiXs. All</span>
+<span class="sd">    available annihilation channels can be found in those tables. For a</span>
+<span class="sd">    requested dark matter mass and channel, this class builds a</span>
+<span class="sd">    `~gammapy.modeling.models.TemplateNDSpectralModel` over a 2D grid of</span>
+<span class="sd">    (``Log[10,x]``, ``mDM``), enabling interpolation in dark matter mass</span>
+<span class="sd">    while keeping ``mDM`` itself frozen as a model parameter.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    mDM : `~astropy.units.Quantity`</span>
-<span class="sd">        Dark matter particle mass as rest mass energy.</span>
+<span class="sd">        Dark matter particle mass as rest mass energy. Must lie within the</span>
+<span class="sd">        mass range tabulated by the chosen ``source``.</span>
 <span class="sd">    channel : str</span>
-<span class="sd">        Annihilation channel. List available channels with `~gammapy.astro.darkmatter.PrimaryFlux.allowed_channels`.</span>
-<span class="sd">    source : str or Table, optional</span>
-<span class="sd">        Data source for the spectra. Options are:</span>
+<span class="sd">        Annihilation channel, e.g. ``&quot;b&quot;`` for bb̄. See</span>
+<span class="sd">        `allowed_channels` for the full list of supported channel labels.</span>
+<span class="sd">        Availability of a given channel may depend on ``source``.</span>
+<span class="sd">    source : str, optional</span>
+<span class="sd">        Data source for the spectral tables. Options are:</span>
 
-<span class="sd">        * ``&quot;pppc4&quot;`` (default): Cirelli et al. 2011.</span>
-<span class="sd">        * ``&quot;cosmixs&quot;``: Cirelli et al. 2024.</span>
-<span class="sd">        * A path to a custom file: Any format readable by `astropy.table.Table.read`</span>
-<span class="sd">        (e.g., .ecsv, .fits, .csv, .dat).</span>
-<span class="sd">        * An Astropy Table that read the desired path</span>
+<span class="sd">        * ``&quot;pppc4&quot;`` (default): Cirelli et al. (2011, 2016) PPPC4DMID</span>
+<span class="sd">          tables.</span>
+<span class="sd">        * ``&quot;cosmixs&quot;``: Cirelli et al. (2024) / CosmiXs tables.</span>
+<span class="sd">        * A path to a custom file readable by `astropy.table.Table.read`</span>
+<span class="sd">          (extensions ``.dat``, ``.txt``, ``.csv``, or ``.ecsv``).</span>
 
-<span class="sd">        If a custom file path is provided, it must contain &#39;mDM&#39; (mass of dark</span>
-<span class="sd">        matter particle) and &#39;Log[10,x]&#39; (energy) columns, plus columns named after</span>
-<span class="sd">        the requested annihilation/decay channels (see the documentation).</span>
+<span class="sd">        If a custom file path is provided, it must contain ``&quot;mDM&quot;`` and</span>
+<span class="sd">        ``&quot;Log[10,x]&quot;`` columns (after applying ``mapping_dict`` if given),</span>
+<span class="sd">        plus columns named after the requested annihilation channel(s)</span>
+<span class="sd">        using the internal channel registry naming convention.</span>
 <span class="sd">    mapping_dict : dict, optional</span>
-<span class="sd">        Mapping dictionary to map the columns of the custom source file to the expected</span>
-<span class="sd">        column names. This is only needed if a file as a spectra source is provided</span>
-<span class="sd">        and the column names in the file do not match the expected names. The dictionary</span>
-<span class="sd">        should have the format {actual_column_name_in_file:expected_column_name}.</span>
-<span class="sd">        An example of the expected columns can be found in the documentation.</span>
+<span class="sd">        Mapping dictionary used to rename the columns of a custom source</span>
+<span class="sd">        file to the expected internal column names. Only used when</span>
+<span class="sd">        ``source`` is a custom file path. Format is</span>
+<span class="sd">        ``{actual_column_name: expected_column_name}``, and must cover the</span>
+<span class="sd">        mandatory columns ``&quot;mDM&quot;`` and ``&quot;Log[10,x]&quot;``.</span>
 
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Internally, the spectral table is read and reshaped into a 2D</span>
+<span class="sd">    `~gammapy.maps.RegionGeom` over (``Log[10,x]``, ``mDM``) axes, wrapped</span>
+<span class="sd">    in a `~gammapy.maps.Map`, and passed to the</span>
+<span class="sd">    `~gammapy.modeling.models.TemplateNDSpectralModel` constructor with</span>
+<span class="sd">    linear interpolation and zero-valued extrapolation. The ``mass``</span>
+<span class="sd">    parameter inherited from `TemplateNDSpectralModel` is frozen after</span>
+<span class="sd">    initialization, since ``mDM`` is treated as a fixed configuration value</span>
+<span class="sd">    rather than a fit parameter.</span>
 
 <span class="sd">    References</span>
 <span class="sd">    ----------</span>
-<span class="sd">    .. [1] `Marco et al. (2011), &quot;PPPC 4 DM ID: a poor particle physicist cookbook</span>
-<span class="sd">    for dark matter indirect detection&quot; &lt;https://ui.adsabs.harvard.edu/abs/2011JCAP...03..051C&gt;`_</span>
-<span class="sd">    .. [2] `Cirelli et al. (2016), &quot;PPPC 4 DM ID: A Poor Particle Physicist Cookbook</span>
-<span class="sd">    for Dark Matter Indirect Detection&quot; &lt;http://www.marcocirelli.net/PPPC4DMID.html&gt;`_</span>
-<span class="sd">    .. [3] `Arina et al. (2024), &quot;CosmiXs: Cosmic messenger spectra for indirect dark</span>
-<span class="sd">    matter searches&quot; &lt;https://arxiv.org/abs/2312.01153&gt;`_</span>
-<span class="sd">    .. [4] `Di Mauro et al. (2025), &quot;Nailing down the theoretical uncertainties of Dbar</span>
-<span class="sd">     spectrum produced from dark matter&quot; &lt;https://arxiv.org/abs/2411.04815&gt;`_</span>
+<span class="sd">    .. [1] `Cirelli et al. (2016), &quot;PPPC 4 DM ID: A Poor Particle Physicist</span>
+<span class="sd">       Cookbook for Dark Matter Indirect Detection&quot;</span>
+<span class="sd">       &lt;http://www.marcocirelli.net/PPPC4DMID.html&gt;`_</span>
+<span class="sd">    .. [2] `Arina et al. (2024), &quot;CosmiXs: Cosmic messenger spectra for</span>
+<span class="sd">       indirect dark matter searches&quot; &lt;https://arxiv.org/abs/2312.01153&gt;`_</span>
+<span class="sd">    .. [3] `Di Mauro et al. (2025), &quot;Nailing down the theoretical</span>
+<span class="sd">       uncertainties of Dbar spectrum produced from dark matter&quot;</span>
+<span class="sd">       &lt;https://arxiv.org/abs/2411.04815&gt;`_</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
-<span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
+    <span class="c1"># noqa: E501</span>
+
+    <span class="n">_unavailable_channels</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;pppc4&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;aZ&quot;</span><span class="p">:</span> <span class="s2">&quot;choose another channel or use CosmiXs (&#39;cosmixs&#39;) as source&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;HZ&quot;</span><span class="p">:</span> <span class="s2">&quot;choose another channel or use CosmiXs (&#39;cosmixs&#39;) as source&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;d&quot;</span><span class="p">:</span> <span class="p">(</span>
+                <span class="s2">&quot;choose the equivalent channel &#39;q&#39; or use CosmiXs (&#39;cosmixs&#39;) as source&quot;</span>
+            <span class="p">),</span>
+            <span class="s2">&quot;u&quot;</span><span class="p">:</span> <span class="p">(</span>
+                <span class="s2">&quot;choose the equivalent channel &#39;q&#39; or use CosmiXs (&#39;cosmixs&#39;) as source&quot;</span>
+            <span class="p">),</span>
+            <span class="s2">&quot;s&quot;</span><span class="p">:</span> <span class="p">(</span>
+                <span class="s2">&quot;choose the equivalent channel &#39;q&#39; or use CosmiXs (&#39;cosmixs&#39;) as source&quot;</span>
+            <span class="p">),</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;cosmixs&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;V-&gt;e&quot;</span><span class="p">:</span> <span class="s2">&quot;choose another channel or use PPPC4 (&#39;pppc4&#39;) as source&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;V-&gt;mu&quot;</span><span class="p">:</span> <span class="s2">&quot;choose another channel or use PPPC4 (&#39;pppc4&#39;) as source&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;V-&gt;tau&quot;</span><span class="p">:</span> <span class="s2">&quot;choose another channel or use PPPC4 (&#39;pppc4&#39;) as source&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;q&quot;</span><span class="p">:</span> <span class="p">(</span>
+                <span class="s2">&quot;choose an equivalent channel such as &#39;d&#39;, &#39;u&#39;, or &#39;s&#39; &quot;</span>
+                <span class="s2">&quot;or use PPPC4 (&#39;pppc4&#39;) as source&quot;</span>
+            <span class="p">),</span>
+        <span class="p">},</span>
+    <span class="p">}</span>
 
     <span class="n">channel_registry</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">&quot;eL&quot;</span><span class="p">:</span> <span class="s2">&quot;eL&quot;</span><span class="p">,</span>
@@ -620,9 +669,9 @@
         <span class="s2">&quot;dNdLog10x[nue]&quot;</span><span class="p">:</span> <span class="s2">&quot;</span><span class="se">\\</span><span class="s2">[Nu]e&quot;</span><span class="p">,</span>
         <span class="s2">&quot;dNdLog10x[numu]&quot;</span><span class="p">:</span> <span class="s2">&quot;</span><span class="se">\\</span><span class="s2">[Nu]</span><span class="se">\\</span><span class="s2">[Mu]&quot;</span><span class="p">,</span>
         <span class="s2">&quot;dNdLog10x[nutau]&quot;</span><span class="p">:</span> <span class="s2">&quot;</span><span class="se">\\</span><span class="s2">[Nu]</span><span class="se">\\</span><span class="s2">[Tau]&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;dNdLog10x[u]&quot;</span><span class="p">:</span> <span class="s2">&quot;u&quot;</span><span class="p">,</span>  <span class="c1"># Does not exist on PPPC4, it is equivalent to q</span>
-        <span class="s2">&quot;dNdLog10x[d]&quot;</span><span class="p">:</span> <span class="s2">&quot;d&quot;</span><span class="p">,</span>  <span class="c1"># Does not exist on PPPC4, it is equivalent to q</span>
-        <span class="s2">&quot;dNdLog10x[s]&quot;</span><span class="p">:</span> <span class="s2">&quot;s&quot;</span><span class="p">,</span>  <span class="c1"># Does not exist on PPPC4, it is equivalent to q</span>
+        <span class="s2">&quot;dNdLog10x[u]&quot;</span><span class="p">:</span> <span class="s2">&quot;u&quot;</span><span class="p">,</span>  <span class="c1"># no PPPC4 equivalent; maps to q</span>
+        <span class="s2">&quot;dNdLog10x[d]&quot;</span><span class="p">:</span> <span class="s2">&quot;d&quot;</span><span class="p">,</span>  <span class="c1"># no PPPC4 equivalent; maps to q</span>
+        <span class="s2">&quot;dNdLog10x[s]&quot;</span><span class="p">:</span> <span class="s2">&quot;s&quot;</span><span class="p">,</span>  <span class="c1"># no PPPC4 equivalent; maps to q</span>
         <span class="s2">&quot;dNdLog10x[c]&quot;</span><span class="p">:</span> <span class="s2">&quot;c&quot;</span><span class="p">,</span>
         <span class="s2">&quot;dNdLog10x[b]&quot;</span><span class="p">:</span> <span class="s2">&quot;b&quot;</span><span class="p">,</span>
         <span class="s2">&quot;dNdLog10x[t]&quot;</span><span class="p">:</span> <span class="s2">&quot;t&quot;</span><span class="p">,</span>
@@ -635,14 +684,14 @@
         <span class="s2">&quot;dNdLog10x[ZL]&quot;</span><span class="p">:</span> <span class="s2">&quot;ZL&quot;</span><span class="p">,</span>
         <span class="s2">&quot;dNdLog10x[ZT]&quot;</span><span class="p">:</span> <span class="s2">&quot;ZT&quot;</span><span class="p">,</span>
         <span class="s2">&quot;dNdLog10x[H]&quot;</span><span class="p">:</span> <span class="s2">&quot;h&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;dNdLog10x[aZ]&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># Does not exist  on PPPC4</span>
-        <span class="s2">&quot;dNdLog10x[HZ]&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># Does not exist  on PPPC4</span>
+        <span class="s2">&quot;dNdLog10x[aZ]&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># does not exist in PPPC4</span>
+        <span class="s2">&quot;dNdLog10x[HZ]&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># does not exist in PPPC4</span>
     <span class="p">}</span>
 
-    <span class="n">tag</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;PrimaryFlux&quot;</span><span class="p">,</span> <span class="s2">&quot;dm-pf&quot;</span><span class="p">]</span>
+    <span class="n">tag</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;ContinuumPrimaryFlux&quot;</span><span class="p">,</span> <span class="s2">&quot;dm-pf&quot;</span><span class="p">]</span>
 
-<div class="viewcode-block" id="PrimaryFlux.__init__">
-<a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.PrimaryFlux.html#gammapy.astro.darkmatter.PrimaryFlux.__init__">[docs]</a>
+<div class="viewcode-block" id="ContinuumPrimaryFlux.__init__">
+<a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.ContinuumPrimaryFlux.html#gammapy.astro.darkmatter.ContinuumPrimaryFlux.__init__">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mDM</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">mapping_dict</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">=</span> <span class="n">source</span>
 
@@ -718,10 +767,67 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">mass</span><span class="o">.</span><span class="n">frozen</span> <span class="o">=</span> <span class="kc">True</span></div>
 
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_resolve_table_path</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolve and validate the path to the spectra data file.&quot;&quot;&quot;</span>
+        <span class="n">base</span> <span class="o">=</span> <span class="s2">&quot;$GAMMAPY_DATA/dark_matter_spectra&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_source_type</span> <span class="o">==</span> <span class="s2">&quot;custom_file&quot;</span><span class="p">:</span>
+            <span class="n">table_filename</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">==</span> <span class="s2">&quot;pppc4&quot;</span><span class="p">:</span>
+            <span class="n">table_filename</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base</span><span class="si">}</span><span class="s2">/PPPC4DMID/AtProduction_gammas.dat&quot;</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">==</span> <span class="s2">&quot;cosmixs&quot;</span><span class="p">:</span>
+            <span class="n">table_filename</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base</span><span class="si">}</span><span class="s2">/cosmixs/AtProduction-Gamma.dat&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown source: &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+
+        <span class="n">path</span> <span class="o">=</span> <span class="n">make_path</span><span class="p">(</span><span class="n">table_filename</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">path</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">File not found: </span><span class="si">{</span><span class="n">table_filename</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="s2">&quot;You may download the required dataset with:</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="s2">&quot;    gammapy download datasets --src dark_matter_spectra&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">path</span>
+
+<div class="viewcode-block" id="ContinuumPrimaryFlux.evaluate">
+<a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.ContinuumPrimaryFlux.html#gammapy.astro.darkmatter.ContinuumPrimaryFlux.evaluate">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate the continuum primary flux spectrum dN/dE.</span>
+
+<span class="sd">        Converts the requested ``energy`` to ``log10(energy / mDM)``,</span>
+<span class="sd">        evaluates the underlying</span>
+<span class="sd">        `~gammapy.modeling.models.TemplateNDSpectralModel` (interpolated</span>
+<span class="sd">        over ``Log[10,x]`` and ``mDM``) to obtain ``dN/dlog10(x)``, and</span>
+<span class="sd">        converts this to ``dN/dE`` via the Jacobian</span>
+<span class="sd">        ``dN/dE = dN/dlog10(x) / (E * ln(10))``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        energy : `~astropy.units.Quantity`</span>
+<span class="sd">            Energy values (array-like) at which to evaluate the spectrum.</span>
+<span class="sd">        *args</span>
+<span class="sd">            Additional template axis coordinates required by the parent</span>
+<span class="sd">            `~gammapy.modeling.models.TemplateNDSpectralModel.evaluate`</span>
+<span class="sd">            (the current ``mDM`` value is appended automatically).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dN_dE : `~astropy.units.Quantity`</span>
+<span class="sd">            Differential photon yield per unit energy.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+        <span class="n">args</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mDM</span><span class="p">)</span>
+
+        <span class="n">log10x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="n">energy</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">mDM</span><span class="p">)</span>
+
+        <span class="n">dN_dlogx</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="n">log10x</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
+        <span class="n">dN_dE</span> <span class="o">=</span> <span class="n">dN_dlogx</span> <span class="o">/</span> <span class="p">(</span><span class="n">energy</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">dN_dE</span></div>
+
+
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">mDM</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Dark matter mass.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mass</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="s2">&quot;GeV&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mass</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span>
 
     <span class="nd">@mDM</span><span class="o">.</span><span class="n">setter</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">mDM</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mDM</span><span class="p">):</span>
@@ -796,7 +902,8 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">channel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">channel</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">channel</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">allowed_channels</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Invalid channel: </span><span class="si">{</span><span class="n">channel</span><span class="si">}</span><span class="se">\n</span><span class="s2">Available: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">allowed_channels</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Invalid channel: &#39;</span><span class="si">{</span><span class="n">channel</span><span class="si">}</span><span class="s2">&#39;</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Available channels: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">allowed_channels</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_source_type</span> <span class="o">==</span> <span class="s2">&quot;custom_file&quot;</span><span class="p">:</span>
@@ -864,144 +971,260 @@
                     <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_mapping_dict</span> <span class="o">=</span> <span class="n">mapping_dict</span>
 
-<div class="viewcode-block" id="PrimaryFlux.evaluate">
-<a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.PrimaryFlux.html#gammapy.astro.darkmatter.PrimaryFlux.evaluate">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate the primary flux.&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="ContinuumPrimaryFlux.to_dict">
+<a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.ContinuumPrimaryFlux.html#gammapy.astro.darkmatter.ContinuumPrimaryFlux.to_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">full_output</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Serialize the model to a dictionary.</span>
 
-        <span class="n">args</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
-        <span class="n">args</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mDM</span><span class="p">)</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        full_output : bool, optional</span>
+<span class="sd">            Unused; present for interface compatibility. Default is False.</span>
 
-        <span class="n">log10x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="n">energy</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">mDM</span><span class="p">)</span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        data : dict</span>
+<span class="sd">            Dictionary representation containing the model type, ``mDM``,</span>
+<span class="sd">            ``channel``, and ``source``, suitable for round-tripping via</span>
+<span class="sd">            `from_dict`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;ContinuumPrimaryFlux&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;mDM&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">mDM</span><span class="o">.</span><span class="n">to_string</span><span class="p">(),</span>
+            <span class="s2">&quot;channel&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">channel</span><span class="p">,</span>
+            <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span>
+        <span class="p">}</span></div>
 
-        <span class="n">dN_dlogx</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="n">log10x</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
-        <span class="n">dN_dE</span> <span class="o">=</span> <span class="n">dN_dlogx</span> <span class="o">/</span> <span class="p">(</span><span class="n">energy</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>
-        <span class="k">return</span> <span class="n">dN_dE</span></div>
+
+<div class="viewcode-block" id="ContinuumPrimaryFlux.from_dict">
+<a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.ContinuumPrimaryFlux.html#gammapy.astro.darkmatter.ContinuumPrimaryFlux.from_dict">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_dict</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct a `ContinuumPrimaryFlux` from a dictionary.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data : dict</span>
+<span class="sd">            Dictionary as produced by `to_dict`, containing ``mDM`` and</span>
+<span class="sd">            ``channel``, and optionally ``source`` (defaults to</span>
+<span class="sd">            ``&quot;pppc4&quot;`` if absent).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        flux : `ContinuumPrimaryFlux`</span>
+<span class="sd">            New instance reconstructed from ``data``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">mDM</span><span class="o">=</span><span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;mDM&quot;</span><span class="p">]),</span>
+            <span class="n">channel</span><span class="o">=</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;channel&quot;</span><span class="p">],</span>
+            <span class="n">source</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;source&quot;</span><span class="p">,</span> <span class="s2">&quot;pppc4&quot;</span><span class="p">),</span>
+        <span class="p">)</span></div>
 </div>
 
 
 
+<div class="viewcode-block" id="PrimaryFlux">
+<a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.PrimaryFlux.html#gammapy.astro.darkmatter.PrimaryFlux">[docs]</a>
+<span class="nd">@deprecated</span><span class="p">(</span><span class="s2">&quot;2.2&quot;</span><span class="p">,</span> <span class="n">alternative</span><span class="o">=</span><span class="s2">&quot;ContinuumPrimaryFlux&quot;</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">PrimaryFlux</span><span class="p">(</span><span class="n">ContinuumPrimaryFlux</span><span class="p">):</span>
+    <span class="n">tag</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;PrimaryFlux&quot;</span><span class="p">,</span> <span class="s2">&quot;dm-pf&quot;</span><span class="p">]</span>
+    <span class="k">pass</span></div>
+
+
+
+<span class="n">PRIMARY_FLUX_REGISTRY</span> <span class="o">=</span> <span class="p">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">tag</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span> <span class="bp">cls</span> <span class="k">for</span> <span class="bp">cls</span> <span class="ow">in</span> <span class="p">(</span><span class="n">ContinuumPrimaryFlux</span><span class="p">,</span> <span class="n">PrimaryFlux</span><span class="p">)}</span>
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Spectral models</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">DarkMatterMixin</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_init</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">mDM</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">factor</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">primary_flux</span><span class="p">,</span> <span class="n">source</span><span class="p">,</span> <span class="n">mapping_dict</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Init and validate inputs&quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="n">z</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Redshift z must be &gt;= 0, got: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_z</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">factor</span><span class="p">)</span><span class="o">.</span><span class="n">value</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The astrophysical factor must be strictly positive.&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_z</span> <span class="o">=</span> <span class="n">z</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_mDM</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">mDM</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span> <span class="o">=</span> <span class="n">channel</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_factor</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">factor</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">=</span> <span class="n">source</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span> <span class="o">=</span> <span class="n">mapping_dict</span>
+        <span class="k">if</span> <span class="n">primary_flux</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">primary_flux</span><span class="p">,</span> <span class="s2">&quot;channel&quot;</span><span class="p">):</span>
+                <span class="n">primary_flux</span><span class="o">.</span><span class="n">channel</span> <span class="o">=</span> <span class="n">channel</span>
+            <span class="n">primary_flux</span><span class="o">.</span><span class="n">mDM</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_expected_primary_flux_mass</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">primary_flux</span> <span class="o">=</span> <span class="n">ContinuumPrimaryFlux</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_expected_primary_flux_mass</span><span class="p">,</span>
+                <span class="n">channel</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">channel</span><span class="p">,</span>
+                <span class="n">source</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span>
+                <span class="n">mapping_dict</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_primary_flux</span> <span class="o">=</span> <span class="n">primary_flux</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mDM</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Dark matter mass.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mDM</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">factor</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Astrophysical Factor.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_factor</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">z</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Source redshift (must be &gt;= 0).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_z</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">primary_flux</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Primary flux model.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_primary_flux</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">channel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Channel of the default primary flux spectrum.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span>
+
+
 <div class="viewcode-block" id="DarkMatterAnnihilationSpectralModel">
 <a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.DarkMatterAnnihilationSpectralModel.html#gammapy.astro.darkmatter.DarkMatterAnnihilationSpectralModel">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">DarkMatterAnnihilationSpectralModel</span><span class="p">(</span><span class="n">SpectralModel</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">DarkMatterAnnihilationSpectralModel</span><span class="p">(</span><span class="n">SpectralModel</span><span class="p">,</span> <span class="n">DarkMatterMixin</span><span class="p">):</span>
 <span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Dark matter annihilation spectral model.</span>
 
-<span class="sd">    The gamma-ray flux is computed as follows:</span>
+<span class="sd">    Computes the differential gamma-ray flux expected from dark matter</span>
+<span class="sd">    annihilation in a region with a given J-factor, combining the</span>
+<span class="sd">    thermally averaged annihilation cross-section, the chosen primary</span>
+<span class="sd">    particle-physics spectrum, and a fit-time normalization scale.</span>
+
+<span class="sd">    The gamma-ray flux is computed as:</span>
 
 <span class="sd">    .. math::</span>
 <span class="sd">        \frac{\mathrm d \phi}{\mathrm d E} =</span>
 <span class="sd">        \frac{\langle \sigma\nu \rangle}{4\pi k m^2_{\mathrm{DM}}}</span>
 <span class="sd">        \frac{\mathrm d N}{\mathrm dE} \times J(\Delta\Omega)</span>
 
+<span class="sd">    where :math:`\langle \sigma\nu \rangle` is the thermal relic</span>
+<span class="sd">    cross-section, :math:`k` accounts for the dark matter particle type</span>
+<span class="sd">    (Majorana or Dirac), :math:`m_{\mathrm{DM}}` is the dark matter mass,</span>
+<span class="sd">    :math:`\mathrm dN/\mathrm dE` is the primary photon spectrum per</span>
+<span class="sd">    annihilation, and :math:`J(\Delta\Omega)` is the astrophysical</span>
+<span class="sd">    J-factor.</span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    mass : `~astropy.units.Quantity`</span>
-<span class="sd">        Dark matter mass.</span>
+<span class="sd">    mDM : `~astropy.units.Quantity`</span>
+<span class="sd">        Dark matter particle mass.</span>
 <span class="sd">    channel : str</span>
-<span class="sd">        Annihilation channel for `~gammapy.astro.darkmatter.PrimaryFlux`, e.g. &quot;b&quot;</span>
-<span class="sd">        for &quot;bbar&quot;.</span>
-<span class="sd">        See `PrimaryFlux.channel_registry` for more.</span>
-<span class="sd">    scale : float</span>
-<span class="sd">        Scale parameter for model fitting.</span>
-<span class="sd">    jfactor : `~astropy.units.Quantity`, optional</span>
-<span class="sd">        Integrated J-Factor needed when `~gammapy.modeling.models.PointSpatialModel`</span>
-<span class="sd">        is used. Default is 1.</span>
+<span class="sd">        Annihilation channel for the primary flux spectrum e.g. ``&quot;b&quot;`` for bb̄. See</span>
+<span class="sd">        `ContinuumPrimaryFlux.channel_registry` for available channels.</span>
+<span class="sd">    scale : float, optional</span>
+<span class="sd">        Dimensionless normalization parameter applied multiplicatively to</span>
+<span class="sd">        the predicted flux, intended to be left free in spectral fits.</span>
+<span class="sd">        Default is 1.</span>
+<span class="sd">    factor : `~astropy.units.Quantity`, optional</span>
+<span class="sd">        Astrophysical J-factor (integrated squared dark matter density</span>
+<span class="sd">        along the line of sight and over the solid angle), needed when a</span>
+<span class="sd">        `~gammapy.modeling.models.PointSpatialModel` is used for the</span>
+<span class="sd">        spatial component. Default is 1 (dimensionless).</span>
 <span class="sd">    z : float, optional</span>
-<span class="sd">        Redshift value. Default is 0.</span>
+<span class="sd">        Redshift of the source. The primary flux is evaluated at the</span>
+<span class="sd">        redshifted energy ``energy * (1 + z)``. Default is 0.</span>
 <span class="sd">    k : int, optional</span>
-<span class="sd">        Type of dark matter particle (k:2 Majorana, k:4 Dirac). Default is 2.</span>
-<span class="sd">    source : str or Table, optional</span>
-<span class="sd">        Data source for the spectra. Options are:</span>
-
-<span class="sd">        * ``&quot;pppc4&quot;`` (default): Cirelli et al. 2011.</span>
-<span class="sd">        * ``&quot;cosmixs&quot;``: Cirelli et al. 2024.</span>
-<span class="sd">        * A path to a custom file: Any format readable by `astropy.table.Table.read`</span>
-<span class="sd">        (e.g., .ecsv, .fits, .csv, .dat).</span>
-<span class="sd">        * An Astropy Table that read the desired path</span>
-
-
-<span class="sd">        If a custom file path is provided, it must contain &#39;mDM&#39; (mass of dark</span>
-<span class="sd">        matter particle) and &#39;Log[10,x]&#39; (energy) columns, plus columns named after</span>
-<span class="sd">        the requested annihilation/decay channels (see the documentation).</span>
-<span class="sd">    mapping_dict : dict, optional</span>
-<span class="sd">        Mapping dictionary to map the columns of the custom source file to the expected</span>
-<span class="sd">        column names. This is only needed if a file as a spectra source is provided</span>
-<span class="sd">        and the column names in the file do not match the expected names. The dictionary</span>
-<span class="sd">        should have the format {actual_column_name_in_file:expected_column_name}.</span>
-<span class="sd">        An example of the expected columns can be found in the documentation.</span>
+<span class="sd">        Dark matter particle type: ``2`` for Majorana particles (which are</span>
+<span class="sd">        their own antiparticles, giving a factor of 2 in the annihilation</span>
+<span class="sd">        rate) or ``4`` for Dirac particles. Default is 2.</span>
+<span class="sd">    primary_flux : primary flux model, optional</span>
+<span class="sd">        Primary photon spectrum per annihilation event. Must be an</span>
+<span class="sd">        instance of `ContinuumPrimaryFlux`. If not provided, a default</span>
+<span class="sd">        `ContinuumPrimaryFlux` is constructed using ``mDM`` and ``channel``.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
-<span class="sd">    This is how to instantiate a `DarkMatterAnnihilationSpectralModel` model::</span>
+<span class="sd">    This is how to instantiate a `DarkMatterAnnihilationSpectralModel`::</span>
 
 <span class="sd">        &gt;&gt;&gt; import astropy.units as u</span>
 <span class="sd">        &gt;&gt;&gt; from gammapy.astro.darkmatter import DarkMatterAnnihilationSpectralModel</span>
 
 <span class="sd">        &gt;&gt;&gt; channel = &quot;b&quot;</span>
-<span class="sd">        &gt;&gt;&gt; massDM = 5000*u.Unit(&quot;GeV&quot;)</span>
-<span class="sd">        &gt;&gt;&gt; jfactor = 3.41e19 * u.Unit(&quot;GeV2 cm-5&quot;)</span>
-<span class="sd">        &gt;&gt;&gt; modelDM = DarkMatterAnnihilationSpectralModel(mass=massDM,</span>
-<span class="sd">          channel=channel, jfactor=jfactor)  # noqa: E501</span>
+<span class="sd">        &gt;&gt;&gt; mDM = 5000*u.Unit(&quot;GeV&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; factor = 3.41e19 * u.Unit(&quot;GeV2 cm-5&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; modelDM = DarkMatterAnnihilationSpectralModel(mDM=mDM,</span>
+<span class="sd">          channel=channel, factor=factor)  # noqa: E501</span>
 
 <span class="sd">    References</span>
 <span class="sd">    ----------</span>
-<span class="sd">    `Marco et al. (2011), &quot;PPPC 4 DM ID: a poor particle physicist cookbook for dark</span>
-<span class="sd">      matter indirect detection&quot; &lt;https://ui.adsabs.harvard.edu/abs/2011JCAP...03..051C&gt;`_</span>
+<span class="sd">    .. [1] `Cirelli et al. (2016), &quot;PPPC 4 DM ID: A Poor Particle Physicist</span>
+<span class="sd">       Cookbook for Dark Matter Indirect Detection&quot;</span>
+<span class="sd">       &lt;http://www.marcocirelli.net/PPPC4DMID.html&gt;`_</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">THERMAL_RELIC_CROSS_SECTION</span> <span class="o">=</span> <span class="mf">3e-26</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s2">&quot;cm3 s-1&quot;</span><span class="p">)</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Thermally averaged annihilation cross-section&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Thermally averaged annihilation cross-section.&quot;&quot;&quot;</span>
 
-    <span class="n">scale</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span>
-        <span class="s2">&quot;scale&quot;</span><span class="p">,</span>
-        <span class="mi">1</span><span class="p">,</span>
-        <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
-        <span class="n">interp</span><span class="o">=</span><span class="s2">&quot;log&quot;</span><span class="p">,</span>
-    <span class="p">)</span>
+    <span class="n">scale</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="s2">&quot;scale&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">interp</span><span class="o">=</span><span class="s2">&quot;log&quot;</span><span class="p">)</span>
     <span class="n">tag</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;DarkMatterAnnihilationSpectralModel&quot;</span><span class="p">,</span> <span class="s2">&quot;dm-annihilation&quot;</span><span class="p">]</span>
 
 <div class="viewcode-block" id="DarkMatterAnnihilationSpectralModel.__init__">
 <a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.DarkMatterAnnihilationSpectralModel.html#gammapy.astro.darkmatter.DarkMatterAnnihilationSpectralModel.__init__">[docs]</a>
+    <span class="nd">@deprecated_renamed_argument</span><span class="p">(</span><span class="s2">&quot;mass&quot;</span><span class="p">,</span> <span class="s2">&quot;mDM&quot;</span><span class="p">,</span> <span class="s2">&quot;2.2&quot;</span><span class="p">)</span>
+    <span class="nd">@deprecated_renamed_argument</span><span class="p">(</span><span class="s2">&quot;jfactor&quot;</span><span class="p">,</span> <span class="s2">&quot;factor&quot;</span><span class="p">,</span> <span class="s2">&quot;2.2&quot;</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">mass</span><span class="p">,</span>
+        <span class="n">mDM</span><span class="p">,</span>
         <span class="n">channel</span><span class="p">,</span>
         <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="o">.</span><span class="n">quantity</span><span class="p">,</span>
-        <span class="n">jfactor</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">factor</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
         <span class="n">z</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
         <span class="n">k</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="n">primary_flux</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">source</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">mapping_dict</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">k</span> <span class="o">=</span> <span class="n">k</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">z</span> <span class="o">=</span> <span class="n">z</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">mass</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">channel</span> <span class="o">=</span> <span class="n">channel</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">jfactor</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">jfactor</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">=</span> <span class="n">source</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span> <span class="o">=</span> <span class="n">mapping_dict</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">primary_flux</span> <span class="o">=</span> <span class="n">PrimaryFlux</span><span class="p">(</span>
-            <span class="n">mass</span><span class="p">,</span>
-            <span class="n">channel</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">channel</span><span class="p">,</span>
-            <span class="n">source</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span>
-            <span class="n">mapping_dict</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span><span class="p">,</span>
-        <span class="p">)</span>
-
+        <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;k must be 2 (Majorana) or 4 (Dirac), got: </span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_k</span> <span class="o">=</span> <span class="n">k</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_init</span><span class="p">(</span><span class="n">mDM</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">factor</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">primary_flux</span><span class="p">,</span> <span class="n">source</span><span class="p">,</span> <span class="n">mapping_dict</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="DarkMatterAnnihilationSpectralModel.evaluate">
 <a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.DarkMatterAnnihilationSpectralModel.html#gammapy.astro.darkmatter.DarkMatterAnnihilationSpectralModel.evaluate">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">,</span> <span class="n">scale</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate dark matter annihilation model.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate the dark matter annihilation differential flux.</span>
+
+<span class="sd">        Computes</span>
+<span class="sd">        ``flux = scale * factor * THERMAL_RELIC_CROSS_SECTION</span>
+<span class="sd">        * primary_flux(energy * (1 + z)) / k / mDM**2 / (4 * pi)``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        energy : `~astropy.units.Quantity`</span>
+<span class="sd">            Energy values (array-like) at which to evaluate the flux.</span>
+<span class="sd">        scale : float</span>
+<span class="sd">            Current value of the ``scale`` normalization parameter.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        flux : `~astropy.units.Quantity`</span>
+<span class="sd">            Differential gamma-ray flux per unit energy.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">flux</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">scale</span>
-            <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">jfactor</span>
+            <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">factor</span>
             <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">THERMAL_RELIC_CROSS_SECTION</span>
             <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">primary_flux</span><span class="p">(</span><span class="n">energy</span><span class="o">=</span><span class="n">energy</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">z</span><span class="p">))</span>
             <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">k</span>
-            <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span>
-            <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span>
+            <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">mDM</span>
+            <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">mDM</span>
             <span class="o">/</span> <span class="p">(</span><span class="mi">4</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">flux</span></div>
@@ -1010,13 +1233,31 @@
 <div class="viewcode-block" id="DarkMatterAnnihilationSpectralModel.to_dict">
 <a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.DarkMatterAnnihilationSpectralModel.html#gammapy.astro.darkmatter.DarkMatterAnnihilationSpectralModel.to_dict">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">full_output</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert to dictionary.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Serialize the model to a dictionary.</span>
+
+<span class="sd">        Extends the base `~gammapy.modeling.models.SpectralModel.to_dict`</span>
+<span class="sd">        output with ``channel``, ``mDM``, ``factor``, ``z``, ``k``, and the</span>
+<span class="sd">        serialized ``primary_flux`` (via its own `to_dict`).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        full_output : bool, optional</span>
+<span class="sd">            Passed through to the parent class&#39;s `to_dict`. Default is</span>
+<span class="sd">            False.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        data : dict</span>
+<span class="sd">            Dictionary representation suitable for round-tripping via</span>
+<span class="sd">            `from_dict`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">data</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(</span><span class="n">full_output</span><span class="o">=</span><span class="n">full_output</span><span class="p">)</span>
         <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;channel&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">channel</span>
-        <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;mass&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span><span class="o">.</span><span class="n">to_string</span><span class="p">()</span>
-        <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;jfactor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">jfactor</span><span class="o">.</span><span class="n">to_string</span><span class="p">()</span>
+        <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;mDM&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mDM</span><span class="o">.</span><span class="n">to_string</span><span class="p">()</span>
+        <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;factor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">factor</span><span class="o">.</span><span class="n">to_string</span><span class="p">()</span>
         <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;z&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">z</span>
         <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;k&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">k</span>
+        <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;primary_flux&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">primary_flux</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
         <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;source&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span>
         <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;mapping_dict&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span>
         <span class="k">return</span> <span class="n">data</span></div>
@@ -1026,143 +1267,208 @@
 <a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.DarkMatterAnnihilationSpectralModel.html#gammapy.astro.darkmatter.DarkMatterAnnihilationSpectralModel.from_dict">[docs]</a>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_dict</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create spectral model from a dictionary.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct a `DarkMatterAnnihilationSpectralModel` from a dictionary.</span>
+
+<span class="sd">        Reconstructs the ``primary_flux`` sub-model using the registry of</span>
+<span class="sd">        known primary flux types, extracts the ``scale`` parameter value</span>
+<span class="sd">        from the serialized parameter list, and passes the remaining</span>
+<span class="sd">        fields through to the constructor.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        data : dict</span>
-<span class="sd">            Dictionary with model data.</span>
+<span class="sd">            Dictionary with a top-level ``&quot;spectral&quot;`` key, as produced by</span>
+<span class="sd">            `to_dict`, containing ``mDM``, ``channel``, ``factor``, ``z``,</span>
+<span class="sd">            ``k``, ``primary_flux``, and ``parameters`` (including</span>
+<span class="sd">            ``scale``).</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        model : `DarkMatterAnnihilationSpectralModel`</span>
-<span class="sd">            Dark matter annihilation spectral model.</span>
+<span class="sd">            New instance reconstructed from ``data``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">]</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">])</span>
         <span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span>
+
+        <span class="n">_RENAMED_FIELDS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;mass&quot;</span><span class="p">:</span> <span class="s2">&quot;mDM&quot;</span><span class="p">,</span> <span class="s2">&quot;jfactor&quot;</span><span class="p">:</span> <span class="s2">&quot;factor&quot;</span><span class="p">}</span>
+        <span class="k">for</span> <span class="n">old_name</span><span class="p">,</span> <span class="n">new_name</span> <span class="ow">in</span> <span class="n">_RENAMED_FIELDS</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">old_name</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;The &#39;</span><span class="si">{</span><span class="n">old_name</span><span class="si">}</span><span class="s2">&#39; field is deprecated since v2.2 and will &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;be removed in a future version. Use &#39;</span><span class="si">{</span><span class="n">new_name</span><span class="si">}</span><span class="s2">&#39; instead. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;This serialized model appears to use the old format.&quot;</span><span class="p">,</span>
+                    <span class="n">GammapyDeprecationWarning</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">data</span><span class="p">[</span><span class="n">new_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">old_name</span><span class="p">)</span>
+
+        <span class="n">pf_data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;primary_flux&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">pf_data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Old format</span>
+            <span class="n">primary_flux</span> <span class="o">=</span> <span class="n">ContinuumPrimaryFlux</span><span class="p">(</span>
+                <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mDM&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mass&quot;</span><span class="p">)),</span>
+                <span class="n">channel</span><span class="o">=</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;channel&quot;</span><span class="p">],</span>
+                <span class="n">source</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;source&quot;</span><span class="p">),</span>
+                <span class="n">mapping_dict</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mapping_dict&quot;</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">pf_cls</span> <span class="o">=</span> <span class="n">PRIMARY_FLUX_REGISTRY</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">pf_data</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">pf_cls</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Unknown primary_flux type: &#39;</span><span class="si">{</span><span class="n">pf_data</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&#39;. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Available: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">PRIMARY_FLUX_REGISTRY</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="n">primary_flux</span> <span class="o">=</span> <span class="n">pf_cls</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">pf_data</span><span class="p">)</span>
+
+        <span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;source&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;mapping_dict&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="n">parameters</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;parameters&quot;</span><span class="p">)</span>
-        <span class="n">scale</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parameters</span> <span class="k">if</span> <span class="n">p</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;scale&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">,</span> <span class="o">**</span><span class="n">data</span><span class="p">)</span></div>
-</div>
+        <span class="n">scale</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parameters</span> <span class="k">if</span> <span class="n">p</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;scale&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">,</span> <span class="n">primary_flux</span><span class="o">=</span><span class="n">primary_flux</span><span class="p">,</span> <span class="o">**</span><span class="n">data</span><span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">k</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;DM particle type (2: Majorana, 4: Dirac).&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_k</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_expected_primary_flux_mass</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expected primary flux mass for annihilation.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        mass : `~astropy.units.Quantity`</span>
+<span class="sd">            Equal to ``mDM``, since in annihilation each dark matter</span>
+<span class="sd">            particle pair has a total rest energy of ``2 * mDM``, shared</span>
+<span class="sd">            between two particles, and the primary flux tables are indexed</span>
+<span class="sd">            by the per-particle mass ``mDM``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">mDM</span></div>
 
 
 
 <div class="viewcode-block" id="DarkMatterDecaySpectralModel">
 <a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.DarkMatterDecaySpectralModel.html#gammapy.astro.darkmatter.DarkMatterDecaySpectralModel">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">DarkMatterDecaySpectralModel</span><span class="p">(</span><span class="n">SpectralModel</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">DarkMatterDecaySpectralModel</span><span class="p">(</span><span class="n">SpectralModel</span><span class="p">,</span> <span class="n">DarkMatterMixin</span><span class="p">):</span>
 <span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Dark matter decay spectral model.</span>
 
-<span class="sd">    The gamma-ray flux is computed as follows:</span>
+<span class="sd">    Computes the differential gamma-ray flux expected from the decay of</span>
+<span class="sd">    dark matter particles in a region with a given D-factor, combining the</span>
+<span class="sd">    decay lifetime, the chosen primary particle-physics spectrum, and a</span>
+<span class="sd">    fit-time normalization scale.</span>
+
+<span class="sd">    The gamma-ray flux is computed as:</span>
 
 <span class="sd">    .. math::</span>
 <span class="sd">        \frac{\mathrm d \phi}{\mathrm d E} =</span>
 <span class="sd">        \frac{\Gamma}{4\pi m_{\mathrm{DM}}}</span>
 <span class="sd">        \frac{\mathrm d N}{\mathrm dE} \times J(\Delta\Omega)</span>
 
+<span class="sd">    where :math:`\Gamma = 1/\tau` is the decay rate (inverse lifetime),</span>
+<span class="sd">    :math:`m_{\mathrm{DM}}` is the dark matter mass,</span>
+<span class="sd">    :math:`\mathrm dN/\mathrm dE` is the primary photon spectrum per decay,</span>
+<span class="sd">    and :math:`J(\Delta\Omega)` is the astrophysical D-factor (here denoted</span>
+<span class="sd">    generically as the astrophysical factor).</span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    mass : `~astropy.units.Quantity`</span>
-<span class="sd">        Dark matter mass.</span>
+<span class="sd">    mDM : `~astropy.units.Quantity`</span>
+<span class="sd">        Dark matter particle mass.</span>
 <span class="sd">    channel : str</span>
-<span class="sd">        Decay channel for `~gammapy.astro.darkmatter.PrimaryFlux`, e.g. &quot;b&quot; for &quot;bbar&quot;.</span>
-<span class="sd">        See `PrimaryFlux.channel_registry` for more.</span>
-<span class="sd">    scale : float</span>
-<span class="sd">        Scale parameter for model fitting</span>
-<span class="sd">    jfactor : `~astropy.units.Quantity`, optional</span>
-<span class="sd">        Integrated J-Factor needed when `~gammapy.modeling.models.PointSpatialModel`</span>
-<span class="sd">        is used. Default is 1.</span>
+<span class="sd">        Decay channel for the primary flux spectrum,</span>
+<span class="sd">        e.g. ``&quot;b&quot;`` for bb̄. See `ContinuumPrimaryFlux.channel_registry`</span>
+<span class="sd">        for available channels.</span>
+<span class="sd">    scale : float, optional</span>
+<span class="sd">        Dimensionless normalization parameter applied multiplicatively to</span>
+<span class="sd">        the predicted flux, intended to be left free in spectral fits.</span>
+<span class="sd">        Default is 1.</span>
+<span class="sd">    factor : `~astropy.units.Quantity`, optional</span>
+<span class="sd">        Astrophysical D-factor (integrated dark matter density along the</span>
+<span class="sd">        line of sight and over the solid angle), needed when a</span>
+<span class="sd">        `~gammapy.modeling.models.PointSpatialModel` is used for the</span>
+<span class="sd">        spatial component. Default is 1 (dimensionless).</span>
 <span class="sd">    z : float, optional</span>
-<span class="sd">        Redshift value. Default is 0.</span>
-<span class="sd">    source : str or Table, optional</span>
-<span class="sd">        Data source for the spectra. Options are:</span>
-
-<span class="sd">        * ``&quot;pppc4&quot;`` (default): Cirelli et al. 2011.</span>
-<span class="sd">        * ``&quot;cosmixs&quot;``: Cirelli et al. 2024.</span>
-<span class="sd">        * A path to a custom file: Any format readable by `astropy.table.Table.read`</span>
-<span class="sd">        (e.g., .ecsv, .fits, .csv, .dat).</span>
-<span class="sd">        * An Astropy Table that read the desired path</span>
-
-
-<span class="sd">        If a custom file path is provided, it must contain &#39;mDM&#39; (mass of dark</span>
-<span class="sd">        matter particle) and &#39;Log[10,x]&#39; (energy) columns, plus columns named after</span>
-<span class="sd">        the requested annihilation/decay channels (see the documentation).</span>
-<span class="sd">    mapping_dict : dict, optional</span>
-<span class="sd">        Mapping dictionary to map the columns of the custom source file to the expected</span>
-<span class="sd">        column names. This is only needed if a file as a spectra source is provided</span>
-<span class="sd">        and the column names in the file do not match the expected names. The dictionary</span>
-<span class="sd">        should have the format {actual_column_name_in_file:expected_column_name}.</span>
-<span class="sd">        An example of the expected columns can be found in the documentation.</span>
-
+<span class="sd">        Redshift of the source. The primary flux is evaluated at the</span>
+<span class="sd">        redshifted energy ``energy * (1 + z)``. Default is 0.</span>
+<span class="sd">    primary_flux : primary flux model, optional</span>
+<span class="sd">        Primary photon spectrum per decay event. Must be an instance of</span>
+<span class="sd">        `ContinuumPrimaryFlux`. If not provided, a default</span>
+<span class="sd">        `ContinuumPrimaryFlux` is constructed using ``mDM / 2`` (the energy</span>
+<span class="sd">        scale relevant for two-body decay products) and ``channel``.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
-<span class="sd">    This is how to instantiate a `DarkMatterDecaySpectralModel` model::</span>
+<span class="sd">    This is how to instantiate a `DarkMatterDecaySpectralModel`::</span>
 
 <span class="sd">        &gt;&gt;&gt; import astropy.units as u</span>
 <span class="sd">        &gt;&gt;&gt; from gammapy.astro.darkmatter import DarkMatterDecaySpectralModel</span>
 
 <span class="sd">        &gt;&gt;&gt; channel = &quot;b&quot;</span>
-<span class="sd">        &gt;&gt;&gt; massDM = 5000*u.Unit(&quot;GeV&quot;)</span>
-<span class="sd">        &gt;&gt;&gt; jfactor = 3.41e19 * u.Unit(&quot;GeV cm-2&quot;)</span>
-<span class="sd">        &gt;&gt;&gt; modelDM = DarkMatterDecaySpectralModel(mass=massDM,</span>
-<span class="sd">        channel=channel, jfactor=jfactor)</span>
+<span class="sd">        &gt;&gt;&gt; mDM = 5000*u.Unit(&quot;GeV&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; factor = 3.41e19 * u.Unit(&quot;GeV cm-2&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; modelDM = DarkMatterDecaySpectralModel(mDM=mDM,</span>
+<span class="sd">        channel=channel, factor=factor)</span>
 
 <span class="sd">    References</span>
 <span class="sd">    ----------</span>
-<span class="sd">    `Marco et al. (2011), &quot;PPPC 4 DM ID: a poor particle physicist cookbook for dark</span>
-<span class="sd">    matter indirect detection&quot; &lt;https://ui.adsabs.harvard.edu/abs/2011JCAP...03..051C&gt;`_</span>
+<span class="sd">    .. [1] `Cirelli et al. (2016), &quot;PPPC 4 DM ID: A Poor Particle Physicist</span>
+<span class="sd">       Cookbook for Dark Matter Indirect Detection&quot;</span>
+<span class="sd">       &lt;http://www.marcocirelli.net/PPPC4DMID.html&gt;`_</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">LIFETIME_AGE_OF_UNIVERSE</span> <span class="o">=</span> <span class="mf">4.3e17</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s2">&quot;s&quot;</span><span class="p">)</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Use age of univserse as lifetime&quot;&quot;&quot;</span>
 
-    <span class="n">scale</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span>
-        <span class="s2">&quot;scale&quot;</span><span class="p">,</span>
-        <span class="mi">1</span><span class="p">,</span>
-        <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
-        <span class="n">interp</span><span class="o">=</span><span class="s2">&quot;log&quot;</span><span class="p">,</span>
-    <span class="p">)</span>
+    <span class="n">scale</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="s2">&quot;scale&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">interp</span><span class="o">=</span><span class="s2">&quot;log&quot;</span><span class="p">)</span>
 
     <span class="n">tag</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;DarkMatterDecaySpectralModel&quot;</span><span class="p">,</span> <span class="s2">&quot;dm-decay&quot;</span><span class="p">]</span>
 
 <div class="viewcode-block" id="DarkMatterDecaySpectralModel.__init__">
 <a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.DarkMatterDecaySpectralModel.html#gammapy.astro.darkmatter.DarkMatterDecaySpectralModel.__init__">[docs]</a>
+    <span class="nd">@deprecated_renamed_argument</span><span class="p">(</span><span class="s2">&quot;mass&quot;</span><span class="p">,</span> <span class="s2">&quot;mDM&quot;</span><span class="p">,</span> <span class="s2">&quot;2.2&quot;</span><span class="p">)</span>
+    <span class="nd">@deprecated_renamed_argument</span><span class="p">(</span><span class="s2">&quot;jfactor&quot;</span><span class="p">,</span> <span class="s2">&quot;factor&quot;</span><span class="p">,</span> <span class="s2">&quot;2.2&quot;</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">mass</span><span class="p">,</span>
+        <span class="n">mDM</span><span class="p">,</span>
         <span class="n">channel</span><span class="p">,</span>
         <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="o">.</span><span class="n">quantity</span><span class="p">,</span>
-        <span class="n">jfactor</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">factor</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
         <span class="n">z</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">primary_flux</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">source</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">mapping_dict</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">z</span> <span class="o">=</span> <span class="n">z</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">mass</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">channel</span> <span class="o">=</span> <span class="n">channel</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">jfactor</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">jfactor</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">=</span> <span class="n">source</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span> <span class="o">=</span> <span class="n">mapping_dict</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">primary_flux</span> <span class="o">=</span> <span class="n">PrimaryFlux</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span>
-            <span class="n">channel</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">channel</span><span class="p">,</span>
-            <span class="n">source</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span>
-            <span class="n">mapping_dict</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span><span class="p">,</span>
-        <span class="p">)</span>
-
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_init</span><span class="p">(</span><span class="n">mDM</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">factor</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">primary_flux</span><span class="p">,</span> <span class="n">source</span><span class="p">,</span> <span class="n">mapping_dict</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="DarkMatterDecaySpectralModel.evaluate">
 <a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.DarkMatterDecaySpectralModel.html#gammapy.astro.darkmatter.DarkMatterDecaySpectralModel.evaluate">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">energy</span><span class="p">,</span> <span class="n">scale</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate dark matter decay model.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate the dark matter decay differential flux.</span>
+
+<span class="sd">        Computes</span>
+<span class="sd">        ``flux = scale * factor * primary_flux(energy * (1 + z))</span>
+<span class="sd">        / LIFETIME_AGE_OF_UNIVERSE / mDM / (4 * pi)``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        energy : `~astropy.units.Quantity`</span>
+<span class="sd">            Energy values (array-like) at which to evaluate the flux.</span>
+<span class="sd">        scale : float</span>
+<span class="sd">            Current value of the ``scale`` normalization parameter.</span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        flux : `~astropy.units.Quantity`</span>
+<span class="sd">            Differential gamma-ray flux per unit energy.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">flux</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">scale</span>
-            <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">jfactor</span>
+            <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">factor</span>
             <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">primary_flux</span><span class="p">(</span><span class="n">energy</span><span class="o">=</span><span class="n">energy</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">z</span><span class="p">))</span>
             <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">LIFETIME_AGE_OF_UNIVERSE</span>
-            <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span>
+            <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">mDM</span>
             <span class="o">/</span> <span class="p">(</span><span class="mi">4</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">flux</span></div>
@@ -1171,11 +1477,32 @@
 <div class="viewcode-block" id="DarkMatterDecaySpectralModel.to_dict">
 <a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.DarkMatterDecaySpectralModel.html#gammapy.astro.darkmatter.DarkMatterDecaySpectralModel.to_dict">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">full_output</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Serialize the model to a dictionary.</span>
+
+<span class="sd">        Extends the base `~gammapy.modeling.models.SpectralModel.to_dict`</span>
+<span class="sd">        output with ``channel``, ``mDM``, ``factor``, ``z``, and the</span>
+<span class="sd">        serialized ``primary_flux`` (via its own `to_dict`). The ``scale``</span>
+<span class="sd">        and ``lifetime`` parameters are included via the base class&#39;s</span>
+<span class="sd">        ``parameters`` serialization.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        full_output : bool, optional</span>
+<span class="sd">            Passed through to the parent class&#39;s `to_dict`. Default is</span>
+<span class="sd">            False.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        data : dict</span>
+<span class="sd">            Dictionary representation suitable for round-tripping via</span>
+<span class="sd">            `from_dict`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">data</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(</span><span class="n">full_output</span><span class="o">=</span><span class="n">full_output</span><span class="p">)</span>
         <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;channel&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">channel</span>
-        <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;mass&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span><span class="o">.</span><span class="n">to_string</span><span class="p">()</span>
-        <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;jfactor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">jfactor</span><span class="o">.</span><span class="n">to_string</span><span class="p">()</span>
+        <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;mDM&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mDM</span><span class="o">.</span><span class="n">to_string</span><span class="p">()</span>
+        <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;factor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">factor</span><span class="o">.</span><span class="n">to_string</span><span class="p">()</span>
         <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;z&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">z</span>
+        <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;primary_flux&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">primary_flux</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
         <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;source&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span>
         <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">][</span><span class="s2">&quot;mapping_dict&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mapping_dict</span>
         <span class="k">return</span> <span class="n">data</span></div>
@@ -1185,24 +1512,81 @@
 <a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.DarkMatterDecaySpectralModel.html#gammapy.astro.darkmatter.DarkMatterDecaySpectralModel.from_dict">[docs]</a>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_dict</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create spectral model from dictionary.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct a `DarkMatterDecaySpectralModel` from a dictionary.</span>
+
+<span class="sd">        Reconstructs the ``primary_flux`` sub-model using the registry of</span>
+<span class="sd">        known primary flux types, extracts the ``scale`` and ``lifetime``</span>
+<span class="sd">        parameter values (with units) from the serialized parameter list,</span>
+<span class="sd">        and passes the remaining fields through to the constructor.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        data : dict</span>
-<span class="sd">            Dictionary with model data.</span>
+<span class="sd">            Dictionary with a top-level ``&quot;spectral&quot;`` key, as produced by</span>
+<span class="sd">            `to_dict`, containing ``mDM``, ``channel``, ``factor``, ``z``,</span>
+<span class="sd">            ``primary_flux``, and ``parameters`` (including ``scale`` and</span>
+<span class="sd">            ``lifetime``).</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        model : `DarkMatterDecaySpectralModel`</span>
-<span class="sd">            Dark matter decay spectral model.</span>
+<span class="sd">            New instance reconstructed from ``data``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">]</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;spectral&quot;</span><span class="p">])</span>
         <span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span>
+
+        <span class="n">_RENAMED_FIELDS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;mass&quot;</span><span class="p">:</span> <span class="s2">&quot;mDM&quot;</span><span class="p">,</span> <span class="s2">&quot;jfactor&quot;</span><span class="p">:</span> <span class="s2">&quot;factor&quot;</span><span class="p">}</span>
+        <span class="k">for</span> <span class="n">old_name</span><span class="p">,</span> <span class="n">new_name</span> <span class="ow">in</span> <span class="n">_RENAMED_FIELDS</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">old_name</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;The &#39;</span><span class="si">{</span><span class="n">old_name</span><span class="si">}</span><span class="s2">&#39; field is deprecated since v2.2 and will &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;be removed in a future version. Use &#39;</span><span class="si">{</span><span class="n">new_name</span><span class="si">}</span><span class="s2">&#39; instead. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;This serialized model appears to use the old format.&quot;</span><span class="p">,</span>
+                    <span class="n">GammapyDeprecationWarning</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">data</span><span class="p">[</span><span class="n">new_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">old_name</span><span class="p">)</span>
+
+        <span class="n">pf_data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;primary_flux&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">pf_data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Old format</span>
+            <span class="n">primary_flux</span> <span class="o">=</span> <span class="n">ContinuumPrimaryFlux</span><span class="p">(</span>
+                <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mDM&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mass&quot;</span><span class="p">)),</span>
+                <span class="n">channel</span><span class="o">=</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;channel&quot;</span><span class="p">],</span>
+                <span class="n">source</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;source&quot;</span><span class="p">),</span>
+                <span class="n">mapping_dict</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mapping_dict&quot;</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">pf_cls</span> <span class="o">=</span> <span class="n">PRIMARY_FLUX_REGISTRY</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">pf_data</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">pf_cls</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Unknown primary_flux type: &#39;</span><span class="si">{</span><span class="n">pf_data</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&#39;. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Available: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">PRIMARY_FLUX_REGISTRY</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="n">primary_flux</span> <span class="o">=</span> <span class="n">pf_cls</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">pf_data</span><span class="p">)</span>
+
+        <span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;source&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;mapping_dict&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
         <span class="n">parameters</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;parameters&quot;</span><span class="p">)</span>
-        <span class="n">scale</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parameters</span> <span class="k">if</span> <span class="n">p</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;scale&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">,</span> <span class="o">**</span><span class="n">data</span><span class="p">)</span></div>
-</div>
+        <span class="n">scale</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parameters</span> <span class="k">if</span> <span class="n">p</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;scale&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">,</span> <span class="n">primary_flux</span><span class="o">=</span><span class="n">primary_flux</span><span class="p">,</span> <span class="o">**</span><span class="n">data</span><span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_expected_primary_flux_mass</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expected primary flux mass for decay.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        mass : `~astropy.units.Quantity`</span>
+<span class="sd">            Equal to ``mDM / 2``, since a decaying dark matter particle of</span>
+<span class="sd">            mass ``mDM`` produces two-body final states each carrying</span>
+<span class="sd">            roughly half the rest energy, and the primary flux tables are</span>
+<span class="sd">            indexed by this per-product mass scale.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">mDM</span> <span class="o">/</span> <span class="mi">2</span></div>
 
 </pre></div>
 
