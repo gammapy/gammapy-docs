@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="2.0.dev4365+g10d49b884" />
+  <meta name="docsearch:version" content="2.0.dev4380+g77dee1493" />
   
     
     <script src="../../../../_static/searchtools.js"></script>
@@ -495,6 +495,8 @@
 <span class="sd">"""Utilities to compute J-factor maps."""</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">html</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numbers</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">astropy.units</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">u</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.modeling.models.prior</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -594,9 +596,61 @@
 
         <span class="k">return</span> <span class="mi">0</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s2">"GeV2 cm-5"</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">annihilation</span> <span class="k">else</span> <span class="s2">"GeV cm-2"</span><span class="p">)</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_integrate_central_pixel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ndecade</span><span class="p">,</span> <span class="n">rtol</span><span class="p">,</span> <span class="n">max_subdivision</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Adaptively average the line-of-sight integral over the central pixel."""</span>
+        <span class="n">central_geom</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span><span class="o">.</span><span class="n">cutout</span><span class="p">(</span>
+            <span class="n">position</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">center_skydir</span><span class="p">,</span>
+            <span class="n">width</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">pixel_scales</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">parent_solid_angle</span> <span class="o">=</span> <span class="n">central_geom</span><span class="o">.</span><span class="n">solid_angle</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">previous</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="n">factor</span> <span class="o">=</span> <span class="mi">2</span>
+        <span class="k">while</span> <span class="n">factor</span> <span class="o">&lt;=</span> <span class="n">max_subdivision</span><span class="p">:</span>
+            <span class="c1"># Even factors ensure no subpixel center coincides with the halo center.</span>
+            <span class="n">subgeom</span> <span class="o">=</span> <span class="n">central_geom</span><span class="o">.</span><span class="n">upsample</span><span class="p">(</span><span class="n">factor</span><span class="p">)</span>
+            <span class="n">separation</span> <span class="o">=</span> <span class="n">subgeom</span><span class="o">.</span><span class="n">separation</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">center_skydir</span><span class="p">)</span><span class="o">.</span><span class="n">rad</span>
+            <span class="n">impact</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span>
+                <span class="n">value</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">separation</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">distance</span><span class="p">,</span>
+                <span class="n">unit</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">distance</span><span class="o">.</span><span class="n">unit</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="n">values</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_integrate_los</span><span class="p">(</span><span class="n">impact_i</span><span class="p">,</span> <span class="n">separation_i</span><span class="p">,</span> <span class="n">ndecade</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">impact_i</span><span class="p">,</span> <span class="n">separation_i</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">impact</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">separation</span><span class="o">.</span><span class="n">ravel</span><span class="p">())</span>
+            <span class="p">]</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">values</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">impact</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="n">current</span> <span class="o">=</span> <span class="p">(</span><span class="n">values</span> <span class="o">*</span> <span class="n">subgeom</span><span class="o">.</span><span class="n">solid_angle</span><span class="p">())</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="n">parent_solid_angle</span>
+
+            <span class="k">if</span> <span class="n">previous</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">relative_change</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">((</span><span class="n">current</span> <span class="o">-</span> <span class="n">previous</span><span class="p">)</span> <span class="o">/</span> <span class="n">current</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">relative_change</span> <span class="o">&lt;</span> <span class="n">rtol</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">current</span>
+
+            <span class="n">previous</span> <span class="o">=</span> <span class="n">current</span>
+            <span class="n">factor</span> <span class="o">*=</span> <span class="mi">2</span>
+
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">"The requested central-pixel relative tolerance "</span>
+            <span class="sa">f</span><span class="s2">"(central_pixel_rtol=</span><span class="si">{</span><span class="n">rtol</span><span class="si">}</span><span class="s2">) was not reached "</span>
+            <span class="s2">"before the maximum subdivision factor "</span>
+            <span class="sa">f</span><span class="s2">"(central_pixel_max_subdivision=</span><span class="si">{</span><span class="n">max_subdivision</span><span class="si">}</span><span class="s2">). "</span>
+            <span class="s2">"Returning the finest estimate. Increase "</span>
+            <span class="s2">"central_pixel_max_subdivision if higher accuracy is required."</span><span class="p">,</span>
+            <span class="ne">UserWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">previous</span>
+
 <div class="viewcode-block" id="JFactory.compute_differential_jfactor">
 <a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.JFactory.html#gammapy.astro.darkmatter.JFactory.compute_differential_jfactor">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">compute_differential_jfactor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ndecade</span><span class="o">=</span><span class="mf">1e4</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_differential_jfactor</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">ndecade</span><span class="o">=</span><span class="mf">1e4</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">central_pixel_rtol</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span>
+        <span class="n">central_pixel_max_subdivision</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
+    <span class="p">):</span>
 <span class="w">        </span><span class="sa">r</span><span class="sd">"""Compute differential J-Factor.</span>
 
 <span class="sd">        .. math::</span>
@@ -612,6 +666,13 @@
 <span class="sd">        ndecade : float, optional</span>
 <span class="sd">            Number of sampling points per decade in radius used for the numerical</span>
 <span class="sd">            integration. Default is 1e4.</span>
+<span class="sd">        central_pixel_rtol : float, optional</span>
+<span class="sd">            Relative tolerance for adaptive refinement of the central pixel.</span>
+<span class="sd">            Default is 0.01.</span>
+<span class="sd">        central_pixel_max_subdivision : int, optional</span>
+<span class="sd">            Maximum subdivision factor for adaptive refinement of the central</span>
+<span class="sd">            pixel. Must be a power of two greater than or equal to 4. Default is</span>
+<span class="sd">            128.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -654,13 +715,46 @@
 <span class="sd">        evaluating it directly, each radial branch is integrated with the</span>
 <span class="sd">        substitution :math:`r = r_\perp\cosh t`.</span>
 <span class="sd">        """</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">central_pixel_rtol</span><span class="p">)</span> <span class="ow">or</span> <span class="n">central_pixel_rtol</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"central_pixel_rtol must be a finite positive number."</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">central_pixel_max_subdivision</span><span class="p">,</span> <span class="n">numbers</span><span class="o">.</span><span class="n">Integral</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="n">central_pixel_max_subdivision</span> <span class="o">&lt;</span> <span class="mi">4</span>
+            <span class="ow">or</span> <span class="n">central_pixel_max_subdivision</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">central_pixel_max_subdivision</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"central_pixel_max_subdivision must be a power of two greater "</span>
+                <span class="s2">"than or equal to 4."</span>
+            <span class="p">)</span>
+
         <span class="n">separation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">separation</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">center_skydir</span><span class="p">)</span><span class="o">.</span><span class="n">rad</span>
         <span class="n">impact</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span>
             <span class="n">value</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">separation</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">distance</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">distance</span><span class="o">.</span><span class="n">unit</span>
         <span class="p">)</span>
+        <span class="n">zero_separation</span> <span class="o">=</span> <span class="n">separation</span> <span class="o">==</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">zero_separation</span><span class="p">):</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">"A pixel center coincides with the halo center, as can occur for "</span>
+                <span class="s2">"a centered map with an odd number of pixels. The central pixel "</span>
+                <span class="s2">"will be adaptively subdivided to avoid the zero-impact line of "</span>
+                <span class="s2">"sight. Consider using an even number of pixels if this special "</span>
+                <span class="s2">"treatment is not desired."</span><span class="p">,</span>
+                <span class="ne">UserWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+
         <span class="n">val</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_integrate_los</span><span class="p">(</span><span class="n">impact_i</span><span class="p">,</span> <span class="n">separation_i</span><span class="p">,</span> <span class="n">ndecade</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">impact_i</span><span class="p">,</span> <span class="n">separation_i</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">impact</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">separation</span><span class="o">.</span><span class="n">ravel</span><span class="p">())</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_integrate_central_pixel</span><span class="p">(</span>
+                <span class="n">ndecade</span><span class="p">,</span>
+                <span class="n">rtol</span><span class="o">=</span><span class="n">central_pixel_rtol</span><span class="p">,</span>
+                <span class="n">max_subdivision</span><span class="o">=</span><span class="n">central_pixel_max_subdivision</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">is_zero_separation</span>
+            <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_integrate_los</span><span class="p">(</span><span class="n">impact_i</span><span class="p">,</span> <span class="n">separation_i</span><span class="p">,</span> <span class="n">ndecade</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">impact_i</span><span class="p">,</span> <span class="n">separation_i</span><span class="p">,</span> <span class="n">is_zero_separation</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+                <span class="n">impact</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">separation</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">zero_separation</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
+            <span class="p">)</span>
         <span class="p">]</span>
         <span class="n">integral_unit</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s2">"GeV2 cm-5"</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">annihilation</span> <span class="k">else</span> <span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s2">"GeV cm-2"</span><span class="p">)</span>
         <span class="n">jfact</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">val</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">integral_unit</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">impact</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
@@ -669,7 +763,13 @@
 
 <div class="viewcode-block" id="JFactory.compute_jfactor">
 <a class="viewcode-back" href="../../../../api/gammapy.astro.darkmatter.JFactory.html#gammapy.astro.darkmatter.JFactory.compute_jfactor">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">compute_jfactor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ndecade</span><span class="o">=</span><span class="mf">1e4</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_jfactor</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">ndecade</span><span class="o">=</span><span class="mf">1e4</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">central_pixel_rtol</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span>
+        <span class="n">central_pixel_max_subdivision</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
+    <span class="p">):</span>
 <span class="w">        </span><span class="sa">r</span><span class="sd">"""Compute astrophysical J-Factor.</span>
 
 <span class="sd">        .. math::</span>
@@ -682,13 +782,24 @@
 <span class="sd">        ndecade : float, optional</span>
 <span class="sd">            Number of sampling points per decade in radius used for the numerical</span>
 <span class="sd">            integration. Default is 1e4.</span>
+<span class="sd">        central_pixel_rtol : float, optional</span>
+<span class="sd">            Relative tolerance for adaptive refinement of the central pixel.</span>
+<span class="sd">            Default is 0.01.</span>
+<span class="sd">        central_pixel_max_subdivision : int, optional</span>
+<span class="sd">            Maximum subdivision factor for adaptive refinement of the central</span>
+<span class="sd">            pixel. Must be a power of two greater than or equal to 4. Default is</span>
+<span class="sd">            128.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        jfactor : `~astropy.units.Quantity`</span>
 <span class="sd">            The j-factor.</span>
 <span class="sd">        """</span>
-        <span class="n">diff_jfact</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_differential_jfactor</span><span class="p">(</span><span class="n">ndecade</span><span class="p">)</span>
+        <span class="n">diff_jfact</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_differential_jfactor</span><span class="p">(</span>
+            <span class="n">ndecade</span><span class="p">,</span>
+            <span class="n">central_pixel_rtol</span><span class="o">=</span><span class="n">central_pixel_rtol</span><span class="p">,</span>
+            <span class="n">central_pixel_max_subdivision</span><span class="o">=</span><span class="n">central_pixel_max_subdivision</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="k">return</span> <span class="n">diff_jfact</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">geom</span><span class="o">.</span><span class="n">to_image</span><span class="p">()</span><span class="o">.</span><span class="n">solid_angle</span><span class="p">()</span></div>
 </div>
 
