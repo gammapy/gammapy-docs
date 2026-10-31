@@ -69,7 +69,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="color-scheme" content="light dark"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="2.0.dev4572+ge17dbaeb5" />
+  <meta name="docsearch:version" content="2.0.dev4603+gf463f343e" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -495,28 +495,290 @@
 <span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
 <span class="sd">"""Sampler parameter classes."""</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">abc</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.utils.deprecation</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">GammapyDeprecationWarning</span><span class="p">,</span>
+    <span class="n">deprecated_renamed_argument</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_parse_datasets</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"Sampler"</span><span class="p">,</span> <span class="s2">"SamplerLikelihood"</span><span class="p">,</span> <span class="s2">"SamplerResult"</span><span class="p">]</span>
 
-<span class="n">SAMPLER_BACKENDS</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"ultranest"</span><span class="p">,</span> <span class="s2">"nautilus"</span><span class="p">]</span>
 
-<span class="n">DEFAULT_SAMPLER_OPTS</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">"ultranest"</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">"live_points"</span><span class="p">:</span> <span class="mi">400</span><span class="p">,</span>
-        <span class="s2">"frac_remain"</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_SamplerBackend</span><span class="p">(</span><span class="n">abc</span><span class="o">.</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Base class for the sampler backends.</span>
+
+<span class="sd">    Subclasses defining a ``tag`` are registered in ``SAMPLER_BACKEND_REGISTRY``.</span>
+
+<span class="sd">    The options use the backend library's own names. Before the run, each of them</span>
+<span class="sd">    is sent to the backend sampler constructor or to its ``run`` method, by</span>
+<span class="sd">    inspecting their signatures.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    options : dict, optional</span>
+<span class="sd">        Options routed automatically to the constructor or the run method.</span>
+<span class="sd">        Default is None.</span>
+<span class="sd">    sampler_opts : dict, optional</span>
+<span class="sd">        Deprecated. Options passed as is to the backend sampler constructor.</span>
+<span class="sd">        Default is None.</span>
+<span class="sd">    run_opts : dict, optional</span>
+<span class="sd">        Deprecated. Options passed as is to the backend sampler run method.</span>
+<span class="sd">        Default is None.</span>
+<span class="sd">    """</span>
+
+    <span class="n">tag</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">default_options</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="c1"># backend constructor arguments that Gammapy fills from the datasets and models,</span>
+    <span class="c1"># excluded from the automatic options routing so that users cannot override them</span>
+    <span class="n">gammapy_filled_args</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="c1"># old option name: new option name</span>
+    <span class="n">deprecated_options</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sampler_opts</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">run_opts</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">options</span> <span class="o">=</span> <span class="p">{}</span> <span class="k">if</span> <span class="n">options</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">dict</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
+        <span class="n">sampler_opts</span> <span class="o">=</span> <span class="p">{}</span> <span class="k">if</span> <span class="n">sampler_opts</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">dict</span><span class="p">(</span><span class="n">sampler_opts</span><span class="p">)</span>
+        <span class="n">run_opts</span> <span class="o">=</span> <span class="p">{}</span> <span class="k">if</span> <span class="n">run_opts</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">dict</span><span class="p">(</span><span class="n">run_opts</span><span class="p">)</span>
+
+        <span class="n">options</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rename_deprecated_options</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
+        <span class="n">sampler_opts</span><span class="p">,</span> <span class="n">run_opts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_deprecated_opts</span><span class="p">(</span><span class="n">sampler_opts</span><span class="p">,</span> <span class="n">run_opts</span><span class="p">)</span>
+
+        <span class="n">duplicates</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">options</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">sampler_opts</span><span class="p">)</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">run_opts</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">duplicates</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Options </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">duplicates</span><span class="p">)</span><span class="si">}</span><span class="s2"> are given twice, "</span>
+                <span class="s2">"in options and in sampler_opts or run_opts."</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">options</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">default_options</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_explicit_sampler_opts</span> <span class="o">=</span> <span class="n">sampler_opts</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_explicit_run_opts</span> <span class="o">=</span> <span class="n">run_opts</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sampler_opts</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">run_opts</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_rename_deprecated_options</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">options</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">old_name</span><span class="p">,</span> <span class="n">new_name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">deprecated_options</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">old_name</span> <span class="ow">in</span> <span class="n">options</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"The </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tag</span><span class="si">}</span><span class="s2"> sampler option '</span><span class="si">{</span><span class="n">old_name</span><span class="si">}</span><span class="s2">' is deprecated, "</span>
+                    <span class="sa">f</span><span class="s2">"use '</span><span class="si">{</span><span class="n">new_name</span><span class="si">}</span><span class="s2">' instead."</span><span class="p">,</span>
+                    <span class="n">GammapyDeprecationWarning</span><span class="p">,</span>
+                    <span class="n">stacklevel</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">options</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">new_name</span><span class="p">,</span> <span class="n">options</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">old_name</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">options</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">resolve_options</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Split the options between the sampler constructor and its run method.</span>
+
+<span class="sd">        This imports the backend library. The result is stored in ``sampler_opts``</span>
+<span class="sd">        and ``run_opts`` and returned.</span>
+<span class="sd">        """</span>
+        <span class="n">explicit</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_explicit_sampler_opts</span><span class="p">)</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_explicit_run_opts</span><span class="p">)</span>
+        <span class="n">options</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">key</span><span class="p">:</span> <span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">explicit</span>
+        <span class="p">}</span>
+        <span class="n">sampler_opts</span><span class="p">,</span> <span class="n">run_opts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_route_options</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sampler_opts</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">sampler_opts</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_explicit_sampler_opts</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">run_opts</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">run_opts</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_explicit_run_opts</span><span class="p">}</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampler_opts</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_opts</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_import_sampler_class</span><span class="p">():</span>
+<span class="w">        </span><span class="sd">"""Import and return the backend sampler class."""</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_handle_deprecated_opts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sampler_opts</span><span class="p">,</span> <span class="n">run_opts</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">sampler_opts</span><span class="p">,</span> <span class="n">run_opts</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_route_options</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">options</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Split options between the sampler constructor and its run method.</span>
+
+<span class="sd">        The split uses the signatures of the backend sampler class, so it follows</span>
+<span class="sd">        the installed version of the backend library.</span>
+<span class="sd">        """</span>
+        <span class="n">sampler_class</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_import_sampler_class</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">function</span> <span class="ow">in</span> <span class="p">[</span><span class="n">sampler_class</span><span class="o">.</span><span class="fm">__init__</span><span class="p">,</span> <span class="n">sampler_class</span><span class="o">.</span><span class="n">run</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_var_keyword</span><span class="p">(</span><span class="n">function</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"The </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tag</span><span class="si">}</span><span class="s2"> sampler accepts arbitrary keyword arguments, "</span>
+                    <span class="s2">"options cannot be routed automatically."</span>
+                <span class="p">)</span>
+
+        <span class="n">init_names</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parameter_names</span><span class="p">(</span><span class="n">sampler_class</span><span class="o">.</span><span class="fm">__init__</span><span class="p">)</span>
+        <span class="n">init_names</span> <span class="o">-=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gammapy_filled_args</span><span class="p">)</span>
+        <span class="n">run_names</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parameter_names</span><span class="p">(</span><span class="n">sampler_class</span><span class="o">.</span><span class="n">run</span><span class="p">)</span>
+
+        <span class="n">sampler_opts</span><span class="p">,</span> <span class="n">run_opts</span> <span class="o">=</span> <span class="p">{},</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">options</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">in_init</span><span class="p">,</span> <span class="n">in_run</span> <span class="o">=</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">init_names</span><span class="p">,</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">run_names</span>
+            <span class="k">if</span> <span class="n">in_init</span> <span class="ow">and</span> <span class="n">in_run</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"Option '</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">' is accepted by both the </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tag</span><span class="si">}</span><span class="s2"> sampler and "</span>
+                    <span class="s2">"its run method, it cannot be routed automatically."</span>
+                <span class="p">)</span>
+            <span class="k">elif</span> <span class="n">in_init</span><span class="p">:</span>
+                <span class="n">sampler_opts</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+            <span class="k">elif</span> <span class="n">in_run</span><span class="p">:</span>
+                <span class="n">run_opts</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"Unknown </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tag</span><span class="si">}</span><span class="s2"> sampler option '</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">'. "</span>
+                    <span class="sa">f</span><span class="s2">"Valid options are: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">init_names</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">run_names</span><span class="p">)</span><span class="si">}</span><span class="s2">."</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="n">sampler_opts</span><span class="p">,</span> <span class="n">run_opts</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_has_var_keyword</span><span class="p">(</span><span class="n">function</span><span class="p">):</span>
+        <span class="n">parameters</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">function</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+        <span class="k">return</span> <span class="nb">any</span><span class="p">(</span><span class="n">par</span><span class="o">.</span><span class="n">kind</span> <span class="o">==</span> <span class="n">par</span><span class="o">.</span><span class="n">VAR_KEYWORD</span> <span class="k">for</span> <span class="n">par</span> <span class="ow">in</span> <span class="n">parameters</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_parameter_names</span><span class="p">(</span><span class="n">function</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Names of the keyword arguments of a function, without ``self``."""</span>
+        <span class="n">parameters</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">function</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="n">name</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">par</span> <span class="ow">in</span> <span class="n">parameters</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="o">!=</span> <span class="s2">"self"</span>
+            <span class="ow">and</span> <span class="n">par</span><span class="o">.</span><span class="n">kind</span> <span class="ow">in</span> <span class="p">(</span><span class="n">par</span><span class="o">.</span><span class="n">POSITIONAL_OR_KEYWORD</span><span class="p">,</span> <span class="n">par</span><span class="o">.</span><span class="n">KEYWORD_ONLY</span><span class="p">)</span>
+        <span class="p">}</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">like</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Create the backend sampler and store it in ``self._sampler``."""</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Run the backend sampler and return the result dictionary.</span>
+
+<span class="sd">        The dictionary must contain a "posterior" entry with "mean" and "stdev".</span>
+<span class="sd">        """</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_result</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result_dict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Convert the result dictionary to a `SamplerResult`."""</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">print_summary</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Print the summary of the sampler run."""</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_UltranestBackend</span><span class="p">(</span><span class="n">_SamplerBackend</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""UltraNest backend using `ultranest.ReactiveNestedSampler`."""</span>
+
+    <span class="n">tag</span> <span class="o">=</span> <span class="s2">"ultranest"</span>
+    <span class="n">default_options</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">"log_dir"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
         <span class="s2">"resume"</span><span class="p">:</span> <span class="s2">"subfolder"</span><span class="p">,</span>
-        <span class="s2">"step_sampler"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="s2">"nsteps"</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
-    <span class="p">},</span>
-    <span class="s2">"nautilus"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"n_live"</span><span class="p">:</span> <span class="mi">2000</span><span class="p">,</span> <span class="s2">"filepath"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">"resume"</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
-<span class="p">}</span>
+        <span class="s2">"min_num_live_points"</span><span class="p">:</span> <span class="mi">400</span><span class="p">,</span>
+        <span class="s2">"frac_remain"</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="n">gammapy_filled_args</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"param_names"</span><span class="p">,</span> <span class="s2">"loglike"</span><span class="p">,</span> <span class="s2">"transform"</span><span class="p">)</span>
+    <span class="n">deprecated_options</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"live_points"</span><span class="p">:</span> <span class="s2">"min_num_live_points"</span><span class="p">}</span>
 
-<span class="n">DEFAULT_RUN_OPTS</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">"ultranest"</span><span class="p">:</span> <span class="p">{},</span>
-    <span class="s2">"nautilus"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"f_live"</span><span class="p">:</span> <span class="mf">0.01</span><span class="p">,</span> <span class="s2">"n_eff"</span><span class="p">:</span> <span class="mi">2000</span><span class="p">,</span> <span class="s2">"verbose"</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
-<span class="p">}</span>
+    <span class="c1"># old sampler_opts name: new run_opts name</span>
+    <span class="n">_deprecated_sampler_opts</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">"live_points"</span><span class="p">:</span> <span class="s2">"min_num_live_points"</span><span class="p">,</span>
+        <span class="s2">"frac_remain"</span><span class="p">:</span> <span class="s2">"frac_remain"</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_import_sampler_class</span><span class="p">():</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">ultranest</span>
+
+        <span class="k">return</span> <span class="n">ultranest</span><span class="o">.</span><span class="n">ReactiveNestedSampler</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_handle_deprecated_opts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sampler_opts</span><span class="p">,</span> <span class="n">run_opts</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">old_name</span><span class="p">,</span> <span class="n">new_name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_deprecated_sampler_opts</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">old_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">sampler_opts</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"The UltraNest sampler option '</span><span class="si">{</span><span class="n">old_name</span><span class="si">}</span><span class="s2">' is deprecated, "</span>
+                <span class="sa">f</span><span class="s2">"use options=</span><span class="se">{{</span><span class="s2">'</span><span class="si">{</span><span class="n">new_name</span><span class="si">}</span><span class="s2">': ...</span><span class="se">}}</span><span class="s2"> instead."</span><span class="p">,</span>
+                <span class="n">GammapyDeprecationWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">sampler_opts</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">old_name</span><span class="p">)</span>
+            <span class="n">run_opts</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">new_name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">sampler_opts</span><span class="p">,</span> <span class="n">run_opts</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">like</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_import_sampler_class</span><span class="p">()(</span>
+            <span class="n">parameters</span><span class="o">.</span><span class="n">names</span><span class="p">,</span>
+            <span class="n">like</span><span class="o">.</span><span class="n">fcn</span><span class="p">,</span>
+            <span class="n">transform</span><span class="o">=</span><span class="n">parameters</span><span class="o">.</span><span class="n">_prior_inverse_cdf</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">sampler_opts</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">run_opts</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_result</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result_dict</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">SamplerResult</span><span class="o">.</span><span class="n">from_ultranest</span><span class="p">(</span><span class="n">result_dict</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">print_summary</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">print_results</span><span class="p">()</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_NautilusBackend</span><span class="p">(</span><span class="n">_SamplerBackend</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Nautilus backend using `nautilus.Sampler`."""</span>
+
+    <span class="n">tag</span> <span class="o">=</span> <span class="s2">"nautilus"</span>
+    <span class="n">default_options</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">"n_live"</span><span class="p">:</span> <span class="mi">2000</span><span class="p">,</span>
+        <span class="s2">"filepath"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">"resume"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"f_live"</span><span class="p">:</span> <span class="mf">0.01</span><span class="p">,</span>
+        <span class="s2">"n_eff"</span><span class="p">:</span> <span class="mi">2000</span><span class="p">,</span>
+        <span class="s2">"verbose"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="n">gammapy_filled_args</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"prior"</span><span class="p">,</span> <span class="s2">"likelihood"</span><span class="p">,</span> <span class="s2">"n_dim"</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_import_sampler_class</span><span class="p">():</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">nautilus</span>
+
+        <span class="k">return</span> <span class="n">nautilus</span><span class="o">.</span><span class="n">Sampler</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">like</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_import_sampler_class</span><span class="p">()(</span>
+            <span class="n">prior</span><span class="o">=</span><span class="n">parameters</span><span class="o">.</span><span class="n">_prior_inverse_cdf</span><span class="p">,</span>
+            <span class="n">likelihood</span><span class="o">=</span><span class="n">like</span><span class="o">.</span><span class="n">fcn</span><span class="p">,</span>
+            <span class="n">n_dim</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">parameters</span><span class="p">),</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">sampler_opts</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+        <span class="n">success</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">run_opts</span><span class="p">)</span>
+
+        <span class="n">points</span><span class="p">,</span> <span class="n">log_w</span><span class="p">,</span> <span class="n">log_l</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">posterior</span><span class="p">()</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_w</span> <span class="o">-</span> <span class="n">log_w</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
+        <span class="n">weights</span> <span class="o">/=</span> <span class="n">weights</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">average</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">stdev</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">average</span><span class="p">((</span><span class="n">points</span> <span class="o">-</span> <span class="n">mean</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+
+        <span class="n">result</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"ncall"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">n_like</span><span class="p">,</span>
+            <span class="s2">"success"</span><span class="p">:</span> <span class="n">success</span><span class="p">,</span>
+            <span class="s2">"logz"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">log_z</span><span class="p">,</span>
+            <span class="s2">"posterior"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"mean"</span><span class="p">:</span> <span class="n">mean</span><span class="p">,</span> <span class="s2">"stdev"</span><span class="p">:</span> <span class="n">stdev</span><span class="p">},</span>
+            <span class="s2">"samples"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">posterior</span><span class="p">(</span><span class="n">equal_weight</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="s2">"weighted_samples"</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">points</span><span class="o">=</span><span class="n">points</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_w</span><span class="p">)),</span>
+            <span class="s2">"log_l"</span><span class="p">:</span> <span class="n">log_l</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_result</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result_dict</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">SamplerResult</span><span class="o">.</span><span class="n">from_nautilus</span><span class="p">(</span><span class="n">result_dict</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">print_summary</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">print_status</span><span class="p">()</span>
 
 
 <div class="viewcode-block" id="Sampler">
@@ -524,7 +786,13 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">Sampler</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Sampler class.</span>
 
-<span class="sd">    The sampler class provides a uniform interface to multiple sampler backends. Currently available: "UltraNest".</span>
+<span class="sd">    The sampler class provides a uniform interface to multiple sampler backends.</span>
+<span class="sd">    Currently available: "ultranest" and "nautilus".</span>
+
+<span class="sd">    Backend options are given in ``options``, with the backend's own names. When</span>
+<span class="sd">    the sampler runs, Gammapy passes each of them to the backend sampler constructor</span>
+<span class="sd">    or to its ``run`` method, based on the signatures of the installed backend</span>
+<span class="sd">    library. An unknown option raises an error listing the valid ones.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -533,72 +801,92 @@
 <span class="sd">        UltraNest: Most options can be found in the</span>
 <span class="sd">        `UltraNest doc &lt;https://johannesbuchner.github.io/UltraNest/&gt;`__.</span>
 <span class="sd">        Nautilus uses neural-network-guided nested sampling. See the</span>
-<span class="sd">       `Nautilus documentation &lt;https://nautilus-sampler.readthedocs.io/&gt;`__.</span>
+<span class="sd">        `Nautilus documentation &lt;https://nautilus-sampler.readthedocs.io/&gt;`__.</span>
 <span class="sd">    sampler_opts : dict, optional</span>
-<span class="sd">        Sampler options passed to the sampler. See the full list of options on the</span>
-<span class="sd">        `UltraNest documentation &lt;https://johannesbuchner.github.io/UltraNest/ultranest.html#ultranest.integrator.ReactiveNestedSampler&gt;`__.</span>
-<span class="sd">        Noteworthy options:</span>
-
-<span class="sd">        live_points : int, optional</span>
-<span class="sd">            Minimum number of live points used in the sampling. Increase this number to get more accurate results.</span>
-<span class="sd">            For more samples in the posterior increase this number or the min_ess parameter.</span>
-<span class="sd">            Default is 400 live points.</span>
-<span class="sd">        frac_remain : float, optional</span>
-<span class="sd">            Integrate until this fraction of the integral is left in the remainder. Set to a low number (1e-2 … 1e-5)</span>
-<span class="sd">            to make sure peaks are discovered. Set to a higher number (0.5) if you know the posterior is simple.</span>
-<span class="sd">            Default is 0.5.</span>
-<span class="sd">        min_ess : int, optional</span>
-<span class="sd">            Target number of effective posterior samples. Increase this number to get more accurate results.</span>
-<span class="sd">            Default is live_points, but you may need to increase it to 1000 or more for complex posteriors.</span>
-<span class="sd">        log_dir : str, optional</span>
-<span class="sd">            Where to store output files.</span>
-<span class="sd">            Default is None and no results are not stored.</span>
-<span class="sd">        resume : str, optional</span>
-<span class="sd">            ‘overwrite’, overwrite previous data. ‘subfolder’, create a fresh subdirectory in `log_dir`.</span>
-<span class="sd">            ‘resume’ or True, continue previous run if available. Only works when dimensionality, transform or</span>
-<span class="sd">            likelihood are consistent.</span>
-<span class="sd">        step_sampler : bool, optional</span>
-<span class="sd">            Use a step sampler. This can be more efficient for higher dimensions (&gt;10 or 15 parameters), but much</span>
-<span class="sd">            slower for lower dimensions.</span>
-<span class="sd">            Default is False.</span>
-<span class="sd">        nsteps : int, optional</span>
-<span class="sd">            Number of steps to take in each direction in the step sampler. Increase this number to get more</span>
-<span class="sd">            accurate results at the cost of more computation time.</span>
-<span class="sd">            Default is 10.</span>
+<span class="sd">        Deprecated since v2.2, use ``options`` instead. Default is None.</span>
 <span class="sd">    run_opts : dict, optional</span>
-<span class="sd">        Optional run options passed to the given backend when running the sampler.</span>
-<span class="sd">        See the full list of run options on the</span>
-<span class="sd">        `UltraNest documentation &lt;https://johannesbuchner.github.io/UltraNest/ultranest.html#ultranest.integrator.ReactiveNestedSampler.run&gt;`__.</span>
+<span class="sd">        Deprecated since v2.2, use ``options`` instead. Default is None.</span>
+<span class="sd">    options : dict, optional</span>
+<span class="sd">        Backend options, routed automatically. Default is None. See the options of</span>
+<span class="sd">        `UltraNest &lt;https://johannesbuchner.github.io/UltraNest/ultranest.html#ultranest.integrator.ReactiveNestedSampler&gt;`__</span>
+<span class="sd">        (constructor and ``run``) and of</span>
+<span class="sd">        `Nautilus &lt;https://nautilus-sampler.readthedocs.io/en/latest/api.html#nautilus.Sampler&gt;`__.</span>
+
+<span class="sd">        Gammapy defaults for "ultranest": ``log_dir=None``, ``resume="subfolder"``,</span>
+<span class="sd">        ``min_num_live_points=400``, ``frac_remain=0.5``.</span>
+
+<span class="sd">        Gammapy defaults for "nautilus": ``n_live=2000``, ``filepath=None``,</span>
+<span class="sd">        ``resume=True``, ``f_live=0.01``, ``n_eff=2000``, ``verbose=True``.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
-<span class="sd">    For a usage example, see :doc:`/tutorials/details/nested_sampling_Crab` tutorial.</span>
+<span class="sd">    &gt;&gt;&gt; from gammapy.modeling import Sampler</span>
+<span class="sd">    &gt;&gt;&gt; options = {"min_num_live_points": 300, "frac_remain": 0.3, "log_dir": None}</span>
+<span class="sd">    &gt;&gt;&gt; sampler = Sampler(backend="ultranest", options=options)</span>
+
+<span class="sd">    For a complete usage example, see :doc:`/tutorials/details/nested_sampling_Crab` tutorial.</span>
 
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>
 <span class="sd">    If you are using the "UltraNest" library, please follow its citation scheme:</span>
 <span class="sd">    `Cite UltraNest &lt;https://johannesbuchner.github.io/UltraNest/issues.html#how-should-i-cite-ultranest&gt;`__.</span>
-
 <span class="sd">    """</span>
 
     <span class="c1"># TODO: add "zeusmc", "emcee"</span>
 
 <div class="viewcode-block" id="Sampler.__init__">
 <a class="viewcode-back" href="../../../api/gammapy.modeling.Sampler.html#gammapy.modeling.Sampler.__init__">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="s2">"ultranest"</span><span class="p">,</span> <span class="n">sampler_opts</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">run_opts</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">backend</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">SAMPLER_BACKENDS</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Sampler </span><span class="si">{</span><span class="n">backend</span><span class="si">}</span><span class="s2"> is not supported."</span><span class="p">)</span>
+    <span class="nd">@deprecated_renamed_argument</span><span class="p">(</span>
+        <span class="p">[</span><span class="s2">"sampler_opts"</span><span class="p">,</span> <span class="s2">"run_opts"</span><span class="p">],</span>
+        <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
+        <span class="p">[</span><span class="s2">"2.2"</span><span class="p">,</span> <span class="s2">"2.2"</span><span class="p">],</span>
+        <span class="n">alternative</span><span class="o">=</span><span class="s2">"options"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="s2">"ultranest"</span><span class="p">,</span> <span class="n">sampler_opts</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">run_opts</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="kc">None</span>
+    <span class="p">):</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">SAMPLER_BACKEND_REGISTRY</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">backend</span> <span class="o">=</span> <span class="n">backend</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">sampler_opts</span> <span class="o">=</span> <span class="p">{}</span> <span class="k">if</span> <span class="n">sampler_opts</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">sampler_opts</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">run_opts</span> <span class="o">=</span> <span class="p">{}</span> <span class="k">if</span> <span class="n">run_opts</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">run_opts</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span> <span class="o">=</span> <span class="n">SAMPLER_BACKEND_REGISTRY</span><span class="o">.</span><span class="n">get_cls</span><span class="p">(</span><span class="n">backend</span><span class="p">)(</span>
+            <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span> <span class="n">sampler_opts</span><span class="o">=</span><span class="n">sampler_opts</span><span class="p">,</span> <span class="n">run_opts</span><span class="o">=</span><span class="n">run_opts</span>
+        <span class="p">)</span></div>
 
-        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">DEFAULT_SAMPLER_OPTS</span><span class="p">[</span><span class="n">backend</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">sampler_opts</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">DEFAULT_RUN_OPTS</span><span class="p">[</span><span class="n">backend</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">run_opts</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span></div>
 
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">options</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Backend options, including the Gammapy defaults."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">options</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sampler_opts</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Options passed to the backend sampler constructor.</span>
+
+<span class="sd">        Deprecated, use `options` instead. Accessing it imports the backend library.</span>
+<span class="sd">        """</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">"Sampler.sampler_opts is deprecated, use Sampler.options instead."</span><span class="p">,</span>
+            <span class="n">GammapyDeprecationWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">resolve_options</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">run_opts</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Options passed to the backend sampler run method.</span>
+
+<span class="sd">        Deprecated, use `options` instead. Accessing it imports the backend library.</span>
+<span class="sd">        """</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">"Sampler.run_opts is deprecated, use Sampler.options instead."</span><span class="p">,</span>
+            <span class="n">GammapyDeprecationWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">resolve_options</span><span class="p">()[</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sampler</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">_sampler</span>
 
     <span class="nd">@staticmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_update_models_from_posterior</span><span class="p">(</span><span class="n">models</span><span class="p">,</span> <span class="n">result</span><span class="p">):</span>
@@ -623,92 +911,6 @@
             <span class="n">par</span><span class="o">.</span><span class="n">error</span> <span class="o">=</span> <span class="n">posterior</span><span class="p">[</span><span class="s2">"stdev"</span><span class="p">][</span><span class="n">i</span><span class="p">]</span>
         <span class="n">models</span><span class="o">.</span><span class="n">_covariance</span> <span class="o">=</span> <span class="kc">None</span>
 
-<div class="viewcode-block" id="Sampler.sampler_ultranest">
-<a class="viewcode-back" href="../../../api/gammapy.modeling.Sampler.html#gammapy.modeling.Sampler.sampler_ultranest">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">sampler_ultranest</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">like</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""</span>
-<span class="sd">        Defines the Ultranest sampler and options.</span>
-
-<span class="sd">        Returns the result in the SamplerResult that contains the updated models, samples, posterior distribution and</span>
-<span class="sd">        other information.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        parameters : `~gammapy.modeling.Parameters`</span>
-<span class="sd">            The models parameters to sample.</span>
-<span class="sd">        like : `~gammapy.modeling.sampler.SamplerLikelihood`</span>
-<span class="sd">            The likelihood function.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        result : `~gammapy.modeling.sampler.SamplerResult`</span>
-<span class="sd">            The sampler results.</span>
-<span class="sd">        """</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">ultranest</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span> <span class="o">=</span> <span class="n">ultranest</span><span class="o">.</span><span class="n">ReactiveNestedSampler</span><span class="p">(</span>
-            <span class="n">parameters</span><span class="o">.</span><span class="n">names</span><span class="p">,</span>
-            <span class="n">like</span><span class="o">.</span><span class="n">fcn</span><span class="p">,</span>
-            <span class="n">transform</span><span class="o">=</span><span class="n">parameters</span><span class="o">.</span><span class="n">_prior_inverse_cdf</span><span class="p">,</span>
-            <span class="n">log_dir</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">sampler_opts</span><span class="p">[</span><span class="s2">"log_dir"</span><span class="p">],</span>
-            <span class="n">resume</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">sampler_opts</span><span class="p">[</span><span class="s2">"resume"</span><span class="p">],</span>
-        <span class="p">)</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampler_opts</span><span class="p">[</span><span class="s2">"step_sampler"</span><span class="p">]:</span>
-            <span class="kn">from</span><span class="w"> </span><span class="nn">ultranest.stepsampler</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-                <span class="n">SliceSampler</span><span class="p">,</span>
-                <span class="n">generate_mixture_random_direction</span><span class="p">,</span>
-            <span class="p">)</span>
-
-            <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">stepsampler</span> <span class="o">=</span> <span class="n">SliceSampler</span><span class="p">(</span>
-                <span class="n">nsteps</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">sampler_opts</span><span class="p">[</span><span class="s2">"nsteps"</span><span class="p">],</span>
-                <span class="n">generate_direction</span><span class="o">=</span><span class="n">generate_mixture_random_direction</span><span class="p">,</span>
-            <span class="p">)</span>
-
-        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-            <span class="n">min_num_live_points</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">sampler_opts</span><span class="p">[</span><span class="s2">"live_points"</span><span class="p">],</span>
-            <span class="n">frac_remain</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">sampler_opts</span><span class="p">[</span><span class="s2">"frac_remain"</span><span class="p">],</span>
-            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">run_opts</span><span class="p">,</span>
-        <span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">result</span></div>
-
-
-<div class="viewcode-block" id="Sampler.sampler_nautilus">
-<a class="viewcode-back" href="../../../api/gammapy.modeling.Sampler.html#gammapy.modeling.Sampler.sampler_nautilus">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">sampler_nautilus</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">like</span><span class="p">):</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">nautilus</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span> <span class="o">=</span> <span class="n">nautilus</span><span class="o">.</span><span class="n">Sampler</span><span class="p">(</span>
-            <span class="n">prior</span><span class="o">=</span><span class="n">parameters</span><span class="o">.</span><span class="n">_prior_inverse_cdf</span><span class="p">,</span>
-            <span class="n">likelihood</span><span class="o">=</span><span class="n">like</span><span class="o">.</span><span class="n">fcn</span><span class="p">,</span>
-            <span class="n">n_dim</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">parameters</span><span class="p">),</span>
-            <span class="n">n_live</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">sampler_opts</span><span class="p">[</span><span class="s2">"n_live"</span><span class="p">],</span>
-            <span class="n">filepath</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">sampler_opts</span><span class="p">[</span><span class="s2">"filepath"</span><span class="p">],</span>
-            <span class="n">resume</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">sampler_opts</span><span class="p">[</span><span class="s2">"resume"</span><span class="p">],</span>
-        <span class="p">)</span>
-
-        <span class="n">success</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">run_opts</span><span class="p">)</span>
-
-        <span class="n">points</span><span class="p">,</span> <span class="n">log_w</span><span class="p">,</span> <span class="n">log_l</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">posterior</span><span class="p">()</span>
-        <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_w</span> <span class="o">-</span> <span class="n">log_w</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
-        <span class="n">weights</span> <span class="o">/=</span> <span class="n">weights</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
-        <span class="n">mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">average</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-        <span class="n">stdev</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">average</span><span class="p">((</span><span class="n">points</span> <span class="o">-</span> <span class="n">mean</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
-
-        <span class="n">result</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">"ncall"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">n_like</span><span class="p">,</span>
-            <span class="s2">"success"</span><span class="p">:</span> <span class="n">success</span><span class="p">,</span>
-            <span class="s2">"logz"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">log_z</span><span class="p">,</span>
-            <span class="s2">"posterior"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"mean"</span><span class="p">:</span> <span class="n">mean</span><span class="p">,</span> <span class="s2">"stdev"</span><span class="p">:</span> <span class="n">stdev</span><span class="p">},</span>
-            <span class="s2">"samples"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">posterior</span><span class="p">(</span><span class="n">equal_weight</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">],</span>
-            <span class="s2">"weighted_samples"</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">points</span><span class="o">=</span><span class="n">points</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_w</span><span class="p">)),</span>
-            <span class="s2">"log_l"</span><span class="p">:</span> <span class="n">log_l</span><span class="p">,</span>
-        <span class="p">}</span>
-        <span class="k">return</span> <span class="n">result</span></div>
-
-
 <div class="viewcode-block" id="Sampler.run">
 <a class="viewcode-back" href="../../../api/gammapy.modeling.Sampler.html#gammapy.modeling.Sampler.run">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">datasets</span><span class="p">):</span>
@@ -731,14 +933,11 @@
         <span class="n">like</span> <span class="o">=</span> <span class="n">SamplerLikelihood</span><span class="p">(</span>
             <span class="n">function</span><span class="o">=</span><span class="n">datasets</span><span class="o">.</span><span class="n">stat_sum_likelihood</span><span class="p">,</span> <span class="n">parameters</span><span class="o">=</span><span class="n">parameters</span>
         <span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">backend</span> <span class="o">==</span> <span class="s2">"ultranest"</span><span class="p">:</span>
-            <span class="n">result_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampler_ultranest</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">like</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">print_results</span><span class="p">()</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="n">SamplerResult</span><span class="o">.</span><span class="n">from_ultranest</span><span class="p">(</span><span class="n">result_dict</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">backend</span> <span class="o">==</span> <span class="s2">"nautilus"</span><span class="p">:</span>
-            <span class="n">result_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampler_nautilus</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">like</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span><span class="o">.</span><span class="n">print_status</span><span class="p">()</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="n">SamplerResult</span><span class="o">.</span><span class="n">from_nautilus</span><span class="p">(</span><span class="n">result_dict</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">resolve_options</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">like</span><span class="p">)</span>
+        <span class="n">result_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">print_summary</span><span class="p">()</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">to_result</span><span class="p">(</span><span class="n">result_dict</span><span class="p">)</span>
 
         <span class="n">models_copy</span> <span class="o">=</span> <span class="n">datasets</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_update_models_from_posterior</span><span class="p">(</span><span class="n">models_copy</span><span class="p">,</span> <span class="n">result_dict</span><span class="p">)</span>
