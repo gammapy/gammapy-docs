@@ -69,7 +69,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="color-scheme" content="light dark"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="2.0.dev4603+gf463f343e" />
+  <meta name="docsearch:version" content="2.0.dev4637+gebd5a5008" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -499,7 +499,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">astropy.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">SkyCoord</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">astropy.coordinates.erfa_astrom</span><span class="w"> </span><span class="kn">import</span> <span class="n">ErfaAstromInterpolator</span><span class="p">,</span> <span class="n">erfa_astrom</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">astropy.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">Table</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">astropy.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">Table</span><span class="p">,</span> <span class="n">QTable</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">astropy.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Time</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">regions</span><span class="w"> </span><span class="kn">import</span> <span class="n">CircleSkyRegion</span>
 
@@ -525,6 +525,7 @@
     <span class="s2">"ThetaSquaredTable"</span><span class="p">,</span>
     <span class="s2">"make_effective_livetime_map"</span><span class="p">,</span>
     <span class="s2">"make_observation_time_map"</span><span class="p">,</span>
+    <span class="s2">"check_run_pair_validity"</span><span class="p">,</span>
 <span class="p">]</span>
 
 <span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
@@ -1550,6 +1551,118 @@
         <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">weights</span> <span class="o">*</span> <span class="n">data</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">Map</span><span class="o">.</span><span class="n">from_geom</span><span class="p">(</span><span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">unit</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_aeff_max_frac_deviation</span><span class="p">(</span>
+    <span class="n">on_observation</span><span class="p">,</span> <span class="n">off_observation</span><span class="p">,</span> <span class="n">energy_axis</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">offset_axis</span><span class="o">=</span><span class="kc">None</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Maximum fractional deviation between the two effective areas.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    on_observation : `~gammapy.data.Observation`</span>
+<span class="sd">        The ON observation.</span>
+<span class="sd">    off_observation : `~gammapy.data.Observation`</span>
+<span class="sd">        The OFF observation.</span>
+<span class="sd">    energy_range : `~gammapy.maps.MapAxis`</span>
+<span class="sd">        The energy axis on which to check the effective area.</span>
+<span class="sd">        Default is None, which takes the effective area energy axis center.</span>
+<span class="sd">    offset_axis : `~gammapy.maps.MapAxis`</span>
+<span class="sd">        The offset range axis on which to check the effective area.</span>
+<span class="sd">        Default is None, which takes the offset energy axis center.</span>
+<span class="sd">    """</span>
+    <span class="n">aeff_on</span> <span class="o">=</span> <span class="n">on_observation</span><span class="o">.</span><span class="n">aeff</span>
+    <span class="n">aeff_off</span> <span class="o">=</span> <span class="n">off_observation</span><span class="o">.</span><span class="n">aeff</span>
+    <span class="k">if</span> <span class="n">aeff_on</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">aeff_off</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">if</span> <span class="n">energy_axis</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">energy</span> <span class="o">=</span> <span class="n">aeff_on</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">"energy"</span><span class="p">]</span><span class="o">.</span><span class="n">center</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">energy</span> <span class="o">=</span> <span class="n">energy_axis</span><span class="o">.</span><span class="n">center</span>
+    <span class="k">if</span> <span class="n">offset_axis</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">offset</span> <span class="o">=</span> <span class="n">aeff_on</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="s2">"offset"</span><span class="p">]</span><span class="o">.</span><span class="n">center</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">offset</span> <span class="o">=</span> <span class="n">offset_axis</span><span class="o">.</span><span class="n">center</span>
+    <span class="n">energy_grid</span><span class="p">,</span> <span class="n">offset_grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">energy</span><span class="p">,</span> <span class="n">offset</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s2">"ij"</span><span class="p">)</span>
+
+    <span class="n">a_on</span> <span class="o">=</span> <span class="n">aeff_on</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="n">energy_true</span><span class="o">=</span><span class="n">energy_grid</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="n">offset_grid</span><span class="p">)</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span><span class="s2">"m2"</span><span class="p">)</span>
+    <span class="n">a_off</span> <span class="o">=</span> <span class="n">aeff_off</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="n">energy_true</span><span class="o">=</span><span class="n">energy_grid</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="n">offset_grid</span><span class="p">)</span><span class="o">.</span><span class="n">to_value</span><span class="p">(</span>
+        <span class="s2">"m2"</span>
+    <span class="p">)</span>
+
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">a_on</span> <span class="o">&gt;</span> <span class="mi">0</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">mask</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">a_off</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">-</span> <span class="n">a_on</span><span class="p">[</span><span class="n">mask</span><span class="p">])</span> <span class="o">/</span> <span class="n">a_on</span><span class="p">[</span><span class="n">mask</span><span class="p">]))</span>
+
+
+<div class="viewcode-block" id="check_run_pair_validity">
+<a class="viewcode-back" href="../../../api/gammapy.makers.utils.check_run_pair_validity.html#gammapy.makers.utils.check_run_pair_validity">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">check_run_pair_validity</span><span class="p">(</span>
+    <span class="n">on_observations</span><span class="p">,</span>
+    <span class="n">off_observations</span><span class="p">,</span>
+    <span class="n">energy_range</span><span class="p">,</span>
+    <span class="n">zenith_tol</span><span class="o">=</span><span class="mi">10</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span><span class="p">,</span>
+    <span class="n">aeff_tol</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Validity check over a list of ON/OFF pairs.</span>
+
+<span class="sd">    Currently, supports only one OFF observation for each ON observation.</span>
+
+<span class="sd">    Checks for difference in zenith angle and effective area. Returns a summary</span>
+<span class="sd">    table along with a flag if the match is sufficient within tolerance.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    on_observations : list of `~gammapy.data.Observation` or `~gammapy.data.Observations`</span>
+<span class="sd">        The ON observations list.</span>
+<span class="sd">    off_observations : list of `~gammapy.data.Observation` or `~gammapy.data.Observations`</span>
+<span class="sd">        The OFF observation list.</span>
+<span class="sd">    energy_range : `~gammapy.maps.MapAxis`</span>
+<span class="sd">        The energy axis on which to check the effective area.</span>
+<span class="sd">    zenith_tol : `~astropy.units.Quantity`, optional</span>
+<span class="sd">        Zenith tolerance.</span>
+<span class="sd">        Default is 10 deg.</span>
+<span class="sd">    aeff_tol : float, optional</span>
+<span class="sd">        Effective-area fractional-deviation tolerance.</span>
+<span class="sd">        Default is 0.1.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    table : `~astropy.table.QTable`</span>
+<span class="sd">        Summary table.</span>
+<span class="sd">        One row per pair, with columns ``obs_id``, ``off_obs_id``,</span>
+<span class="sd">        ``zenith_on``, ``zenith_off``, ``delta_zenith``, ``zenith_ok``,</span>
+<span class="sd">        ``aeff_max_frac_deviation`` and ``aeff_ok``.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">on_observations</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">off_observations</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"on_observations and off_observations must have equal length; "</span>
+            <span class="sa">f</span><span class="s2">"got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">on_observations</span><span class="p">)</span><span class="si">}</span><span class="s2"> for on and </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">off_observations</span><span class="p">)</span><span class="si">}</span><span class="s2"> for off."</span>
+        <span class="p">)</span>
+
+    <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">on_obs</span><span class="p">,</span> <span class="n">off_obs</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">on_observations</span><span class="p">,</span> <span class="n">off_observations</span><span class="p">):</span>
+        <span class="n">zenith_on</span> <span class="o">=</span> <span class="mf">90.0</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span> <span class="o">-</span> <span class="n">on_obs</span><span class="o">.</span><span class="n">get_pointing_altaz</span><span class="p">(</span><span class="n">on_obs</span><span class="o">.</span><span class="n">tmid</span><span class="p">)</span><span class="o">.</span><span class="n">alt</span>
+        <span class="n">zenith_off</span> <span class="o">=</span> <span class="mf">90.0</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span> <span class="o">-</span> <span class="n">off_obs</span><span class="o">.</span><span class="n">get_pointing_altaz</span><span class="p">(</span><span class="n">off_obs</span><span class="o">.</span><span class="n">tmid</span><span class="p">)</span><span class="o">.</span><span class="n">alt</span>
+        <span class="n">delta_zenith</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">zenith_on</span> <span class="o">-</span> <span class="n">zenith_off</span><span class="p">)</span>
+        <span class="n">aeff_dev</span> <span class="o">=</span> <span class="n">_aeff_max_frac_deviation</span><span class="p">(</span><span class="n">on_obs</span><span class="p">,</span> <span class="n">off_obs</span><span class="p">,</span> <span class="n">energy_range</span><span class="p">)</span>
+        <span class="n">aeff_ok</span> <span class="o">=</span> <span class="n">aeff_dev</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">aeff_dev</span> <span class="o">&lt;</span> <span class="n">aeff_tol</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"obs_id"</span><span class="p">:</span> <span class="n">on_obs</span><span class="o">.</span><span class="n">obs_id</span><span class="p">,</span>
+            <span class="s2">"off_obs_id"</span><span class="p">:</span> <span class="n">off_obs</span><span class="o">.</span><span class="n">obs_id</span><span class="p">,</span>
+            <span class="s2">"zenith_on"</span><span class="p">:</span> <span class="n">zenith_on</span><span class="p">,</span>
+            <span class="s2">"zenith_off"</span><span class="p">:</span> <span class="n">zenith_off</span><span class="p">,</span>
+            <span class="s2">"delta_zenith"</span><span class="p">:</span> <span class="n">delta_zenith</span><span class="p">,</span>
+            <span class="s2">"zenith_ok"</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="n">delta_zenith</span> <span class="o">&lt;</span> <span class="n">zenith_tol</span><span class="p">),</span>
+            <span class="s2">"aeff_max_frac_deviation"</span><span class="p">:</span> <span class="n">aeff_dev</span><span class="p">,</span>
+            <span class="s2">"aeff_ok"</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="n">aeff_ok</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">QTable</span><span class="p">(</span><span class="n">results</span><span class="p">)</span></div>
+
 </pre></div>
 
                 </article>
