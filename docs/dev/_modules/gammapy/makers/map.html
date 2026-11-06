@@ -69,7 +69,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="color-scheme" content="light dark"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="2.0.dev4680+g1dbfd868d" />
+  <meta name="docsearch:version" content="2.0.dev4721+g86d3e7b6e" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -499,14 +499,15 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">regions</span><span class="w"> </span><span class="kn">import</span> <span class="n">PointSkyRegion</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">MapDatasetMetaData</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Observation</span><span class="p">,</span> <span class="n">FixedPointingInfo</span><span class="p">,</span> <span class="n">PointingMode</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.irf</span><span class="w"> </span><span class="kn">import</span> <span class="n">EDispMap</span><span class="p">,</span> <span class="n">EDispKernelMap</span><span class="p">,</span> <span class="n">PSFMap</span><span class="p">,</span> <span class="n">FoVAlignment</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Observation</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.maps</span><span class="w"> </span><span class="kn">import</span> <span class="n">Map</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Maker</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">make_counts_rad_max</span><span class="p">,</span>
-    <span class="n">make_map_background_irf</span><span class="p">,</span>
     <span class="n">project_irf_on_geom</span><span class="p">,</span>
+    <span class="n">integrate_project_irf_on_geom</span><span class="p">,</span>
+    <span class="n">_compute_rotation_time_steps</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"MapDatasetMaker"</span><span class="p">]</span>
@@ -742,7 +743,16 @@
 
 <div class="viewcode-block" id="MapDatasetMaker.make_background">
 <a class="viewcode-back" href="../../../api/gammapy.makers.MapDatasetMaker.html#gammapy.makers.MapDatasetMaker.make_background">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">make_background</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">geom</span><span class="p">,</span> <span class="n">observation</span><span class="p">):</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">make_background</span><span class="p">(</span>
+        <span class="n">geom</span><span class="p">,</span>
+        <span class="n">observation</span><span class="p">,</span>
+        <span class="n">use_region_center</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">interp_missing_data</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">pad_offset</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">oversampling</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">fov_rotation_step</span><span class="o">=</span><span class="mi">1</span> <span class="o">*</span> <span class="n">u</span><span class="o">.</span><span class="n">deg</span><span class="p">,</span>
+    <span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Make background map.</span>
 
 <span class="sd">        Parameters</span>
@@ -751,6 +761,23 @@
 <span class="sd">            Reference geometry.</span>
 <span class="sd">        observation : `~gammapy.data.Observation`</span>
 <span class="sd">            Observation container.</span>
+<span class="sd">        use_region_center : bool, optional</span>
+<span class="sd">            For geom as a `~gammapy.maps.RegionGeom`. If True, consider the values at the region center.</span>
+<span class="sd">            If False, average over the whole region.</span>
+<span class="sd">            Default is True.</span>
+<span class="sd">        interp_missing_data : bool, optional</span>
+<span class="sd">            Interpolate missing values in background 3d map.</span>
+<span class="sd">            Default is True, have to be set to True for CTAO IRF.</span>
+<span class="sd">        pad_offset : bool, optional</span>
+<span class="sd">            Pad one bin in offset for 2D background map.</span>
+<span class="sd">            This avoids extrapolation at edges and use the nearest value.</span>
+<span class="sd">            Default is True.</span>
+<span class="sd">        oversampling : int, optional</span>
+<span class="sd">            Oversampling factor in energy, used for the background model evaluation.</span>
+<span class="sd">            Default is None.</span>
+<span class="sd">        fov_rotation_step : `~astropy.units.Quantity`</span>
+<span class="sd">            Maximum rotation error to create sub-time bins if the IRF is in 3D and in AltAz.</span>
+<span class="sd">            Default is 1.0 deg.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -758,6 +785,7 @@
 <span class="sd">            Background map.</span>
 <span class="sd">        """</span>
         <span class="n">bkg</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">bkg</span>
+
         <span class="k">with</span> <span class="n">u</span><span class="o">.</span><span class="n">add_enabled_units</span><span class="p">([</span><span class="n">u</span><span class="o">.</span><span class="n">def_unit</span><span class="p">(</span><span class="s2">"transit"</span><span class="p">,</span> <span class="n">u</span><span class="o">.</span><span class="n">sday</span><span class="p">)]):</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">bkg</span><span class="p">,</span> <span class="n">Map</span><span class="p">):</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="n">bkg</span><span class="o">.</span><span class="n">unit</span> <span class="ow">or</span> <span class="n">bkg</span><span class="o">.</span><span class="n">unit</span><span class="o">.</span><span class="n">is_equivalent</span><span class="p">(</span><span class="n">u</span><span class="o">.</span><span class="n">Unit</span><span class="p">(</span><span class="s2">""</span><span class="p">)):</span>
@@ -783,25 +811,48 @@
                         <span class="sa">f</span><span class="s2">"Background unit </span><span class="si">{</span><span class="n">observation</span><span class="o">.</span><span class="n">bkg</span><span class="o">.</span><span class="n">unit</span><span class="si">}</span><span class="s2"> is not supported"</span>
                     <span class="p">)</span>
 
-        <span class="n">use_region_center</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">"use_region_center"</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="n">time_start</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">tstart</span>
+        <span class="n">ontime</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">observation_time_duration</span>
+        <span class="n">location</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">observatory_earth_location</span>
+        <span class="n">pointing</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">pointing</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">background_interp_missing_data</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">interp_missing_data</span><span class="p">:</span>
             <span class="n">bkg</span><span class="o">.</span><span class="n">interp_missing_data</span><span class="p">(</span><span class="n">axis_name</span><span class="o">=</span><span class="s2">"energy"</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">background_pad_offset</span> <span class="ow">and</span> <span class="n">bkg</span><span class="o">.</span><span class="n">has_offset_axis</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">pad_offset</span> <span class="ow">and</span> <span class="n">bkg</span><span class="o">.</span><span class="n">has_offset_axis</span><span class="p">:</span>
             <span class="n">bkg</span> <span class="o">=</span> <span class="n">bkg</span><span class="o">.</span><span class="n">pad</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"edge"</span><span class="p">,</span> <span class="n">axis_name</span><span class="o">=</span><span class="s2">"offset"</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">make_map_background_irf</span><span class="p">(</span>
-            <span class="n">pointing</span><span class="o">=</span><span class="n">observation</span><span class="o">.</span><span class="n">pointing</span><span class="p">,</span>
-            <span class="n">ontime</span><span class="o">=</span><span class="n">observation</span><span class="o">.</span><span class="n">observation_time_duration</span><span class="p">,</span>
-            <span class="n">bkg</span><span class="o">=</span><span class="n">bkg</span><span class="p">,</span>
-            <span class="n">geom</span><span class="o">=</span><span class="n">geom</span><span class="p">,</span>
-            <span class="n">time_start</span><span class="o">=</span><span class="n">observation</span><span class="o">.</span><span class="n">tstart</span><span class="p">,</span>
-            <span class="n">fov_rotation_step</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fov_rotation_step</span><span class="p">,</span>
-            <span class="n">oversampling</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">background_oversampling</span><span class="p">,</span>
-            <span class="n">use_region_center</span><span class="o">=</span><span class="n">use_region_center</span><span class="p">,</span>
-            <span class="n">location</span><span class="o">=</span><span class="n">observation</span><span class="o">.</span><span class="n">observatory_earth_location</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="n">fov_frame</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">get_fov_frame</span><span class="p">(</span><span class="n">observation</span><span class="o">.</span><span class="n">tmid</span><span class="p">,</span> <span class="n">FoVAlignment</span><span class="o">.</span><span class="n">RADEC</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">bkg</span><span class="o">.</span><span class="n">has_offset_axis</span> <span class="ow">and</span> <span class="n">bkg</span><span class="o">.</span><span class="n">fov_alignment</span> <span class="o">==</span> <span class="n">FoVAlignment</span><span class="o">.</span><span class="n">ALTAZ</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">FixedPointingInfo</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">"make_map_background_irf requires FixedPointingInfo if "</span>
+                    <span class="s2">"BackgroundIRF.fov_alignement is ALTAZ"</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="n">times</span> <span class="o">=</span> <span class="n">_compute_rotation_time_steps</span><span class="p">(</span>
+                <span class="n">time_start</span><span class="p">,</span> <span class="n">time_start</span> <span class="o">+</span> <span class="n">ontime</span><span class="p">,</span> <span class="n">fov_rotation_step</span><span class="p">,</span> <span class="n">pointing</span><span class="p">,</span> <span class="n">location</span>
+            <span class="p">)</span>
+            <span class="n">fov_frame</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">get_fov_frame</span><span class="p">(</span><span class="n">times</span><span class="p">,</span> <span class="n">FoVAlignment</span><span class="o">.</span><span class="n">ALTAZ</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="nb">isinstance</span><span class="p">(</span><span class="n">pointing</span><span class="p">,</span> <span class="n">FixedPointingInfo</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="n">pointing</span><span class="o">.</span><span class="n">mode</span> <span class="o">==</span> <span class="n">PointingMode</span><span class="o">.</span><span class="n">DRIFT</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                    <span class="s2">"Drift pointing mode is not supported for background calculation."</span>
+                <span class="p">)</span>
+            <span class="n">fov_frame</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">get_fov_frame</span><span class="p">(</span><span class="n">observation</span><span class="o">.</span><span class="n">tmid</span><span class="p">,</span> <span class="n">FoVAlignment</span><span class="o">.</span><span class="n">RADEC</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">oversampling</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">geom</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">upsample</span><span class="p">(</span><span class="n">factor</span><span class="o">=</span><span class="n">oversampling</span><span class="p">,</span> <span class="n">axis_name</span><span class="o">=</span><span class="s2">"energy"</span><span class="p">)</span>
+
+        <span class="n">bkg_map</span> <span class="o">=</span> <span class="n">integrate_project_irf_on_geom</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">bkg</span><span class="p">,</span> <span class="n">fov_frame</span><span class="p">,</span> <span class="n">use_region_center</span><span class="p">)</span>
+        <span class="n">bkg_map</span> <span class="o">*=</span> <span class="n">ontime</span>
+
+        <span class="k">if</span> <span class="n">oversampling</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">bkg_map</span> <span class="o">=</span> <span class="n">bkg_map</span><span class="o">.</span><span class="n">downsample</span><span class="p">(</span><span class="n">factor</span><span class="o">=</span><span class="n">oversampling</span><span class="p">,</span> <span class="n">axis_name</span><span class="o">=</span><span class="s2">"energy"</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">bkg_map</span><span class="o">.</span><span class="n">to_unit</span><span class="p">(</span><span class="s2">""</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="MapDatasetMaker.make_edisp">
@@ -1016,7 +1067,13 @@
 
         <span class="k">if</span> <span class="s2">"background"</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">selection</span><span class="p">:</span>
             <span class="n">kwargs</span><span class="p">[</span><span class="s2">"background"</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_background</span><span class="p">(</span>
-                <span class="n">dataset</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">geom</span><span class="p">,</span> <span class="n">observation</span>
+                <span class="n">dataset</span><span class="o">.</span><span class="n">counts</span><span class="o">.</span><span class="n">geom</span><span class="p">,</span>
+                <span class="n">observation</span><span class="p">,</span>
+                <span class="n">use_region_center</span><span class="o">=</span><span class="n">use_region_center</span><span class="p">,</span>
+                <span class="n">interp_missing_data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">background_interp_missing_data</span><span class="p">,</span>
+                <span class="n">pad_offset</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">background_pad_offset</span><span class="p">,</span>
+                <span class="n">oversampling</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">background_oversampling</span><span class="p">,</span>
+                <span class="n">fov_rotation_step</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fov_rotation_step</span><span class="p">,</span>
             <span class="p">)</span>
 
         <span class="k">if</span> <span class="s2">"psf"</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">selection</span><span class="p">:</span>
