@@ -69,7 +69,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="color-scheme" content="light dark"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="2.0.dev4726+gf542cffb1" />
+  <meta name="docsearch:version" content="2.0.dev4735+g37288a67b" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -495,14 +495,17 @@
 <span></span><span class="c1"># Licensed under a 3-clause BSD style license - see LICENSE.rst</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">ncx2</span>
-
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">ncx2</span><span class="p">,</span> <span class="n">chi2</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.optimize</span><span class="w"> </span><span class="kn">import</span> <span class="n">brentq</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.utils.deprecation</span><span class="w"> </span><span class="kn">import</span> <span class="n">deprecated_renamed_argument</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gammapy.utils.roots</span><span class="w"> </span><span class="kn">import</span> <span class="n">find_roots</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"sigma_to_ts"</span><span class="p">,</span> <span class="s2">"ts_to_sigma"</span><span class="p">]</span>
 
 
 <div class="viewcode-block" id="sigma_to_ts">
 <a class="viewcode-back" href="../../../api/gammapy.stats.sigma_to_ts.html#gammapy.stats.sigma_to_ts">[docs]</a>
+<span class="nd">@deprecated_renamed_argument</span><span class="p">(</span><span class="s2">"n_sigma_asimov"</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">"2.2"</span><span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">sigma_to_ts</span><span class="p">(</span><span class="n">n_sigma</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_sigma_asimov</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Convert number of sigma to delta ts.</span>
 
@@ -519,12 +522,9 @@
 <span class="sd">    df : int, optional</span>
 <span class="sd">        Number of degree of freedom. Default is 1.</span>
 <span class="sd">    n_sigma_asimov : float, optional</span>
-<span class="sd">        Significance in number of sigma in the Asimov dataset</span>
-<span class="sd">        (in which counts are equal to the predicted counts).</span>
-<span class="sd">        In that case the function applies the Wald test described in [2] and [3],</span>
-<span class="sd">        where the TS of H1 under the H0 assumption is assumed to follow a non-central chi2 distribution.</span>
+<span class="sd">        Significance in number of sigma in the Asimov dataset.</span>
 <span class="sd">        Should only be used for sensitivity computations. Default is 0.</span>
-
+<span class="sd">        Deprecated since v2.2.</span>
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    ts : float</span>
@@ -533,20 +533,66 @@
 <span class="sd">    References</span>
 <span class="sd">    ----------</span>
 <span class="sd">    .. [1] Wilks theorem: https://en.wikipedia.org/wiki/Wilks%27_theorem</span>
+<span class="sd">    """</span>
+    <span class="c1"># invert ts_to_sigma step</span>
+    <span class="n">p_value</span> <span class="o">=</span> <span class="n">chi2</span><span class="o">.</span><span class="n">sf</span><span class="p">(</span><span class="n">n_sigma</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">ts</span> <span class="o">=</span> <span class="n">chi2</span><span class="o">.</span><span class="n">isf</span><span class="p">(</span><span class="n">p_value</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">)</span>
 
-<span class="sd">    .. [2] Wald (1943): https://www.pp.rhul.ac.uk/~cowan/stat/wald1943.pdf</span>
+    <span class="k">return</span> <span class="n">ts</span></div>
 
-<span class="sd">    .. [3] Cowan et al. (2011), European Physical Journal C, 71, 1554.</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">sigma_to_ts_sensitivity</span><span class="p">(</span><span class="n">n_sigma</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Convert median significance to an Asimov test statistic.</span>
+
+<span class="sd">    Under the regular Wald approximation [1]_ [2]_, the test statistic</span>
+<span class="sd">    follows a non-central chi-square distribution under the alternative</span>
+<span class="sd">    hypothesis. Its noncentrality parameter is estimated by the test</span>
+<span class="sd">    statistic evaluated on an Asimov dataset. The null distribution is</span>
+<span class="sd">    a central chi-square distribution with the same degrees of freedom.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_sigma : float</span>
+<span class="sd">        Target median significance in non-negative Gaussian sigma, using</span>
+<span class="sd">        the two-sided convention ``p = 2 * norm.sf(n_sigma)``.</span>
+<span class="sd">    df : int, optional</span>
+<span class="sd">        Number of degree of freedom. Default is 1.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    ts : float</span>
+<span class="sd">        Asimov test statistic, interpreted as the noncentrality parameter.</span>
+<span class="sd">        Returns zero for targets below the minimum attainable median</span>
+<span class="sd">        significance.</span>
+
+<span class="sd">    References</span>
+<span class="sd">    ----------</span>
+<span class="sd">    .. [1] Wald (1943): https://www.pp.rhul.ac.uk/~cowan/stat/wald1943.pdf</span>
+
+<span class="sd">    .. [2] Cowan et al. (2011), European Physical Journal C, 71, 1554.</span>
 <span class="sd">        doi:10.1140/epjc/s10052-011-1554-0.</span>
 <span class="sd">    """</span>
-    <span class="n">ts_asimov</span> <span class="o">=</span> <span class="n">n_sigma_asimov</span><span class="o">**</span><span class="mi">2</span>
-    <span class="n">p_value</span> <span class="o">=</span> <span class="n">ncx2</span><span class="o">.</span><span class="n">sf</span><span class="p">(</span><span class="n">n_sigma</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">nc</span><span class="o">=</span><span class="n">ts_asimov</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">ncx2</span><span class="o">.</span><span class="n">isf</span><span class="p">(</span><span class="n">p_value</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span> <span class="n">nc</span><span class="o">=</span><span class="n">ts_asimov</span><span class="p">)</span></div>
+    <span class="c1"># invert ts_to_sigma step</span>
+    <span class="n">p_value</span> <span class="o">=</span> <span class="n">chi2</span><span class="o">.</span><span class="n">sf</span><span class="p">(</span><span class="n">n_sigma</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">q_med</span> <span class="o">=</span> <span class="n">chi2</span><span class="o">.</span><span class="n">isf</span><span class="p">(</span><span class="n">p_value</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">)</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">f</span><span class="p">(</span><span class="n">nc</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">ncx2</span><span class="o">.</span><span class="n">ppf</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span> <span class="n">nc</span><span class="o">=</span><span class="n">nc</span><span class="p">)</span> <span class="o">-</span> <span class="n">q_med</span>
+
+    <span class="c1"># f rises monotonically with nc</span>
+    <span class="c1"># if f(nc=0) is already positive there is no root to find</span>
+    <span class="k">if</span> <span class="n">f</span><span class="p">(</span><span class="mf">0.0</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mf">0.0</span>
+
+    <span class="c1"># solve for nc = ts</span>
+    <span class="n">roots</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">find_roots</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">q_med</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">roots</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
 
 <div class="viewcode-block" id="ts_to_sigma">
 <a class="viewcode-back" href="../../../api/gammapy.stats.ts_to_sigma.html#gammapy.stats.ts_to_sigma">[docs]</a>
+<span class="nd">@deprecated_renamed_argument</span><span class="p">(</span><span class="s2">"ts_asimov"</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">"2.2"</span><span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">ts_to_sigma</span><span class="p">(</span><span class="n">ts</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ts_asimov</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Convert delta ts to number of sigma.</span>
 
@@ -563,13 +609,9 @@
 <span class="sd">    df : int, optional</span>
 <span class="sd">        Number of degree of freedom. Default is 1.</span>
 <span class="sd">    ts_asimov : float, optional</span>
-<span class="sd">        TS value in the Asimov dataset</span>
-<span class="sd">        (in which counts equal to the predicted counts).</span>
-<span class="sd">        In that case the function applies the Wald test described in [2] and [3],</span>
-<span class="sd">        and the TS is assumed to follow a non-central chi2 distribution.</span>
+<span class="sd">        TS value in the Asimov dataset.</span>
 <span class="sd">        Should only be used for sensitivity computations. Default is 0.</span>
-
-
+<span class="sd">        Deprecated since v2.2.</span>
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    n_sigma : float</span>
@@ -578,15 +620,46 @@
 <span class="sd">    References</span>
 <span class="sd">    ----------</span>
 <span class="sd">    .. [1] Wilks theorem: https://en.wikipedia.org/wiki/Wilks%27_theorem</span>
+<span class="sd">    """</span>
+    <span class="n">p_value</span> <span class="o">=</span> <span class="n">chi2</span><span class="o">.</span><span class="n">sf</span><span class="p">(</span><span class="n">ts</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">chi2</span><span class="o">.</span><span class="n">isf</span><span class="p">(</span><span class="n">p_value</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span></div>
 
-<span class="sd">    .. [2] Wald (1943): https://www.pp.rhul.ac.uk/~cowan/stat/wald1943.pdf</span>
 
-<span class="sd">    .. [3] Cowan et al. (2011), European Physical Journal C, 71, 1554.</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">ts_to_sigma_sensitivity</span><span class="p">(</span><span class="n">ts</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Convert an Asimov test statistic to median significance.</span>
+
+<span class="sd">    Under the regular Wald approximation [1]_ [2]_, the test statistic</span>
+<span class="sd">    follows a non-central chi-square distribution under the alternative</span>
+<span class="sd">    hypothesis. Its noncentrality parameter is estimated by the test</span>
+<span class="sd">    statistic evaluated on an Asimov dataset. The null distribution is</span>
+<span class="sd">    a central chi-square distribution with the same degrees of freedom.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    ts : float</span>
+<span class="sd">        Non-negative Asimov test statistic, interpreted as the</span>
+<span class="sd">        noncentrality parameter. Only use for sensitivity computations.</span>
+<span class="sd">    df : int, optional</span>
+<span class="sd">        Number of degree of freedom. Default is 1.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    n_sigma : float</span>
+<span class="sd">        Median significance in Gaussian sigma, using the two-sided</span>
+<span class="sd">        convention ``n_sigma = norm.isf(p / 2)``.</span>
+
+<span class="sd">    References</span>
+<span class="sd">    ----------</span>
+<span class="sd">    .. [1] Wald (1943): https://www.pp.rhul.ac.uk/~cowan/stat/wald1943.pdf</span>
+
+<span class="sd">    .. [2] Cowan et al. (2011), European Physical Journal C, 71, 1554.</span>
 <span class="sd">        doi:10.1140/epjc/s10052-011-1554-0.</span>
 <span class="sd">    """</span>
-    <span class="n">p_value</span> <span class="o">=</span> <span class="n">ncx2</span><span class="o">.</span><span class="n">sf</span><span class="p">(</span><span class="n">ts</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span> <span class="n">nc</span><span class="o">=</span><span class="n">ts_asimov</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">ncx2</span><span class="o">.</span><span class="n">isf</span><span class="p">(</span><span class="n">p_value</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">nc</span><span class="o">=</span><span class="n">ts_asimov</span><span class="p">))</span></div>
+    <span class="n">q_med</span> <span class="o">=</span> <span class="n">ncx2</span><span class="o">.</span><span class="n">ppf</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span> <span class="n">nc</span><span class="o">=</span><span class="n">ts</span><span class="p">)</span>
 
+    <span class="n">p_value</span> <span class="o">=</span> <span class="n">chi2</span><span class="o">.</span><span class="n">sf</span><span class="p">(</span><span class="n">q_med</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">chi2</span><span class="o">.</span><span class="n">isf</span><span class="p">(</span><span class="n">p_value</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
 </pre></div>
 
                 </article>
