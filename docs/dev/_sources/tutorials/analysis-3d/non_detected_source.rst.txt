@@ -45,9 +45,11 @@ to quantify non-detections. There are two distinct approaches to consider:
 - Test for the presence of emission anywhere in a map and compute an integral flux upper limit at
   any position (i.e. UL map).
 - Test the presence of emission from a potential source with given position and morphology and compute
-  integral and differential UL
+  integral and differential UL.
 
-.. GENERATED FROM PYTHON SOURCE LINES 34-39
+We will use both frequentist and Bayesian approaches for computing the ULs.
+
+.. GENERATED FROM PYTHON SOURCE LINES 36-41
 
 Setup
 -----
@@ -55,15 +57,19 @@ Setup
 As usual, let’s start with some general imports…
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 39-57
+.. GENERATED FROM PYTHON SOURCE LINES 41-67
 
 .. code-block:: Python
 
 
     # %matplotlib inline
     import matplotlib.pyplot as plt
-
+    import numpy as np
     import astropy.units as u
+    import logging
+
+    logging.getLogger("ultranest").setLevel(logging.WARNING)
+    logging.getLogger("ultranest").propagate = False
 
     from gammapy.datasets import MapDataset, Datasets
     from gammapy.estimators import FluxPointsEstimator, ExcessMapEstimator
@@ -72,8 +78,12 @@ As usual, let’s start with some general imports…
         PointSpatialModel,
         PowerLawSpectralModel,
         SkyModel,
-        create_crab_spectral_model,
+        FoVBackgroundModel,
+        Models,
     )
+    from gammapy.estimators import FluxCollectionEstimator
+    from gammapy.modeling import Parameter, Sampler
+    from gammapy.modeling.models import UniformPrior
     from gammapy.visualization import plot_distribution
 
 
@@ -84,7 +94,7 @@ As usual, let’s start with some general imports…
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 58-65
+.. GENERATED FROM PYTHON SOURCE LINES 68-75
 
 Load observation
 ----------------
@@ -94,7 +104,7 @@ already created a `~gammapy.datasets.MapDataset` from observation id ``20275`` f
 public H.E.S.S. data release and stored it in ``$GAMMAPY_DATA``
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 65-70
+.. GENERATED FROM PYTHON SOURCE LINES 75-80
 
 .. code-block:: Python
 
@@ -115,26 +125,27 @@ public H.E.S.S. data release and stored it in ``$GAMMAPY_DATA``
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 71-78
+.. GENERATED FROM PYTHON SOURCE LINES 81-90
 
 Create Upper Limit maps
 -----------------------
 
 We will first use the `~gammapy.estimators.ExcessMapEstimator` for a quick check to see if
-there are any potential sources in the field. The ``correlation_radius`` should be around the
-size of the source you are searching for. You may also use the
-`~gammapy.estimators.TSMapEstimator`.
+there are any potential sources in the field. The ``correlation_radius`` should be
+roughly the quadratic sum of the PSF size (at low energies) and the source size
+you are searching for. You may also use the
+`~gammapy.estimators.TSMapEstimator` which uses a forward folding approach, where
+you can directly specify the spatial model you are probing.
 
-.. GENERATED FROM PYTHON SOURCE LINES 78-100
+.. GENERATED FROM PYTHON SOURCE LINES 90-111
 
 .. code-block:: Python
 
 
     estimator = ExcessMapEstimator(
-        sum_over_energy_groups=True,
         selection_optional="all",
         correlate_off=True,
-        correlation_radius=0.1 * u.deg,
+        correlation_radius=0.2 * u.deg,
     )
 
     lima_maps = estimator.run(dataset)
@@ -146,9 +157,9 @@ size of the source you are searching for. You may also use the
         figsize=(11, 4), subplot_kw={"projection": lima_maps.geom.wcs}, ncols=2
     )
     ax1.set_title("Significance map")
-    significance_map.plot(ax=ax1, add_cbar=True)
+    significance_map.plot(ax=ax1, add_cbar=True, cmap="coolwarm", vmin=-4, vmax=4)
     ax2.set_title("Excess map")
-    excess_map.plot(ax=ax2, add_cbar=True)
+    excess_map.plot(ax=ax2, add_cbar=True, cmap="coolwarm")
     plt.show()
 
 
@@ -160,24 +171,17 @@ size of the source you are searching for. You may also use the
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /home/runner/work/gammapy-docs/gammapy-docs/gammapy/examples/tutorials/analysis-3d/non_detected_source.py:79: GammapyDeprecationWarning: "sum_over_energy_groups" was deprecated in version 2.2 and will be removed in a future version. 
-      estimator = ExcessMapEstimator(
 
 
 
-
-.. GENERATED FROM PYTHON SOURCE LINES 101-105
+.. GENERATED FROM PYTHON SOURCE LINES 112-116
 
 The significance map looks featureless. We will plot a histogram of the
 significance distribution and fit it with a standard normal.
 Deviations from a standard normal can suggest the presence of gamma-ray sources,
 or can also originate from incorrect modeling of the residual hadronic background.
 
-.. GENERATED FROM PYTHON SOURCE LINES 105-116
+.. GENERATED FROM PYTHON SOURCE LINES 116-127
 
 .. code-block:: Python
 
@@ -204,21 +208,21 @@ or can also originate from incorrect modeling of the residual hadronic backgroun
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 117-123
+.. GENERATED FROM PYTHON SOURCE LINES 128-134
 
 We can also see the correlated upper limits at any position in the map. However, it is important to note
 that this is **not** a source UL, as the containment correction is not applied here. Instead, it gives the
 flux upper limits contained within the ``correlation_radius`` at each pixel. This can be useful
-when making quick look plots to search for the presence of new sources with a field - for example
+when making quick look plots to search for the presence of new sources within a field - for example
 in the case of alerts from Gravitational Wave detectors.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 123-128
+.. GENERATED FROM PYTHON SOURCE LINES 134-139
 
 .. code-block:: Python
 
 
-    lima_maps.flux_ul.plot(add_cbar=True, cmap="viridis")
+    lima_maps.flux_ul.plot(add_cbar=True, cmap="Reds")
     plt.show()
 
 
@@ -234,7 +238,7 @@ in the case of alerts from Gravitational Wave detectors.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 129-154
+.. GENERATED FROM PYTHON SOURCE LINES 140-171
 
 .. _compute_upper_lims:
 
@@ -242,8 +246,9 @@ Compute upper limits for a source
 ---------------------------------
 
 Now, we address a more specific question.
-Suppose we were expecting a source at a specific position, say the center of our map.
-We’ll attempt to fit a point source at that location to determine whether the signal
+Suppose we were expecting a source at a specific position, say at the center of our
+map.
+We’ll attempt to fit a point source at the location to determine whether the signal
 is significant above the background.
 
 For this, we compare two hypotheses:
@@ -254,18 +259,22 @@ For this, we compare two hypotheses:
 The difference in test statistic (TS) between the two cases indicates the
 significance of the alternative hypothesis.
 
-For this purpose, we can utilise the function `~gammapy.modeling.select_nested_models` which
-performs these comparisons internally.
-As the null hypothesis, :math:`H_0`, corresponds to the case of no source, we set the amplitude to 0, in other words
-the source has no flux.
+For this purpose, we utilise the function `~gammapy.modeling.select_nested_models`
+which performs these comparisons internally. As the null hypothesis,
+:math:`H_0`, corresponds to the case of no source, we set the amplitude to 0,
+in other words the source has no flux.
 
-To prevent the fit from converging to unrelated positions, we freeze the spatial parameters.
+To prevent the fit from drifting to unrelated positions, we freeze the spatial parameters.
 Alternatively, you can constrain the parameter ranges to stay within your expected region.
+We also add a background model with a free normalisation to account for uncertainties
+in the background. You can add more complex background corrections such as letting
+the tilt free, or a piecewise correction, or add additional models like a diffuse
+gamma-ray background, etc.
 
-.. GENERATED FROM PYTHON SOURCE LINES 154-172
+
+.. GENERATED FROM PYTHON SOURCE LINES 171-189
 
 .. code-block:: Python
-
 
 
     spectral_model = PowerLawSpectralModel()
@@ -276,7 +285,8 @@ Alternatively, you can constrain the parameter ranges to stay within your expect
     sky_model = SkyModel(
         spatial_model=spatial_model, spectral_model=spectral_model, name="source"
     )
-    dataset.models = sky_model
+    bkg_model = FoVBackgroundModel(dataset_name=dataset.name)
+    dataset.models = Models([sky_model, bkg_model])
     LLR = select_nested_models(
         datasets=Datasets(dataset),
         parameters=[sky_model.parameters["amplitude"]],
@@ -292,16 +302,16 @@ Alternatively, you can constrain the parameter ranges to stay within your expect
 
  .. code-block:: none
 
-    {'ts': 4.583718379990387, 'fit_results': <gammapy.modeling.fit.FitResult object at 0x7fa978308530>, 'fit_results_null': <gammapy.modeling.fit.FitResult object at 0x7fa9782d5190>}
+    {'ts': 4.610476648189433, 'fit_results': <gammapy.modeling.fit.FitResult object at 0x7fca7454ef30>, 'fit_results_null': <gammapy.modeling.fit.FitResult object at 0x7fca90a92720>}
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 173-174
+.. GENERATED FROM PYTHON SOURCE LINES 190-191
 
 The fitted parameters under the alternative hypothesis:
 
-.. GENERATED FROM PYTHON SOURCE LINES 174-177
+.. GENERATED FROM PYTHON SOURCE LINES 191-194
 
 .. code-block:: Python
 
@@ -318,48 +328,86 @@ The fitted parameters under the alternative hypothesis:
 
     type    name      value         unit      ...    max    frozen link prior
     ---- --------- ----------- -------------- ... --------- ------ ---- -----
-             index  1.1760e+00                ...       nan  False           
-         amplitude -8.4167e-13 TeV-1 s-1 cm-2 ...       nan  False           
+             index  1.1774e+00                ...       nan  False           
+         amplitude -8.5434e-13 TeV-1 s-1 cm-2 ...       nan  False           
          reference  1.0000e+00            TeV ...       nan   True           
              lon_0  1.8700e+02            deg ...       nan   True           
              lat_0  2.6000e+00            deg ... 9.000e+01   True           
+              tilt  0.0000e+00                ...       nan   True           
+              norm  1.0046e+00                ...       nan  False           
+         reference  1.0000e+00            TeV ...       nan   True           
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 178-183
+.. GENERATED FROM PYTHON SOURCE LINES 195-201
 
-The test statistic is ``ts ~ 4.7``. Note that here we have
+The test statistic is ``ts ~ 4.6``. Note that here we have
 only 1 free parameter, the amplitude, and thus, we can assume the simple conversion
-significance = :math:`\sqrt{ts} \approx 2.2`.
-Therefore, the observed fluctuations are not significant above the background.
+significance = :math:`\sqrt{ts} \approx 2.14 \sigma`.
+Therefore, the observed fluctuations are not significant above the background at
+the typically required level of 5-sigma.
 Next, we will estimate the differential upper limits of the source.
 
-.. GENERATED FROM PYTHON SOURCE LINES 185-201
+.. GENERATED FROM PYTHON SOURCE LINES 203-253
 
 Differential upper limits
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-In the absence of a detection, using the model directly from the fit is meaningless as its features can be
-simply due to background fluctuations.
-It is important to **set a reasonable model** on the dataset
-before proceeding with the `~gammapy.estimators.FluxPointsEstimator`. This model can come from
-measurements from other instruments, be an extrapolation of the flux
-observed at other wavelengths, come from theoretical estimations, etc.
-In particular, a model with a negative amplitude as obtained above should not be used.
+As the source is not significantly detected, a measured flux would mostly
+reflect background fluctuations. Instead, we quote an **upper limit (UL)**:
+the largest flux that is still compatible with the data, at a chosen
+confidence level. We compute it in two ways: first a frequentist UL from the
+profile likelihood, then a Bayesian UL from the posterior distribution.
+The two answer different questions, as discussed at the end of this notebook.
 
-Note that **the computed upper limits depend on the spectral parameters of the assumed model**.
-Here, we compute the 3-sigma upper limits for assuming a spectral index of 2.0.
-We also fix the spatial parameters of the model to prevent the minimiser
-from wandering off to different regions in the FoV.
+The upper limit is the maximum flux compatible with this particular
+data set, and is *not* an estimate of the true source flux.
+The upper limits also depends on:
+
+- The **assumed spectral shape** can have an impact on the retrieved flux. Here we assume a power law with index 2. The
+  amplitude only sets a reference flux, which is rescaled,
+  so its value does not affect the UL as long as it is positive.
+  In particular, *do not* use a model with a negative amplitude, as obtained above.
+  We will constrain the amplitude to positive values to remain in the physical
+  realm. Note that for spectral models with a sharp high-energy decline (e.g. ExpCutoff, LogParabola, or EBL-absorbed models), the best-fit amplitude in the cutoff region may predict an extremely low reference flux, leading to unreliable flux limits. A conservative workaround is to use a power-law spectral model when computing flux limits in all energy bins. While this approach is not ideal, it avoids artificially suppressing the reference flux and generally yields more conservative upper limits.
+- The **confidence level** and the **method**. Always report both, and, for a
+  Bayesian UL, also report the **prior**.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 201-221
+.. _frequentist_upper_lims:
+
+Frequentist differential upper limits
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A frequentist UL is the output of a procedure with a guaranteed
+*coverage*: if the observation were repeated many times, the interval
+``[0, UL]`` would contain the true flux in the stated fraction of the
+repetitions (e.g. 95%).
+
+In Gammapy, the UL is the flux at which the fit statistic rises
+by ``n_sigma_ul**2`` above its minimum (on the high-flux side). Asymptotically,
+this corresponds to a one-sided confidence level: ``n_sigma_ul=2`` (the default)
+gives ΔTS = 4, i.e. ~97.7%, and ``n_sigma_ul=1.645`` gives 95%.
+The `~gammapy.estimators.FluxPointsEstimator` computes one UL per energy bin.
+By default (``reoptimize=False``), only the normalisation is fitted in each bin;
+all other parameters stay fixed. Here we use ``n_sigma_ul=1.645`` to get the 95% UL,
+which is standardly quoted in published results.
+
+Note that in the case of a detection, n_sigma=2 still corresponds to ΔTS = 4
+but is associated to a two-sided confidence level of 95%.
+
+For computational reasons here, we keep the background normalisation frozen,
+but **in a real analysis, you should keep it free and use** `reoptimize=True`.
+The `reoptimize` configuration does not change the dof, so the above
+mentioned sigma to confidence interval remains unchanged.
+
+.. GENERATED FROM PYTHON SOURCE LINES 253-268
 
 .. code-block:: Python
 
 
-    sky_model.parameters["amplitude"].value = 1e-14
+    sky_model.parameters["amplitude"].value = 1e-13
     sky_model.parameters["index"].value = 2.0
     sky_model.freeze(model_type="spatial")
 
@@ -367,16 +415,32 @@ from wandering off to different regions in the FoV.
     fpe = FluxPointsEstimator(
         selection_optional="all",
         energy_edges=energy_edges,
-        n_sigma_ul=3,
+        n_sigma_ul=1.645,
         source="source",
     )
 
     fp1 = fpe.run(dataset)
 
 
-    fp1.plot(sed_type="dnde")
-    plt.show()
 
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 269-271
+
+It is useful to plot the upper limits along with fit statistic as a
+density plot to see the TS difference in each bin.
+
+.. GENERATED FROM PYTHON SOURCE LINES 271-276
+
+.. code-block:: Python
+
+
+    fp1.plot(sed_type="dnde", color="black")
+    fp1.plot_ts_profiles(sed_type="dnde")
+    plt.show()
 
 
 
@@ -390,16 +454,342 @@ from wandering off to different regions in the FoV.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 222-228
+.. GENERATED FROM PYTHON SOURCE LINES 277-279
+
+It can also be useful to visualise the likelihood profile for
+diagnostic purposes, as explained in :doc:`/tutorials/details/fitting`.
+
+.. GENERATED FROM PYTHON SOURCE LINES 281-301
+
+Expected upper limits (Brazil bands)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An observed upper limit comes from a single realisation of the data.
+Repeated experiments of the same expected background (e.g. lightcurves) will
+lead to different Poisson realizations of the background and will yield
+different upper limit values. To see how unusual it is, we compare it with the
+distribution of upper limits we would expect *if there were no source*.
+We simulate many *background-only datasets*, compute the upper limits for each
+one in the same way as above, and take the median and the 68% and 95% ranges.
+These form the so-called Brazil bands.
+
+Since this is computationally intensive, we will avoid executing it in this
+notebook, but show only the static plot.
+
+Instead of running many simulations, a quick alternative is the Asimov
+approximation of `Cowan et al. (2011) <https://arxiv.org/abs/1007.1727>`__.
+A single fit to the Asimov dataset (counts equal to the predicted background,
+with no fluctuations) gives the median expected upper limit.
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 301-364
+
+.. code-block:: Python
+
+
+
+    def run_mc():
+        # Simulate
+        n_toys = 100  # increase for smoother bands
+        dnde_ul_toys = []
+        for idx in range(n_toys):
+            if idx % 10 == 0:
+                print(f"Running for ---------- ${idx}")
+            toy = dataset.copy(name=f"toy-{idx}")
+            toy.models = None
+            toy.fake(random_state=idx)
+            toy.models = sky_model.copy(name="source")
+            fp_toy = fpe.run(toy)
+            dnde_ul_toys.append(fp_toy.dnde_ul.quantity.squeeze())
+
+        unit = u.Unit("cm-2 s-1 TeV-1")
+        dnde_ul_toys = u.Quantity(dnde_ul_toys).to_value(unit)
+        p025, p16, p50, p84, p975 = np.nanpercentile(
+            dnde_ul_toys, [2.5, 16, 50, 84, 97.5], axis=0
+        )
+
+        # Compute the Asimov UL
+        asimov = dataset.copy(name="asimov")
+
+        npred_bkg = asimov.npred_background()
+        asimov.counts.data[...] = npred_bkg.data
+
+        asimov.models = Models(
+            [
+                sky_model.copy(name="source"),
+                FoVBackgroundModel(dataset_name=asimov.name),
+            ]
+        )
+
+        fp_asimov = fpe.run(asimov)
+
+        # Plot
+        energy = fp1.energy_ref.to_value("TeV")
+
+        ax = fp1.plot(sed_type="dnde", label="Observed UL", color="black", lw=2)
+        ax.fill_between(
+            energy, p025, p975, color="gold", alpha=0.5, label="Expected UL, 95%"
+        )
+        ax.fill_between(
+            energy, p16, p84, color="limegreen", alpha=0.3, label="Expected UL, 68%"
+        )
+        ax.plot(energy, p50, linestyle="dotted", label="Expected UL, median", color="blue")
+        ax.plot(
+            energy,
+            fp_asimov.dnde_ul.quantity.squeeze().to_value(unit),
+            linestyle="dashdot",
+            label="Asimov UL",
+            color="red",
+        )
+
+        ax.loglog()
+        ax.set_xlabel("Energy [TeV]")
+        ax.set_ylabel(f"dnde [{unit.to_string('latex_inline')}]")
+        ax.legend()
+        plt.show()
+
+
+
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 365-366
+
+.. image:: ../../_static/freq_UL_bands.png
+
+.. GENERATED FROM PYTHON SOURCE LINES 369-377
+
+If the observed upper limits lie inside the bands, it implies the data are
+consistent with background only.
+If they fall below the yellow band, the background is overestimated.
+To avoid this, you should always
+*reoptimize the parameters of the other models, specially the background model*.
+If they still occur, such points should be treated with caution as they
+may exclude fluxes the observation was not sensitive to. This usually indicates
+background systematics that have not been accounted for.
+
+.. GENERATED FROM PYTHON SOURCE LINES 379-403
+
+.. _bayesian_upper_lims:
+
+Bayesian upper limits
+~~~~~~~~~~~~~~~~~~~~~
+
+An alternative to the frequentist approach above is
+a **Bayesian credible upper limit**, the flux below which a chosen fraction
+of the posterior probability lies.
+
+This requires a prior on every free parameter. To keep the example simple,
+we fix the spectral index and the position, so the amplitude is the only
+free parameter. We use a uniform prior starting at zero.
+Its upper bound must lie well above the upper limits.
+
+**Note:** a Bayesian upper limit depends on the choice of prior. A prior that is
+uniform in amplitude is the usual choice for upper limits. A log-uniform prior
+would favour small fluxes and give a lower limit, which then depends on the
+lower bound of the prior.
+
+`~gammapy.estimators.FluxCollectionEstimator` fits the same normalisation per
+energy bin as above. It can use either a `~gammapy.modeling.Fit` or a
+`~gammapy.modeling.Sampler` as solver. With a sampler, the upper limit is the
+``\Phi(n_sigma_ul)`` quantile of the posterior of the normalisation.
+While reporting results, always quote the used prior.
+
+.. GENERATED FROM PYTHON SOURCE LINES 403-443
+
+.. code-block:: Python
+
+
+    norm_max = 100
+    norm_bayes = Parameter("norm", value=1, prior=UniformPrior(min=0, max=norm_max))
+
+    sampler = Sampler(
+        backend="ultranest",
+        options={
+            "min_num_live_points": 300,
+            "frac_remain": 0.3,
+            "log_dir": None,
+            "show_status": False,
+            "viz_callback": False,
+        },
+    )
+
+    fce_bayes = FluxCollectionEstimator(
+        energy_edges=energy_edges,
+        models=[sky_model],
+        n_sigma_ul=1.645,
+        norm=norm_bayes,
+        solver=sampler,
+    )
+    fp_bayes = fce_bayes.run(Datasets([dataset]))["flux_points"]["source"]
+
+    fig, ax = plt.subplots()
+    unit = u.Unit("cm-2 s-1 TeV-1")
+    energy = fp_bayes.energy_ref.to_value("TeV")
+    fp1.plot(ax=ax, fmt="o-", label="Frequentist UL")
+    ax.plot(
+        energy,
+        fp_bayes.dnde_ul.quantity.squeeze().to_value(unit),
+        "s--",
+        label="Bayesian Limit (uniform prior, norm ≥ 0)",
+    )
+    ax.loglog()
+    ax.set_xlabel("Energy [TeV]")
+    ax.set_ylabel(f"dnde upper limit, 95% [{unit.to_string('latex_inline')}]")
+    ax.legend()
+    plt.show()
+
+
+
+
+.. image-sg:: /tutorials/analysis-3d/images/sphx_glr_non_detected_source_006.png
+   :alt: non detected source
+   :srcset: /tutorials/analysis-3d/images/sphx_glr_non_detected_source_006.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+
+    logZ = -1773.972 +- 0.268
+      single instance: logZ = -1773.972 +- 0.037
+      bootstrapped   : logZ = -1773.978 +- 0.058
+      tail           : logZ = +- 0.262
+    insert order U test : converged: True correlation: inf iterations
+
+        norm                : 0     │▆▅▆▇▇▆▆▇▆▆▅▆▆▅▅▆▇▃▄▄▃▃▃▃▃▃▂▂▁▂▁▁▁▁▁▁▁▁ │100       32 +- 22
+
+
+    logZ = -1464.979 +- 0.272
+      single instance: logZ = -1464.979 +- 0.060
+      bootstrapped   : logZ = -1464.987 +- 0.071
+      tail           : logZ = +- 0.263
+    insert order U test : converged: True correlation: inf iterations
+
+        norm                : 0     │▇▆▆▅▄▄▃▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ ▁ ▁  ▁ │95        13 +- 13
+
+
+    logZ = -1065.515 +- 0.289
+      single instance: logZ = -1065.515 +- 0.060
+      bootstrapped   : logZ = -1065.518 +- 0.120
+      tail           : logZ = +- 0.262
+    insert order U test : converged: True correlation: inf iterations
+
+        norm                : 0     │▇▇▅▅▃▄▃▃▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ ▁   ▁ │94        13 +- 12
+
+
+    logZ = -986.004 +- 0.276
+      single instance: logZ = -986.004 +- 0.049
+      bootstrapped   : logZ = -985.999 +- 0.088
+      tail           : logZ = +- 0.262
+    insert order U test : converged: True correlation: inf iterations
+
+        norm                : 0     │▇▆▅▅▄▄▄▃▂▂▂▂▂▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ ▁▁ │100       18 +- 17
+
+
+    logZ = -625.975 +- 0.300
+      single instance: logZ = -625.975 +- 0.052
+      bootstrapped   : logZ = -625.970 +- 0.145
+      tail           : logZ = +- 0.262
+    insert order U test : converged: True correlation: inf iterations
+
+        norm                : 0     │▇▇▆▅▅▄▃▃▃▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ ▁ ▁│100       16 +- 16
+
+
+    logZ = -636.750 +- 0.274
+      single instance: logZ = -636.750 +- 0.039
+      bootstrapped   : logZ = -636.751 +- 0.078
+      tail           : logZ = +- 0.262
+    insert order U test : converged: True correlation: inf iterations
+
+        norm                : 0     │▇▆▇▅▆▅▅▅▅▃▃▄▃▂▂▃▂▂▁▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁│100       25 +- 22
+
+
+    logZ = -615.134 +- 0.285
+      single instance: logZ = -615.134 +- 0.040
+      bootstrapped   : logZ = -615.128 +- 0.111
+      tail           : logZ = +- 0.262
+    insert order U test : converged: True correlation: inf iterations
+
+        norm                : 0     │▇▇▇▆▇▅▆▄▃▃▃▃▃▃▃▂▂▂▂▂▁▂▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁│100       24 +- 21
+
+
+    logZ = -410.204 +- 0.265
+      single instance: logZ = -410.204 +- 0.031
+      bootstrapped   : logZ = -410.210 +- 0.037
+      tail           : logZ = +- 0.262
+    insert order U test : converged: True correlation: inf iterations
+
+        norm                : 0     │▇▇▆▅▆▄▅▅▄▄▄▄▄▄▂▃▃▃▃▃▃▂▂▃▂▂▁▂▂▁▁▂▁▁▁▁▁▂▁│100       32 +- 25
+
+
+    logZ = -268.460 +- 0.263
+      single instance: logZ = -268.460 +- 0.031
+      bootstrapped   : logZ = -268.460 +- 0.021
+      tail           : logZ = +- 0.262
+    insert order U test : converged: True correlation: inf iterations
+
+        norm                : 0     │▇▇▇▆▆▆▆▄▆▅▅▅▅▃▃▄▃▃▃▃▃▂▂▂▃▂▁▁▂▂▂▂▁▂▂▁▁▁▁│100       32 +- 25
+
+
+    logZ = -321.668 +- 0.263
+      single instance: logZ = -321.668 +- 0.030
+      bootstrapped   : logZ = -321.674 +- 0.022
+      tail           : logZ = +- 0.262
+    insert order U test : converged: True correlation: inf iterations
+
+        norm                : 0     │▇▅▆▅▆▅▅▅▄▄▅▄▄▄▃▄▃▃▂▃▃▃▂▃▃▂▂▂▂▂▂▂▂▁▁▁▁▁▂│100       34 +- 26
+
+    /home/runner/work/gammapy-docs/gammapy-docs/gammapy/.tox/build_docs/lib/python3.12/site-packages/gammapy/maps/region/ndmap.py:154: UserWarning: linestyle is redundantly defined by the 'linestyle' keyword argument and the fmt string "o-" (-> linestyle='-'). The keyword argument will take precedence.
+      ax.errorbar(
+    /home/runner/work/gammapy-docs/gammapy-docs/gammapy/.tox/build_docs/lib/python3.12/site-packages/gammapy/maps/region/ndmap.py:154: UserWarning: marker is redundantly defined by the 'marker' keyword argument and the fmt string "o-" (-> marker='o'). The keyword argument will take precedence.
+      ax.errorbar(
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 445-467
+
+Comparing the two upper limits
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Note that the frequentist and Bayesian upper limits answer different questions, so
+they do not have to give the same number.
+
+- **Frequentist (profile likelihood) upper limit.** This is a statement about
+  the *procedure*. If the experiment were repeated many times, the intervals
+  it produces would contain the true flux in a fixed fraction of the
+  repetitions (this is called *coverage*). In this approach, the other free
+  parameters ("nuisance parameters") are re-fitted to their best values.
+
+- **Bayesian credible upper limit.** This is a statement about the flux,
+  given the data we actually observed and the prior we chose: "there is a 99.8%
+  probability that the flux lies below this value". It depends heavily on the
+  choice of the prior. The nuisance parameters are integrated out.
+  Every value contributes, weighted by its likelihood and its prior.
+
+In the regime of many counts, with the best fit far from zero and a flat
+prior, the two results converge. In that limit the
+likelihood is close to a Gaussian, and the remaining difference is only the
+confidence-level convention.
+
+.. GENERATED FROM PYTHON SOURCE LINES 470-478
+
+.. _integral_upper_lims:
 
 Integral upper limits
 ~~~~~~~~~~~~~~~~~~~~~
 
 To compute the integral upper limits between certain energies,
-we can simply run  `~gammapy.estimators.FluxPointsEstimator`
+one can simply run the estimators, eg `~gammapy.estimators.FluxPointsEstimator`
 with one bin in energy.
 
-.. GENERATED FROM PYTHON SOURCE LINES 228-240
+.. GENERATED FROM PYTHON SOURCE LINES 478-488
 
 .. code-block:: Python
 
@@ -417,78 +807,19 @@ with one bin in energy.
 
 
 
-
-
 .. rst-class:: sphx-glr-script-out
 
  .. code-block:: none
 
-    Integral upper limit between 0.8 TeV and 10.0 TeV is 7.76e-14 1 / (s cm2)
+    Integral upper limit between 0.8 TeV and 10.0 TeV is 7.05e-14 1 / (s cm2)
 
 
 
-
-.. GENERATED FROM PYTHON SOURCE LINES 241-255
-
-Sensitivity estimation
-~~~~~~~~~~~~~~~~~~~~~~
-
-We can then ask,  **would this source have been detectable given this IRF/exposure time?**
-
-The `~gammapy.estimators.FluxPointsEstimator` can be used to obtain the sensitivity,
-which can be compared to the flux prediction for a given (hypothetical) source. We have the 5-sigma
-sensitivity here, which can be configured using ``n_sigma_sensitivity``
-parameter of this estimator. Let us see what we would have seen if a Crab-like source was
-present in the center.
-Note that this computed sensitivity does not take into account the factors
-such as the minimum number of gamma-rays (see :doc:`/tutorials/analysis-1d/cta_sensitivity`)
-and is dependent on the analysis configuration.
-We compare this with the known Crab spectrum.
-
-.. GENERATED FROM PYTHON SOURCE LINES 255-268
-
-.. code-block:: Python
-
-
-    crab_model = create_crab_spectral_model()
-
-    fp1.dnde_sensitivity.plot(label="sensitivity")
-    crab_model.plot(
-        energy_bounds=fp1.geom.axes["energy"], sed_type="dnde", label="Crab spectrum"
-    )
-    plt.grid(which="minor", alpha=0.3)
-
-    plt.legend()
-    plt.show()
-
-
-
-
-
-.. image-sg:: /tutorials/analysis-3d/images/sphx_glr_non_detected_source_006.png
-   :alt: non detected source
-   :srcset: /tutorials/analysis-3d/images/sphx_glr_non_detected_source_006.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /home/runner/work/gammapy-docs/gammapy-docs/gammapy/.tox/build_docs/lib/python3.12/site-packages/gammapy/modeling/models/spectral.py:675: UserWarning: This axis already has a converter set and is updating to a potentially incompatible converter
-      ax.plot(energy.center, flux.quantity[:, 0, 0], **kwargs)
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 270-271
-
-Thus, a Crab-like source should have been above our sensitivity till around ~ 4 TeV for this specific observation.
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 23.934 seconds)
+   **Total running time of the script:** (1 minutes 5.375 seconds)
 
 
 .. _sphx_glr_download_tutorials_analysis-3d_non_detected_source.py:
