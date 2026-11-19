@@ -1,0 +1,43 @@
+ImageProfile
+============
+
+.. currentmodule:: gammapy.estimators
+
+.. autoclass:: ImageProfile
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~ImageProfile.profile
+      ~ImageProfile.profile_err
+      ~ImageProfile.x_max
+      ~ImageProfile.x_min
+      ~ImageProfile.x_ref
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~ImageProfile.normalize
+      ~ImageProfile.peek
+      ~ImageProfile.plot
+      ~ImageProfile.plot_err
+      ~ImageProfile.smooth
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: profile
+   .. autoattribute:: profile_err
+   .. autoattribute:: x_max
+   .. autoattribute:: x_min
+   .. autoattribute:: x_ref
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: normalize
+   .. automethod:: peek
+   .. automethod:: plot
+   .. automethod:: plot_err
+   .. automethod:: smooth

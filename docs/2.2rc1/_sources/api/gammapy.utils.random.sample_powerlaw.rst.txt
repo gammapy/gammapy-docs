@@ -1,0 +1,6 @@
+sample_powerlaw
+===============
+
+.. currentmodule:: gammapy.utils.random
+
+.. autofunction:: sample_powerlaw

@@ -1,0 +1,21 @@
+SimplePulsar
+============
+
+.. currentmodule:: gammapy.astro.source
+
+.. autoclass:: SimplePulsar
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~SimplePulsar.luminosity_spindown
+      ~SimplePulsar.magnetic_field
+      ~SimplePulsar.tau
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: luminosity_spindown
+   .. autoattribute:: magnetic_field
+   .. autoattribute:: tau
