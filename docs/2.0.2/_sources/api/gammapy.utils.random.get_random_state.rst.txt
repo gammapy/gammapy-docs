@@ -1,0 +1,6 @@
+get_random_state
+================
+
+.. currentmodule:: gammapy.utils.random
+
+.. autofunction:: get_random_state

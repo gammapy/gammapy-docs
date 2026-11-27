@@ -1,0 +1,41 @@
+ASmoothMapEstimator
+===================
+
+.. currentmodule:: gammapy.estimators
+
+.. autoclass:: ASmoothMapEstimator
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~ASmoothMapEstimator.config_parameters
+      ~ASmoothMapEstimator.selection_optional
+      ~ASmoothMapEstimator.tag
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~ASmoothMapEstimator.copy
+      ~ASmoothMapEstimator.estimate_maps
+      ~ASmoothMapEstimator.get_kernels
+      ~ASmoothMapEstimator.get_scales
+      ~ASmoothMapEstimator.run
+      ~ASmoothMapEstimator.selection_all
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: config_parameters
+   .. autoattribute:: selection_optional
+   .. autoattribute:: tag
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: copy
+   .. automethod:: estimate_maps
+   .. automethod:: get_kernels
+   .. automethod:: get_scales
+   .. automethod:: run
+   .. automethod:: selection_all

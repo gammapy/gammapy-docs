@@ -1,0 +1,33 @@
+ImageProfileEstimator
+=====================
+
+.. currentmodule:: gammapy.estimators
+
+.. autoclass:: ImageProfileEstimator
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~ImageProfileEstimator.config_parameters
+      ~ImageProfileEstimator.selection_optional
+      ~ImageProfileEstimator.tag
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~ImageProfileEstimator.copy
+      ~ImageProfileEstimator.run
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: config_parameters
+   .. autoattribute:: selection_optional
+   .. autoattribute:: tag
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: copy
+   .. automethod:: run

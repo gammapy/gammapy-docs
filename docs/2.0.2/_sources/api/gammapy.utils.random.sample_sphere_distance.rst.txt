@@ -1,0 +1,6 @@
+sample_sphere_distance
+======================
+
+.. currentmodule:: gammapy.utils.random
+
+.. autofunction:: sample_sphere_distance

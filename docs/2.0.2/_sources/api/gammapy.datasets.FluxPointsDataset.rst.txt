@@ -1,0 +1,67 @@
+FluxPointsDataset
+=================
+
+.. currentmodule:: gammapy.datasets
+
+.. autoclass:: FluxPointsDataset
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~FluxPointsDataset.available_stat_type
+      ~FluxPointsDataset.gti
+      ~FluxPointsDataset.mask
+      ~FluxPointsDataset.mask_safe
+      ~FluxPointsDataset.mask_valid
+      ~FluxPointsDataset.models
+      ~FluxPointsDataset.name
+      ~FluxPointsDataset.stat_type
+      ~FluxPointsDataset.tag
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~FluxPointsDataset.copy
+      ~FluxPointsDataset.data_shape
+      ~FluxPointsDataset.flux_pred
+      ~FluxPointsDataset.from_dict
+      ~FluxPointsDataset.plot_fit
+      ~FluxPointsDataset.plot_residuals
+      ~FluxPointsDataset.plot_spectrum
+      ~FluxPointsDataset.read
+      ~FluxPointsDataset.residuals
+      ~FluxPointsDataset.stat_array
+      ~FluxPointsDataset.stat_sum
+      ~FluxPointsDataset.to_dict
+      ~FluxPointsDataset.write
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: available_stat_type
+   .. autoattribute:: gti
+   .. autoattribute:: mask
+   .. autoattribute:: mask_safe
+   .. autoattribute:: mask_valid
+   .. autoattribute:: models
+   .. autoattribute:: name
+   .. autoattribute:: stat_type
+   .. autoattribute:: tag
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: copy
+   .. automethod:: data_shape
+   .. automethod:: flux_pred
+   .. automethod:: from_dict
+   .. automethod:: plot_fit
+   .. automethod:: plot_residuals
+   .. automethod:: plot_spectrum
+   .. automethod:: read
+   .. automethod:: residuals
+   .. automethod:: stat_array
+   .. automethod:: stat_sum
+   .. automethod:: to_dict
+   .. automethod:: write

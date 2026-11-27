@@ -1,0 +1,6 @@
+add_observed_parameters
+=======================
+
+.. currentmodule:: gammapy.astro.population
+
+.. autofunction:: add_observed_parameters

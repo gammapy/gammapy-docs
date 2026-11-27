@@ -1,0 +1,177 @@
+WcsNDMap
+========
+
+.. currentmodule:: gammapy.maps
+
+.. autoclass:: WcsNDMap
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~WcsNDMap.data
+      ~WcsNDMap.geom
+      ~WcsNDMap.is_mask
+      ~WcsNDMap.meta
+      ~WcsNDMap.quantity
+      ~WcsNDMap.tag
+      ~WcsNDMap.unit
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~WcsNDMap.binary_dilate
+      ~WcsNDMap.binary_erode
+      ~WcsNDMap.coadd
+      ~WcsNDMap.convolve
+      ~WcsNDMap.copy
+      ~WcsNDMap.create
+      ~WcsNDMap.crop
+      ~WcsNDMap.cumsum
+      ~WcsNDMap.cutout
+      ~WcsNDMap.cutout_and_mask_region
+      ~WcsNDMap.dot
+      ~WcsNDMap.downsample
+      ~WcsNDMap.fill_by_coord
+      ~WcsNDMap.fill_by_idx
+      ~WcsNDMap.fill_by_pix
+      ~WcsNDMap.fill_events
+      ~WcsNDMap.from_geom
+      ~WcsNDMap.from_hdu
+      ~WcsNDMap.from_hdulist
+      ~WcsNDMap.from_stack
+      ~WcsNDMap.get_by_coord
+      ~WcsNDMap.get_by_idx
+      ~WcsNDMap.get_by_pix
+      ~WcsNDMap.get_image_by_coord
+      ~WcsNDMap.get_image_by_idx
+      ~WcsNDMap.get_image_by_pix
+      ~WcsNDMap.get_spectrum
+      ~WcsNDMap.integral
+      ~WcsNDMap.interp_by_coord
+      ~WcsNDMap.interp_by_pix
+      ~WcsNDMap.interp_to_geom
+      ~WcsNDMap.is_allclose
+      ~WcsNDMap.iter_by_axis
+      ~WcsNDMap.iter_by_image
+      ~WcsNDMap.iter_by_image_data
+      ~WcsNDMap.iter_by_image_index
+      ~WcsNDMap.mask_contains_region
+      ~WcsNDMap.mask_nearest_position
+      ~WcsNDMap.normalize
+      ~WcsNDMap.pad
+      ~WcsNDMap.plot
+      ~WcsNDMap.plot_grid
+      ~WcsNDMap.plot_interactive
+      ~WcsNDMap.plot_mask
+      ~WcsNDMap.read
+      ~WcsNDMap.reduce
+      ~WcsNDMap.reduce_over_axes
+      ~WcsNDMap.rename_axes
+      ~WcsNDMap.reorder_axes
+      ~WcsNDMap.reproject_by_image
+      ~WcsNDMap.reproject_to_geom
+      ~WcsNDMap.resample
+      ~WcsNDMap.resample_axis
+      ~WcsNDMap.sample_coord
+      ~WcsNDMap.set_by_coord
+      ~WcsNDMap.set_by_idx
+      ~WcsNDMap.set_by_pix
+      ~WcsNDMap.slice_by_idx
+      ~WcsNDMap.smooth
+      ~WcsNDMap.split_by_axis
+      ~WcsNDMap.stack
+      ~WcsNDMap.sum_over_axes
+      ~WcsNDMap.to_cube
+      ~WcsNDMap.to_hdu
+      ~WcsNDMap.to_hdulist
+      ~WcsNDMap.to_region_nd_map
+      ~WcsNDMap.to_region_nd_map_histogram
+      ~WcsNDMap.to_unit
+      ~WcsNDMap.upsample
+      ~WcsNDMap.write
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: data
+   .. autoattribute:: geom
+   .. autoattribute:: is_mask
+   .. autoattribute:: meta
+   .. autoattribute:: quantity
+   .. autoattribute:: tag
+   .. autoattribute:: unit
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: binary_dilate
+   .. automethod:: binary_erode
+   .. automethod:: coadd
+   .. automethod:: convolve
+   .. automethod:: copy
+   .. automethod:: create
+   .. automethod:: crop
+   .. automethod:: cumsum
+   .. automethod:: cutout
+   .. automethod:: cutout_and_mask_region
+   .. automethod:: dot
+   .. automethod:: downsample
+   .. automethod:: fill_by_coord
+   .. automethod:: fill_by_idx
+   .. automethod:: fill_by_pix
+   .. automethod:: fill_events
+   .. automethod:: from_geom
+   .. automethod:: from_hdu
+   .. automethod:: from_hdulist
+   .. automethod:: from_stack
+   .. automethod:: get_by_coord
+   .. automethod:: get_by_idx
+   .. automethod:: get_by_pix
+   .. automethod:: get_image_by_coord
+   .. automethod:: get_image_by_idx
+   .. automethod:: get_image_by_pix
+   .. automethod:: get_spectrum
+   .. automethod:: integral
+   .. automethod:: interp_by_coord
+   .. automethod:: interp_by_pix
+   .. automethod:: interp_to_geom
+   .. automethod:: is_allclose
+   .. automethod:: iter_by_axis
+   .. automethod:: iter_by_image
+   .. automethod:: iter_by_image_data
+   .. automethod:: iter_by_image_index
+   .. automethod:: mask_contains_region
+   .. automethod:: mask_nearest_position
+   .. automethod:: normalize
+   .. automethod:: pad
+   .. automethod:: plot
+   .. automethod:: plot_grid
+   .. automethod:: plot_interactive
+   .. automethod:: plot_mask
+   .. automethod:: read
+   .. automethod:: reduce
+   .. automethod:: reduce_over_axes
+   .. automethod:: rename_axes
+   .. automethod:: reorder_axes
+   .. automethod:: reproject_by_image
+   .. automethod:: reproject_to_geom
+   .. automethod:: resample
+   .. automethod:: resample_axis
+   .. automethod:: sample_coord
+   .. automethod:: set_by_coord
+   .. automethod:: set_by_idx
+   .. automethod:: set_by_pix
+   .. automethod:: slice_by_idx
+   .. automethod:: smooth
+   .. automethod:: split_by_axis
+   .. automethod:: stack
+   .. automethod:: sum_over_axes
+   .. automethod:: to_cube
+   .. automethod:: to_hdu
+   .. automethod:: to_hdulist
+   .. automethod:: to_region_nd_map
+   .. automethod:: to_region_nd_map_histogram
+   .. automethod:: to_unit
+   .. automethod:: upsample
+   .. automethod:: write

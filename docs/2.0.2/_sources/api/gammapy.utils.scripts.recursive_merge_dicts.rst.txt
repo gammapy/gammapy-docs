@@ -1,0 +1,6 @@
+recursive_merge_dicts
+=====================
+
+.. currentmodule:: gammapy.utils.scripts
+
+.. autofunction:: recursive_merge_dicts

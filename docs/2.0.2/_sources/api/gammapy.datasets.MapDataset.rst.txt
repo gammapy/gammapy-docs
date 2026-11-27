@@ -1,0 +1,147 @@
+MapDataset
+==========
+
+.. currentmodule:: gammapy.datasets
+
+.. autoclass:: MapDataset
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~MapDataset.background
+      ~MapDataset.background_model
+      ~MapDataset.counts
+      ~MapDataset.data_shape
+      ~MapDataset.edisp
+      ~MapDataset.energy_range
+      ~MapDataset.energy_range_fit
+      ~MapDataset.energy_range_safe
+      ~MapDataset.energy_range_total
+      ~MapDataset.evaluators
+      ~MapDataset.excess
+      ~MapDataset.exposure
+      ~MapDataset.geoms
+      ~MapDataset.gti
+      ~MapDataset.mask
+      ~MapDataset.mask_fit
+      ~MapDataset.mask_fit_image
+      ~MapDataset.mask_image
+      ~MapDataset.mask_safe
+      ~MapDataset.mask_safe_edisp
+      ~MapDataset.mask_safe_image
+      ~MapDataset.mask_safe_psf
+      ~MapDataset.meta
+      ~MapDataset.meta_table
+      ~MapDataset.models
+      ~MapDataset.name
+      ~MapDataset.psf
+      ~MapDataset.stat_type
+      ~MapDataset.tag
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~MapDataset.copy
+      ~MapDataset.create
+      ~MapDataset.cutout
+      ~MapDataset.downsample
+      ~MapDataset.fake
+      ~MapDataset.from_dict
+      ~MapDataset.from_geoms
+      ~MapDataset.from_hdulist
+      ~MapDataset.info_dict
+      ~MapDataset.npred
+      ~MapDataset.npred_background
+      ~MapDataset.npred_signal
+      ~MapDataset.pad
+      ~MapDataset.peek
+      ~MapDataset.plot_residuals
+      ~MapDataset.plot_residuals_spatial
+      ~MapDataset.plot_residuals_spectral
+      ~MapDataset.read
+      ~MapDataset.resample_energy_axis
+      ~MapDataset.reset_data_cache
+      ~MapDataset.residuals
+      ~MapDataset.slice_by_energy
+      ~MapDataset.slice_by_idx
+      ~MapDataset.stack
+      ~MapDataset.stat_array
+      ~MapDataset.stat_sum
+      ~MapDataset.to_dict
+      ~MapDataset.to_hdulist
+      ~MapDataset.to_image
+      ~MapDataset.to_masked
+      ~MapDataset.to_region_map_dataset
+      ~MapDataset.to_spectrum_dataset
+      ~MapDataset.write
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: background
+   .. autoattribute:: background_model
+   .. autoattribute:: counts
+   .. autoattribute:: data_shape
+   .. autoattribute:: edisp
+   .. autoattribute:: energy_range
+   .. autoattribute:: energy_range_fit
+   .. autoattribute:: energy_range_safe
+   .. autoattribute:: energy_range_total
+   .. autoattribute:: evaluators
+   .. autoattribute:: excess
+   .. autoattribute:: exposure
+   .. autoattribute:: geoms
+   .. autoattribute:: gti
+   .. autoattribute:: mask
+   .. autoattribute:: mask_fit
+   .. autoattribute:: mask_fit_image
+   .. autoattribute:: mask_image
+   .. autoattribute:: mask_safe
+   .. autoattribute:: mask_safe_edisp
+   .. autoattribute:: mask_safe_image
+   .. autoattribute:: mask_safe_psf
+   .. autoattribute:: meta
+   .. autoattribute:: meta_table
+   .. autoattribute:: models
+   .. autoattribute:: name
+   .. autoattribute:: psf
+   .. autoattribute:: stat_type
+   .. autoattribute:: tag
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: copy
+   .. automethod:: create
+   .. automethod:: cutout
+   .. automethod:: downsample
+   .. automethod:: fake
+   .. automethod:: from_dict
+   .. automethod:: from_geoms
+   .. automethod:: from_hdulist
+   .. automethod:: info_dict
+   .. automethod:: npred
+   .. automethod:: npred_background
+   .. automethod:: npred_signal
+   .. automethod:: pad
+   .. automethod:: peek
+   .. automethod:: plot_residuals
+   .. automethod:: plot_residuals_spatial
+   .. automethod:: plot_residuals_spectral
+   .. automethod:: read
+   .. automethod:: resample_energy_axis
+   .. automethod:: reset_data_cache
+   .. automethod:: residuals
+   .. automethod:: slice_by_energy
+   .. automethod:: slice_by_idx
+   .. automethod:: stack
+   .. automethod:: stat_array
+   .. automethod:: stat_sum
+   .. automethod:: to_dict
+   .. automethod:: to_hdulist
+   .. automethod:: to_image
+   .. automethod:: to_masked
+   .. automethod:: to_region_map_dataset
+   .. automethod:: to_spectrum_dataset
+   .. automethod:: write

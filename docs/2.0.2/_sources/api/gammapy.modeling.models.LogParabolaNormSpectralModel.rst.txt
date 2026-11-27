@@ -1,0 +1,93 @@
+LogParabolaNormSpectralModel
+============================
+
+.. currentmodule:: gammapy.modeling.models
+
+.. autoclass:: LogParabolaNormSpectralModel
+   :show-inheritance:
+
+   .. rubric:: Attributes Summary
+
+   .. autosummary::
+
+      ~LogParabolaNormSpectralModel.alpha
+      ~LogParabolaNormSpectralModel.beta
+      ~LogParabolaNormSpectralModel.covariance
+      ~LogParabolaNormSpectralModel.default_parameters
+      ~LogParabolaNormSpectralModel.frozen
+      ~LogParabolaNormSpectralModel.is_norm_spectral_model
+      ~LogParabolaNormSpectralModel.norm
+      ~LogParabolaNormSpectralModel.parameters
+      ~LogParabolaNormSpectralModel.parameters_unique_names
+      ~LogParabolaNormSpectralModel.pivot_energy
+      ~LogParabolaNormSpectralModel.reference
+      ~LogParabolaNormSpectralModel.tag
+      ~LogParabolaNormSpectralModel.type
+
+   .. rubric:: Methods Summary
+
+   .. autosummary::
+
+      ~LogParabolaNormSpectralModel.__call__
+      ~LogParabolaNormSpectralModel.copy
+      ~LogParabolaNormSpectralModel.energy_flux
+      ~LogParabolaNormSpectralModel.energy_flux_error
+      ~LogParabolaNormSpectralModel.evaluate
+      ~LogParabolaNormSpectralModel.evaluate_error
+      ~LogParabolaNormSpectralModel.freeze
+      ~LogParabolaNormSpectralModel.from_dict
+      ~LogParabolaNormSpectralModel.from_log10
+      ~LogParabolaNormSpectralModel.from_parameters
+      ~LogParabolaNormSpectralModel.integral
+      ~LogParabolaNormSpectralModel.integral_error
+      ~LogParabolaNormSpectralModel.inverse
+      ~LogParabolaNormSpectralModel.inverse_all
+      ~LogParabolaNormSpectralModel.plot
+      ~LogParabolaNormSpectralModel.plot_error
+      ~LogParabolaNormSpectralModel.reassign
+      ~LogParabolaNormSpectralModel.reference_fluxes
+      ~LogParabolaNormSpectralModel.spectral_index
+      ~LogParabolaNormSpectralModel.spectral_index_error
+      ~LogParabolaNormSpectralModel.to_dict
+      ~LogParabolaNormSpectralModel.unfreeze
+
+   .. rubric:: Attributes Documentation
+
+   .. autoattribute:: alpha
+   .. autoattribute:: beta
+   .. autoattribute:: covariance
+   .. autoattribute:: default_parameters
+   .. autoattribute:: frozen
+   .. autoattribute:: is_norm_spectral_model
+   .. autoattribute:: norm
+   .. autoattribute:: parameters
+   .. autoattribute:: parameters_unique_names
+   .. autoattribute:: pivot_energy
+   .. autoattribute:: reference
+   .. autoattribute:: tag
+   .. autoattribute:: type
+
+   .. rubric:: Methods Documentation
+
+   .. automethod:: __call__
+   .. automethod:: copy
+   .. automethod:: energy_flux
+   .. automethod:: energy_flux_error
+   .. automethod:: evaluate
+   .. automethod:: evaluate_error
+   .. automethod:: freeze
+   .. automethod:: from_dict
+   .. automethod:: from_log10
+   .. automethod:: from_parameters
+   .. automethod:: integral
+   .. automethod:: integral_error
+   .. automethod:: inverse
+   .. automethod:: inverse_all
+   .. automethod:: plot
+   .. automethod:: plot_error
+   .. automethod:: reassign
+   .. automethod:: reference_fluxes
+   .. automethod:: spectral_index
+   .. automethod:: spectral_index_error
+   .. automethod:: to_dict
+   .. automethod:: unfreeze
