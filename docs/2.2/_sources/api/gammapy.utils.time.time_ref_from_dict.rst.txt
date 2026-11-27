@@ -1,0 +1,6 @@
+time_ref_from_dict
+==================
+
+.. currentmodule:: gammapy.utils.time
+
+.. autofunction:: time_ref_from_dict

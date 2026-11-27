@@ -1,0 +1,6 @@
+make_base_catalog_galactic
+==========================
+
+.. currentmodule:: gammapy.astro.population
+
+.. autofunction:: make_base_catalog_galactic
